@@ -334,6 +334,23 @@ export default function OrderDetails() {
           setUsername(storedUser);
           console.log('[OrderDetails] Username loaded:', storedUser);
         }
+
+        // LOAD SHOW STOCK ONLY SETTING (USER SPECIFIC)
+        const userKey = storedUser ? `settings_show_stock_only_${storedUser}` : 'settings_show_stock_only';
+        const showStockOnlyStr = await AsyncStorage.getItem(userKey);
+        const showStockOnly = showStockOnlyStr === 'true';
+
+        if (showStockOnly) {
+          console.log(`[OrderDetails] "Show Stock Only" setting is ENABLED for ${storedUser || 'unknown'}`);
+          setFilterInStock(true);
+          setFilters(prev => ({
+            ...prev,
+            inStock: true
+          }));
+        } else {
+          console.log(`[OrderDetails] "Show Stock Only" setting is DISABLED for ${storedUser || 'unknown'}`);
+        }
+
       } catch (error) {
         console.error('[OrderDetails] Failed to load settings/user:', error);
       }

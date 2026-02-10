@@ -37,7 +37,9 @@ const Home = ({ navigation }) => {
   // Settings Modal State
   const [settingsModalVisible, setSettingsModalVisible] = useState(false);
   const [isPrinterSettingsOpen, setIsPrinterSettingsOpen] = useState(false); // New nested state
+  const [isProductSettingsOpen, setIsProductSettingsOpen] = useState(false); // New nested state
   const [paperSize, setPaperSize] = useState(58); // Default 58mm
+  const [showStockOnly, setShowStockOnly] = useState(false);
 
   useEffect(() => {
     // Load username from storage
@@ -53,7 +55,9 @@ const Home = ({ navigation }) => {
     };
 
     loadUsername();
+    loadUsername();
     loadPrinterSettings();
+    loadProductSettings();
 
     // Animations
     Animated.parallel([
@@ -165,6 +169,34 @@ const Home = ({ navigation }) => {
       await printerService.setPaperWidth(size);
     } catch (e) {
       console.log("Printer paper size set error", e);
+    }
+  };
+
+  const loadProductSettings = async () => {
+    try {
+      const currentUsername = await AsyncStorage.getItem('username');
+      if (!currentUsername) return;
+
+      const key = `settings_show_stock_only_${currentUsername}`;
+      const val = await AsyncStorage.getItem(key);
+      if (val === 'true') setShowStockOnly(true);
+      else setShowStockOnly(false);
+    } catch (e) {
+      console.log("Error loading product settings", e);
+    }
+  };
+
+  const toggleShowStockOnly = async () => {
+    const newValue = !showStockOnly;
+    setShowStockOnly(newValue);
+    try {
+      const currentUsername = await AsyncStorage.getItem('username');
+      if (currentUsername) {
+        const key = `settings_show_stock_only_${currentUsername}`;
+        await AsyncStorage.setItem(key, String(newValue));
+      }
+    } catch (e) {
+      console.log("Error saving product settings", e);
     }
   };
 
@@ -280,14 +312,14 @@ const Home = ({ navigation }) => {
 
               {/* Header */}
               <View style={styles.modalHeader}>
-                {isPrinterSettingsOpen ? (
-                  <TouchableOpacity onPress={() => setIsPrinterSettingsOpen(false)} style={styles.backButton}>
+                {isPrinterSettingsOpen || isProductSettingsOpen ? (
+                  <TouchableOpacity onPress={() => { setIsPrinterSettingsOpen(false); setIsProductSettingsOpen(false); }} style={styles.backButton}>
                     <Ionicons name="arrow-back" size={24} color={Colors.text.primary} />
                   </TouchableOpacity>
                 ) : null}
 
                 <Text style={styles.modalTitle}>
-                  {isPrinterSettingsOpen ? "Printer Settings" : "Settings"}
+                  {isPrinterSettingsOpen ? "Printer Settings" : (isProductSettingsOpen ? "Product Settings" : "Settings")}
                 </Text>
 
                 <TouchableOpacity onPress={() => setSettingsModalVisible(false)}>
@@ -296,7 +328,8 @@ const Home = ({ navigation }) => {
               </View>
 
               {/* Content Logic */}
-              {!isPrinterSettingsOpen ? (
+              {/* Content Logic */}
+              {!isPrinterSettingsOpen && !isProductSettingsOpen ? (
                 /* Main Settings Menu */
                 <View>
                   <TouchableOpacity
@@ -315,18 +348,46 @@ const Home = ({ navigation }) => {
                     <Ionicons name="chevron-forward" size={24} color={Colors.text.tertiary} />
                   </TouchableOpacity>
 
-                  {/* Placeholder for other settings */}
-                  <TouchableOpacity style={styles.menuItem} activeOpacity={0.7}>
+                  {/* Product Settings */}
+                  <TouchableOpacity
+                    style={styles.menuItem}
+                    onPress={() => setIsProductSettingsOpen(true)}
+                    activeOpacity={0.7}
+                  >
                     <View style={styles.menuItemLeft}>
-                      <View style={[styles.menuIconContainer, { backgroundColor: 'rgba(16, 185, 129, 0.1)' }]}>
-                        <Ionicons name="cloud-done-outline" size={24} color={Colors.success.main} />
+                      <View style={[styles.menuIconContainer, { backgroundColor: 'rgba(255, 152, 0, 0.1)' }]}>
+                        <Ionicons name="cube-outline" size={24} color="#FF9800" />
                       </View>
                       <View>
-                        <Text style={styles.menuItemTitle}>Sync</Text>
-                        <Text style={styles.menuItemSubtitle}>Manage data synchronization</Text>
+                        <Text style={styles.menuItemTitle}>Products</Text>
+                        <Text style={styles.menuItemSubtitle}>Manage product visibility</Text>
                       </View>
                     </View>
                     <Ionicons name="chevron-forward" size={24} color={Colors.text.tertiary} />
+                  </TouchableOpacity>
+                </View>
+              ) : isProductSettingsOpen ? (
+                /* Inner Product Settings View */
+                <View style={styles.settingItem}>
+                  <TouchableOpacity
+                    style={[styles.menuItem, { borderBottomWidth: 0 }]}
+                    onPress={toggleShowStockOnly}
+                    activeOpacity={0.8}
+                  >
+                    <View style={styles.menuItemLeft}>
+                      <View style={[styles.menuIconContainer, { backgroundColor: showStockOnly ? 'rgba(76, 175, 80, 0.1)' : 'rgba(158, 158, 158, 0.1)' }]}>
+                        <Ionicons name={showStockOnly ? "checkmark-circle" : "ellipse-outline"} size={24} color={showStockOnly ? Colors.success.main : Colors.text.tertiary} />
+                      </View>
+                      <View style={{ flex: 1 }}>
+                        <Text style={styles.menuItemTitle}>Show Stock Only</Text>
+                        <Text style={styles.menuItemSubtitle} numberOfLines={2}>Only display products with available stock</Text>
+                      </View>
+                    </View>
+                    <Ionicons
+                      name={showStockOnly ? "toggle" : "toggle-outline"}
+                      size={32}
+                      color={showStockOnly ? Colors.success.main : Colors.text.tertiary}
+                    />
                   </TouchableOpacity>
                 </View>
               ) : (
@@ -599,7 +660,9 @@ const styles = StyleSheet.create({
   menuItemLeft: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: Spacing.md
+    gap: Spacing.md,
+    flex: 1, // Allow taking up available space
+    paddingRight: Spacing.md // Add spacing before the right icon/toggle
   },
   menuIconContainer: {
     width: 48,

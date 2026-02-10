@@ -54,7 +54,22 @@ export default function RootLayout() {
 
           if (now - parseInt(loginTimestamp, 10) > twentyHours) {
             console.log("Auto-logout: Session expired 20h limit");
-            await AsyncStorage.multiRemove(["authToken", "user", "loginTimestamp", "isDemo", "demoExpiresAt", "licenseActivated", "licenseKey", "clientId", "allowedMenuIds", "role", "accountcode"]);
+
+            // SMART LOGOUT: Preserve License & Device Info, Clear User Session Data ONLY
+            // Keys to remove: "authToken", "user", "loginTimestamp", "allowedMenuIds", "role", "accountcode"
+            // Keys PRESERVED: "clientId", "licenseKey", "licenseActivated", "deviceId", "customerName", "projectName", "isDemo", "demoExpiresAt"
+
+            await AsyncStorage.multiRemove([
+              "authToken",
+              "user",
+              "loginTimestamp",
+              "allowedMenuIds",
+              "role",
+              "accountcode",
+              // "settings_show_stock_only" // Optional: decide if settings should be cleared. User didn't specify, usually better to keep or clear per user.
+              // Note: "settings_show_stock_only_USERNAME" are user specific and won't be cleared here, which is fine.
+            ]);
+
             router.replace("/");
             return;
           }

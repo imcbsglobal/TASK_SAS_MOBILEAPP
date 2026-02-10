@@ -846,7 +846,7 @@ export default function PlaceOrder() {
           <TouchableOpacity onPress={() => router.back()} style={styles.iconButton}>
             <Ionicons name="arrow-back" size={24} color={Colors.accent.main} />
           </TouchableOpacity>
-          <Text style={styles.headerTitle}>Placed Orders</Text>
+          <Text style={styles.headerTitle}>Placed Returns</Text>
           <View style={{ width: 24 }} />
         </View>
 

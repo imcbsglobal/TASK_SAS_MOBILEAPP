@@ -340,8 +340,25 @@ export default function OrderDetails() {
         const storedUser = await AsyncStorage.getItem('username');
         if (storedUser) {
           setUsername(storedUser);
-          console.log('[OrderDetails] Username loaded:', storedUser);
+          console.log('[ReturnDetails] Username loaded:', storedUser);
         }
+
+        // LOAD SHOW STOCK ONLY SETTING (USER SPECIFIC)
+        const userKey = storedUser ? `settings_show_stock_only_${storedUser}` : 'settings_show_stock_only';
+        const showStockOnlyStr = await AsyncStorage.getItem(userKey);
+        const showStockOnly = showStockOnlyStr === 'true';
+
+        if (showStockOnly) {
+          console.log(`[ReturnDetails] "Show Stock Only" setting is ENABLED for ${storedUser || 'unknown'}`);
+          setFilterInStock(true);
+          setFilters(prev => ({
+            ...prev,
+            inStock: true
+          }));
+        } else {
+          console.log(`[ReturnDetails] "Show Stock Only" setting is DISABLED for ${storedUser || 'unknown'}`);
+        }
+
       } catch (error) {
         console.error('[OrderDetails] Failed to load settings/user:', error);
       }
@@ -2100,7 +2117,7 @@ export default function OrderDetails() {
         )}
         <Animated.View style={[styles.bottomSheet, { transform: [{ translateY: sheetAnim }] }]}>
           <View style={styles.sheetHeader}>
-            <Text style={styles.sheetTitle}>Current Order ({itemCount} items)</Text>
+            <Text style={styles.sheetTitle}>Current Return ({itemCount} items)</Text>
             <TouchableOpacity onPress={() => toggleSheet(false)}>
               <Ionicons name="close" size={24} color={Colors.text.secondary} />
             </TouchableOpacity>
@@ -2145,7 +2162,7 @@ export default function OrderDetails() {
                 style={styles.proceedGradient}
               >
                 <View style={styles.PlaceOrderButton}>
-                  <Text style={styles.checkoutText}>Place Order</Text>
+                  <Text style={styles.checkoutText}>Place Return</Text>
                   <Ionicons name="checkmark-circle" size={20} color="#FFF" />
                 </View>
               </LinearGradient>

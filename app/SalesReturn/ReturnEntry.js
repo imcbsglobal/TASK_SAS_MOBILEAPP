@@ -122,9 +122,23 @@ export default function EntryScreen() {
       setAvailablePriceCodes(codes);
       // Set default if valid
       if (codes.length > 0) {
-        const defaultCode = codes.find(c => c.code === 'S2') || codes[0];
-        setSelectedPriceCode(defaultCode.code);
-        setSelectedPriceName(defaultCode.name);
+        let defaultCode = null;
+        // NEW: Prioritize default_price_code from settings
+        let settingsRef = null;
+        if (settingsStr) settingsRef = JSON.parse(settingsStr);
+
+        if (settingsRef && settingsRef.default_price_code) {
+          defaultCode = codes.find(c => c.code === settingsRef.default_price_code);
+        }
+
+        if (!defaultCode) {
+          defaultCode = codes.find(c => c.code === 'S2') || codes[0];
+        }
+
+        if (defaultCode) {
+          setSelectedPriceCode(defaultCode.code);
+          setSelectedPriceName(defaultCode.name);
+        }
       }
 
     } catch (e) {
@@ -170,6 +184,42 @@ export default function EntryScreen() {
 
   // Auto-select Price Code based on Customer Default
   useEffect(() => {
+    // ---------------------------------------------------------
+    // NEW LOGIC: Check read_price_category from settings
+    // ---------------------------------------------------------
+    if (appSettings && appSettings.read_price_category === false) {
+      const targetDefault = appSettings.default_price_code || 'S1';
+
+      // Try to find the full price object for the default code
+      let foundPrice = availablePriceCodes.find(pc => pc.code === targetDefault);
+
+      // If not in available, check ALL codes 
+      if (!foundPrice && appSettings.price_codes) {
+        foundPrice = appSettings.price_codes.find(pc => pc.code === targetDefault);
+      }
+
+      // If still not found, check generic defaults
+      if (!foundPrice) {
+        foundPrice = DEFAULT_PRICE_CODES.find(pc => pc.code === targetDefault);
+      }
+
+      if (foundPrice) {
+        if (selectedPriceCode !== foundPrice.code) {
+          console.log(`[ReturnEntry] read_price_category is FALSE. Enforcing system default: ${foundPrice.code}`);
+          setSelectedPriceCode(foundPrice.code);
+          setSelectedPriceName(foundPrice.name);
+        }
+      } else {
+        if (selectedPriceCode !== targetDefault) {
+          console.log(`[ReturnEntry] System default ${targetDefault} object not found. Forcing code.`);
+          setSelectedPriceCode(targetDefault);
+          setSelectedPriceName(targetDefault);
+        }
+      }
+      return;
+    }
+    // ---------------------------------------------------------
+
     if (selectedCustomer && selectedCustomer.remarkcolumntitle) {
       const code = selectedCustomer.remarkcolumntitle;
       // Check if this code is in the AVAILABLE (filtered) list for this user
@@ -210,8 +260,16 @@ export default function EntryScreen() {
         }
       }
     } else if (selectedCustomer && !selectedCustomer.remarkcolumntitle && availablePriceCodes.length > 0) {
-      // Customer has NO specific price code -> Revert to Default (S2 or First Available)
-      const defaultCode = availablePriceCodes.find(c => c.code === 'S2') || availablePriceCodes[0];
+      // Customer has NO specific price code -> Revert to Default (System Default or First Available)
+
+      let defaultCode = null;
+      if (appSettings && appSettings.default_price_code) {
+        defaultCode = availablePriceCodes.find(c => c.code === appSettings.default_price_code);
+      }
+
+      if (!defaultCode) {
+        defaultCode = availablePriceCodes.find(c => c.code === 'S2') || availablePriceCodes[0];
+      }
 
       if (defaultCode && selectedPriceCode !== defaultCode.code) {
         console.log(`[Entry] Customer has no default. Reverting to system default: ${defaultCode.code}`);
@@ -219,7 +277,7 @@ export default function EntryScreen() {
         setSelectedPriceName(defaultCode.name);
       }
     }
-  }, [selectedCustomer, availablePriceCodes]);
+  }, [selectedCustomer, availablePriceCodes, appSettings]);
 
   const loadFromDatabase = async () => {
     try {
@@ -524,7 +582,7 @@ export default function EntryScreen() {
             activeOpacity={0.8}
           >
             <View style={[styles.proceedGradient, { backgroundColor: 'transparent' }]}>
-              <Text style={[styles.proceedText, { color: Colors.accent.main }]}>View Placed Orders</Text>
+              <Text style={[styles.proceedText, { color: Colors.accent.main }]}>View Return Orders</Text>
               <Ionicons name="list" size={20} color={Colors.accent.main} />
             </View>
           </TouchableOpacity>

@@ -122,9 +122,30 @@ export default function EntryScreen() {
       setAvailablePriceCodes(codes);
       // Set default if valid
       if (codes.length > 0) {
-        const defaultCode = codes.find(c => c.code === 'S2') || codes[0];
-        setSelectedPriceCode(defaultCode.code);
-        setSelectedPriceName(defaultCode.name);
+        let defaultCode = null;
+        // NEW: Prioritize default_price_code from settings
+        if (appSettings && appSettings.default_price_code) { // Check appSettings state if already set, or parse locally
+          // NOTE: appSettings might not be set yet if we just parsed it. Use local variable if needed.
+          // Better to re-parse or use the local 'settings' variable if defined in scope.
+        }
+
+        // Re-using local 'settings' from if block is tricky due to scope. 
+        // Let's rely on logic similar to above.
+        let settingsRef = null;
+        if (settingsStr) settingsRef = JSON.parse(settingsStr);
+
+        if (settingsRef && settingsRef.default_price_code) {
+          defaultCode = codes.find(c => c.code === settingsRef.default_price_code);
+        }
+
+        if (!defaultCode) {
+          defaultCode = codes.find(c => c.code === 'S2') || codes[0];
+        }
+
+        if (defaultCode) {
+          setSelectedPriceCode(defaultCode.code);
+          setSelectedPriceName(defaultCode.name);
+        }
       }
 
     } catch (e) {
@@ -170,6 +191,43 @@ export default function EntryScreen() {
 
   // Auto-select Price Code based on Customer Default
   useEffect(() => {
+    // ---------------------------------------------------------
+    // NEW LOGIC: Check read_price_category from settings
+    // ---------------------------------------------------------
+    if (appSettings && appSettings.read_price_category === false) {
+      const targetDefault = appSettings.default_price_code || 'S1';
+
+      // Try to find the full price object for the default code
+      let foundPrice = availablePriceCodes.find(pc => pc.code === targetDefault);
+
+      // If not in available, check ALL codes (in case it is restricted but is the system default)
+      if (!foundPrice && appSettings.price_codes) {
+        foundPrice = appSettings.price_codes.find(pc => pc.code === targetDefault);
+      }
+
+      // If still not found, check generic defaults
+      if (!foundPrice) {
+        foundPrice = DEFAULT_PRICE_CODES.find(pc => pc.code === targetDefault);
+      }
+
+      if (foundPrice) {
+        if (selectedPriceCode !== foundPrice.code) {
+          console.log(`[Entry] read_price_category is FALSE. Enforcing system default: ${foundPrice.code}`);
+          setSelectedPriceCode(foundPrice.code);
+          setSelectedPriceName(foundPrice.name);
+        }
+      } else {
+        // Just set the code string if object not found
+        if (selectedPriceCode !== targetDefault) {
+          console.log(`[Entry] System default ${targetDefault} object not found. Forcing code.`);
+          setSelectedPriceCode(targetDefault);
+          setSelectedPriceName(targetDefault);
+        }
+      }
+      return; // Stop processing customer-specific logic
+    }
+    // ---------------------------------------------------------
+
     if (selectedCustomer && selectedCustomer.remarkcolumntitle) {
       const code = selectedCustomer.remarkcolumntitle;
       // Check if this code is in the AVAILABLE (filtered) list for this user
@@ -210,8 +268,17 @@ export default function EntryScreen() {
         }
       }
     } else if (selectedCustomer && !selectedCustomer.remarkcolumntitle && availablePriceCodes.length > 0) {
-      // Customer has NO specific price code -> Revert to Default (S2 or First Available)
-      const defaultCode = availablePriceCodes.find(c => c.code === 'S2') || availablePriceCodes[0];
+      // Customer has NO specific price code -> Revert to Default (System Default or First Available)
+
+      let defaultCode = null;
+      // Try to use system default first if available
+      if (appSettings && appSettings.default_price_code) {
+        defaultCode = availablePriceCodes.find(c => c.code === appSettings.default_price_code);
+      }
+
+      if (!defaultCode) {
+        defaultCode = availablePriceCodes.find(c => c.code === 'S2') || availablePriceCodes[0];
+      }
 
       if (defaultCode && selectedPriceCode !== defaultCode.code) {
         console.log(`[Entry] Customer has no default. Reverting to system default: ${defaultCode.code}`);
@@ -219,7 +286,7 @@ export default function EntryScreen() {
         setSelectedPriceName(defaultCode.name);
       }
     }
-  }, [selectedCustomer, availablePriceCodes]);
+  }, [selectedCustomer, availablePriceCodes, appSettings]); // Added appSettings dependency
 
   const loadFromDatabase = async () => {
     try {
