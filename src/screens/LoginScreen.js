@@ -579,7 +579,7 @@ export default function LoginScreen() {
           </TouchableOpacity>
         </View>
 
-        <Text style={styles.footerText}>© 2025 All rights reserved. IMCB Solutions LLP</Text>
+        <Text style={styles.footerText}>© 2026 All rights reserved. IMCB Solutions LLP</Text>
       </KeyboardAvoidingView>
     </LinearGradient>
   );

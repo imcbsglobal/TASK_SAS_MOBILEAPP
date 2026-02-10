@@ -65,6 +65,7 @@ export default function PlaceOrder() {
   useEffect(() => {
     if (currentUsername) {
       loadLocalOrders();
+      fetchUploadedOrders();
     }
   }, [currentUsername]);
 
@@ -858,7 +859,7 @@ export default function PlaceOrder() {
             </TouchableOpacity>
             <TouchableOpacity style={[styles.filterTab, filterStatus === 'uploaded' && styles.filterTabActive]} onPress={() => setFilterStatus('uploaded')}>
               <Ionicons name="cloud-done" size={16} color={filterStatus === 'uploaded' ? '#FFF' : Colors.success.main} />
-              <Text style={[styles.filterTabText, filterStatus === 'uploaded' && styles.filterTabTextActive]}>Uploaded</Text>
+              <Text style={[styles.filterTabText, filterStatus === 'uploaded' && styles.filterTabTextActive]}>Uploaded ({uploadedCount})</Text>
             </TouchableOpacity>
             <TouchableOpacity style={[styles.filterTab, filterStatus === 'failed' && styles.filterTabActive]} onPress={() => setFilterStatus('failed')}>
               <Ionicons name="alert-circle" size={16} color={filterStatus === 'failed' ? '#FFF' : Colors.error.main} />

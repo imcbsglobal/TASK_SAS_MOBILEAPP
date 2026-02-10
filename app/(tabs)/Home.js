@@ -298,6 +298,10 @@ const Home = ({ navigation }) => {
               ))}
             </View>
           </Animated.View>
+
+          <View style={styles.footerContainer}>
+            <Text style={styles.footerText}>© 2026 All rights reserved. IMCB Solutions LLP</Text>
+          </View>
         </ScrollView>
 
         {/* Settings Modal */}
@@ -733,7 +737,16 @@ const styles = StyleSheet.create({
   sizeOptionSubtitle: {
     fontSize: 10,
     color: Colors.text.tertiary
-  }
+  },
+  footerContainer: {
+    alignItems: 'center',
+    marginTop: Spacing.xl,
+    marginBottom: Spacing.xl * 2, // Extra space for safe area
+  },
+  footerText: {
+    color: Colors.text.tertiary,
+    fontSize: Typography.sizes.xs,
+  },
 });
 
 export default Home;

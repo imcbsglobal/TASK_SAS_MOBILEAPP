@@ -79,6 +79,7 @@ export default function PunchInScreen() {
   const [notes, setNotes] = useState("");
   const [punching, setPunching] = useState(false);
   const [loggedInUser, setLoggedInUser] = useState("");
+  const [punchinStatusToPost, setPunchinStatusToPost] = useState("");
 
   useFocusEffect(
     useCallback(() => {
@@ -239,6 +240,8 @@ export default function PunchInScreen() {
       // User requirement: "show only the verified customers only from [API]"
       // and "status verified no need to show the customers pending"
       const verifiedFirmCodes = new Set();
+      const firmLocationMap = new Map(); // Map to store coordinates by firm_code
+
       firms.forEach(firm => {
         // normalizing code to string and trimming
         const code = String(firm.firm_code || '').trim();
@@ -246,6 +249,13 @@ export default function PunchInScreen() {
 
         if (code && status !== 'pending') {
           verifiedFirmCodes.add(code);
+          // Store coordinates for this firm
+          firmLocationMap.set(code, {
+            latitude: firm.latitude,
+            longitude: firm.longitude,
+            storeName: firm.storeName,
+            storeLocation: firm.storeLocation
+          });
         }
       });
 
@@ -278,15 +288,24 @@ export default function PunchInScreen() {
       console.log(`[PunchIn] Fetched ${debtors.length} debtors for selection`);
 
       // MAPPING Debtors: code, name, place, balance, client_id
-      const mappedCustomers = debtors.map(debtor => ({
-        ...debtor, // Spread all properties (includes latitude, longitude if present)
-        code: debtor.code || debtor.id?.toString(),
-        name: debtor.name || "Unknown Debtor",
-        place: debtor.place || debtor.area || '',
-        area: debtor.area || '', // Ensure area is explicitly mapped
-        balance: debtor.balance || 0,
-        client_id: debtor.client_id
-      }));
+      // AND merge coordinates from shop location API
+      const mappedCustomers = debtors.map(debtor => {
+        const customerCode = String(debtor.code || debtor.id?.toString() || '').trim();
+        const locationData = firmLocationMap.get(customerCode);
+
+        return {
+          ...debtor, // Spread all properties
+          code: debtor.code || debtor.id?.toString(),
+          name: debtor.name || "Unknown Debtor",
+          place: debtor.place || debtor.area || '',
+          area: debtor.area || '', // Ensure area is explicitly mapped
+          balance: debtor.balance || 0,
+          client_id: debtor.client_id,
+          // Merge coordinates from shop location API
+          latitude: locationData?.latitude || debtor.latitude,
+          longitude: locationData?.longitude || debtor.longitude,
+        };
+      });
 
       // APPLY FILTER: Only show verified customers
       const verifiedCustomers = mappedCustomers.filter(c => {
@@ -407,6 +426,28 @@ export default function PunchInScreen() {
       return;
     }
 
+    // Check if customer has valid coordinates
+    if (!customer.latitude || !customer.longitude) {
+      Alert.alert(
+        "Location Data Missing",
+        "This customer does not have location coordinates. Cannot verify location.",
+        [
+          {
+            text: "Cancel",
+            style: "cancel"
+          },
+          {
+            text: "Continue Anyway",
+            onPress: () => {
+              setPunchinStatusToPost("location data unavailable");
+              takeSelfie();
+            }
+          }
+        ]
+      );
+      return;
+    }
+
     const distance = getDistanceFromLatLonInMeters(
       currentLocation.latitude,
       currentLocation.longitude,
@@ -416,47 +457,116 @@ export default function PunchInScreen() {
 
     console.log(`Distance to ${customer.name}: ${distance.toFixed(1)}m`);
 
-    if (distance > 100) {
+    if (distance <= 100) {
+      // User is within correct location
       Alert.alert(
-        "Out of Range",
-        `You are too far from ${customer.name}.\nDistance: ${distance.toFixed(1)}m.\nRequired: < 100m.`
+        "Success",
+        "You are in correct location",
+        [
+          {
+            text: "OK",
+            onPress: () => {
+              setPunchinStatusToPost("correct location");
+              takeSelfie();
+            }
+          }
+        ]
       );
-      return;
+    } else {
+      // User location is mismatched
+      Alert.alert(
+        "Location Mismatch",
+        "Your location is mismatched with the shop location. Do you want to continue?",
+        [
+          {
+            text: "No",
+            style: "cancel"
+          },
+          {
+            text: "Yes",
+            onPress: () => {
+              setPunchinStatusToPost("mismatch location");
+              takeSelfie();
+            }
+          }
+        ]
+      );
     }
-
-    takeSelfie();
   };
 
   const takeSelfie = async () => {
+    console.log('[PunchIn] ===== takeSelfie CALLED =====');
     try {
+      console.log('[PunchIn] Requesting camera permissions...');
       const { status } = await ImagePicker.requestCameraPermissionsAsync();
+      console.log('[PunchIn] Camera permission status:', status);
+
       if (status !== 'granted') {
+        console.log('[PunchIn] Camera permission denied');
         Alert.alert("Permission denied", "Camera permission is required for selfie verification.");
         return;
       }
 
+      console.log('[PunchIn] Launching camera...');
       const result = await ImagePicker.launchCameraAsync({
         cameraType: 'front',
         allowsEditing: false,
         quality: 0.5,
       });
 
+      console.log('[PunchIn] Camera returned successfully');
+
+      // Increase delay to 300ms to let camera fully close
+      await new Promise(resolve => setTimeout(resolve, 300));
+
+      console.log('[PunchIn] Processing result...');
+      console.log('[PunchIn] Result canceled:', result.canceled);
+      console.log('[PunchIn] Has assets:', !!result.assets);
+
       if (!result.canceled && result.assets && result.assets.length > 0) {
-        setSelfieUri(result.assets[0].uri);
-        setShowConfirmModal(true);
+        console.log('[PunchIn] Extracting URI...');
+        const uri = result.assets[0].uri;
+        console.log('[PunchIn] URI:', uri);
+
+        // Increase setTimeout delay to 200ms and add try-catch for stability
+        setTimeout(() => {
+          try {
+            console.log('[PunchIn] Updating states...');
+            setSelfieUri(uri);
+            setShowConfirmModal(true);
+            console.log('[PunchIn] States updated successfully');
+          } catch (e) {
+            console.error('[PunchIn] Error updating states:', e);
+            Alert.alert("Error", "Failed to process image. Please try again.");
+          }
+        }, 200);
+      } else {
+        console.log('[PunchIn] Camera was canceled or no assets');
       }
     } catch (error) {
-      console.error("Camera error:", error);
+      console.error("[PunchIn] Camera error:", error);
+      console.error("[PunchIn] Error stack:", error.stack);
       Alert.alert("Error", "Failed to open camera.");
     }
   };
 
   const confirmPunchIn = async () => {
+    console.log('[PunchIn] ===== confirmPunchIn CALLED =====');
     const customer = getSelectedCustomerDetails();
-    if (!selfieUri || !customer || !currentLocation) return;
+    console.log('[PunchIn] Customer:', customer?.code);
+    console.log('[PunchIn] SelfieUri:', !!selfieUri);
+    console.log('[PunchIn] CurrentLocation:', !!currentLocation);
+    console.log('[PunchIn] PunchinStatusToPost:', punchinStatusToPost);
+
+    if (!selfieUri || !customer || !currentLocation) {
+      console.log('[PunchIn] Missing required data, returning');
+      return;
+    }
 
     try {
+      console.log('[PunchIn] Setting punching to true');
       setPunching(true);
+      console.log('[PunchIn] Getting auth token');
       const token = await AsyncStorage.getItem("authToken");
 
       let address = "";
@@ -477,6 +587,13 @@ export default function PunchInScreen() {
       formData.append('customerCode', customer.code);
       formData.append('latitude', currentLocation.latitude.toString());
       formData.append('longitude', currentLocation.longitude.toString());
+      formData.append('current_location', `${currentLocation.latitude},${currentLocation.longitude}`);
+
+      // Safety check for customer coordinates
+      const shopLat = customer.latitude || 0;
+      const shopLon = customer.longitude || 0;
+      formData.append('shop_location', `${shopLat},${shopLon}`);
+      formData.append('punchin_status', punchinStatusToPost || 'unknown');
       formData.append('address', address || 'Unknown');
       formData.append('notes', notes || '');
 
@@ -489,6 +606,18 @@ export default function PunchInScreen() {
         name: filename,
         type: type
       });
+
+      console.log('[PunchIn] ===== DATA BEING POSTED TO API =====');
+      console.log('[PunchIn] customerCode:', customer.code);
+      console.log('[PunchIn] latitude:', currentLocation.latitude);
+      console.log('[PunchIn] longitude:', currentLocation.longitude);
+      console.log('[PunchIn] current_location:', `${currentLocation.latitude},${currentLocation.longitude}`);
+      console.log('[PunchIn] shop_location:', `${shopLat},${shopLon}`);
+      console.log('[PunchIn] punchin_status:', punchinStatusToPost || 'unknown');
+      console.log('[PunchIn] address:', address || 'Unknown');
+      console.log('[PunchIn] notes:', notes || '');
+      console.log('[PunchIn] image:', filename);
+      console.log('[PunchIn] ==========================================');
 
       console.log('[PunchIn] Posting punch-in...');
       const response = await fetch('https://tasksas.com/api/punch-in/', {
@@ -806,10 +935,10 @@ export default function PunchInScreen() {
               style={[
                 styles.actionButton,
                 styles.punchInButton,
-                (isBlocked || !canPunch) && styles.disabledButton
+                isBlocked && styles.disabledButton
               ]}
               onPress={startPunchInFlow}
-              disabled={punching || isBlocked || !canPunch}
+              disabled={punching || isBlocked}
             >
               {punching ? (
                 <ActivityIndicator color="#FFF" />
