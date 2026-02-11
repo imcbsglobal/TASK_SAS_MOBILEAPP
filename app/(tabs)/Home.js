@@ -36,10 +36,12 @@ const Home = ({ navigation }) => {
 
   // Settings Modal State
   const [settingsModalVisible, setSettingsModalVisible] = useState(false);
-  const [isPrinterSettingsOpen, setIsPrinterSettingsOpen] = useState(false); // New nested state
-  const [isProductSettingsOpen, setIsProductSettingsOpen] = useState(false); // New nested state
+  const [isPrinterSettingsOpen, setIsPrinterSettingsOpen] = useState(false);
+  const [isProductSettingsOpen, setIsProductSettingsOpen] = useState(false);
+  const [isPaymentSettingsOpen, setIsPaymentSettingsOpen] = useState(false);
   const [paperSize, setPaperSize] = useState(58); // Default 58mm
   const [showStockOnly, setShowStockOnly] = useState(false);
+  const [defaultPaymentMethod, setDefaultPaymentMethod] = useState('Cash');
 
   useEffect(() => {
     // Load username from storage
@@ -58,6 +60,7 @@ const Home = ({ navigation }) => {
     loadUsername();
     loadPrinterSettings();
     loadProductSettings();
+    loadPaymentSettings();
 
     // Animations
     Animated.parallel([
@@ -145,7 +148,10 @@ const Home = ({ navigation }) => {
       description: 'Printer configuration',
       onPress: () => {
         loadPrinterSettings();
+        loadPaymentSettings();
         setIsPrinterSettingsOpen(false);
+        setIsProductSettingsOpen(false);
+        setIsPaymentSettingsOpen(false);
         setSettingsModalVisible(true);
       },
       gradient: [Colors.text.secondary, Colors.text.primary],
@@ -197,6 +203,24 @@ const Home = ({ navigation }) => {
       }
     } catch (e) {
       console.log("Error saving product settings", e);
+    }
+  };
+
+  const loadPaymentSettings = async () => {
+    try {
+      const val = await AsyncStorage.getItem('settings_default_payment_method');
+      if (val) setDefaultPaymentMethod(val);
+    } catch (e) {
+      console.log("Error loading payment settings", e);
+    }
+  };
+
+  const handlePaymentMethodSelection = async (method) => {
+    setDefaultPaymentMethod(method);
+    try {
+      await AsyncStorage.setItem('settings_default_payment_method', method);
+    } catch (e) {
+      console.log("Error saving payment settings", e);
     }
   };
 
@@ -316,14 +340,20 @@ const Home = ({ navigation }) => {
 
               {/* Header */}
               <View style={styles.modalHeader}>
-                {isPrinterSettingsOpen || isProductSettingsOpen ? (
-                  <TouchableOpacity onPress={() => { setIsPrinterSettingsOpen(false); setIsProductSettingsOpen(false); }} style={styles.backButton}>
+                {isPrinterSettingsOpen || isProductSettingsOpen || isPaymentSettingsOpen ? (
+                  <TouchableOpacity onPress={() => {
+                    setIsPrinterSettingsOpen(false);
+                    setIsProductSettingsOpen(false);
+                    setIsPaymentSettingsOpen(false);
+                  }} style={styles.backButton}>
                     <Ionicons name="arrow-back" size={24} color={Colors.text.primary} />
                   </TouchableOpacity>
                 ) : null}
 
                 <Text style={styles.modalTitle}>
-                  {isPrinterSettingsOpen ? "Printer Settings" : (isProductSettingsOpen ? "Product Settings" : "Settings")}
+                  {isPrinterSettingsOpen ? "Printer Settings" :
+                    (isProductSettingsOpen ? "Product Settings" :
+                      (isPaymentSettingsOpen ? "Payment Settings" : "Settings"))}
                 </Text>
 
                 <TouchableOpacity onPress={() => setSettingsModalVisible(false)}>
@@ -333,7 +363,7 @@ const Home = ({ navigation }) => {
 
               {/* Content Logic */}
               {/* Content Logic */}
-              {!isPrinterSettingsOpen && !isProductSettingsOpen ? (
+              {!isPrinterSettingsOpen && !isProductSettingsOpen && !isPaymentSettingsOpen ? (
                 /* Main Settings Menu */
                 <View>
                   <TouchableOpacity
@@ -369,6 +399,24 @@ const Home = ({ navigation }) => {
                     </View>
                     <Ionicons name="chevron-forward" size={24} color={Colors.text.tertiary} />
                   </TouchableOpacity>
+
+                  {/* Payment Settings */}
+                  <TouchableOpacity
+                    style={styles.menuItem}
+                    onPress={() => setIsPaymentSettingsOpen(true)}
+                    activeOpacity={0.7}
+                  >
+                    <View style={styles.menuItemLeft}>
+                      <View style={[styles.menuIconContainer, { backgroundColor: 'rgba(76, 175, 80, 0.1)' }]}>
+                        <Ionicons name="card-outline" size={24} color={Colors.success.main} />
+                      </View>
+                      <View>
+                        <Text style={styles.menuItemTitle}>Payment Method</Text>
+                        <Text style={styles.menuItemSubtitle}>Set default for new orders</Text>
+                      </View>
+                    </View>
+                    <Ionicons name="chevron-forward" size={24} color={Colors.text.tertiary} />
+                  </TouchableOpacity>
                 </View>
               ) : isProductSettingsOpen ? (
                 /* Inner Product Settings View */
@@ -393,6 +441,41 @@ const Home = ({ navigation }) => {
                       color={showStockOnly ? Colors.success.main : Colors.text.tertiary}
                     />
                   </TouchableOpacity>
+                </View>
+              ) : isPaymentSettingsOpen ? (
+                /* Inner Payment Settings View */
+                <View style={styles.settingItem}>
+                  <View style={styles.settingLabelContainer}>
+                    <Text style={styles.settingLabel}>Default Payment Method</Text>
+                  </View>
+
+                  <View style={styles.sizeSelectionContainer}>
+                    <TouchableOpacity
+                      style={[styles.sizeOption, defaultPaymentMethod === 'Cash' && styles.sizeOptionSelected]}
+                      onPress={() => handlePaymentMethodSelection('Cash')}
+                    >
+                      <Ionicons name={defaultPaymentMethod === 'Cash' ? "radio-button-on" : "radio-button-off"} size={24} color={defaultPaymentMethod === 'Cash' ? Colors.primary.main : Colors.text.tertiary} />
+                      <View>
+                        <Text style={[styles.sizeOptionTitle, defaultPaymentMethod === 'Cash' && styles.sizeOptionTitleSelected]}>Cash</Text>
+                        <Text style={styles.sizeOptionSubtitle}>Standard Cash/Bank</Text>
+                      </View>
+                    </TouchableOpacity>
+
+                    <TouchableOpacity
+                      style={[styles.sizeOption, defaultPaymentMethod === 'Credit' && styles.sizeOptionSelected]}
+                      onPress={() => handlePaymentMethodSelection('Credit')}
+                    >
+                      <Ionicons name={defaultPaymentMethod === 'Credit' ? "radio-button-on" : "radio-button-off"} size={24} color={defaultPaymentMethod === 'Credit' ? Colors.primary.main : Colors.text.tertiary} />
+                      <View>
+                        <Text style={[styles.sizeOptionTitle, defaultPaymentMethod === 'Credit' && styles.sizeOptionTitleSelected]}>Credit</Text>
+                        <Text style={styles.sizeOptionSubtitle}>Credit Sale</Text>
+                      </View>
+                    </TouchableOpacity>
+                  </View>
+
+                  <Text style={styles.helperText}>
+                    This method will be auto-selected when you create a new order.
+                  </Text>
                 </View>
               ) : (
                 /* Inner Printer Settings View */

@@ -45,8 +45,13 @@ export default function PlaceOrder() {
   const [uploadingOrder, setUploadingOrder] = useState(null);
   const [filterStatus, setFilterStatus] = useState('pending'); // pending, uploaded, failed
   const [uploadDetailsModal, setUploadDetailsModal] = useState(false);
+
   const [selectedOrderDetails, setSelectedOrderDetails] = useState(null);
   const [currentUsername, setCurrentUsername] = useState(null);
+
+  // Bulk Selection State
+  const [selectionMode, setSelectionMode] = useState(false);
+  const [selectedOrders, setSelectedOrders] = useState([]);
 
 
   // Printer State
@@ -291,7 +296,133 @@ export default function PlaceOrder() {
         }
       ]
     );
+
   }
+
+  // Bulk Selection Logic
+  const toggleSelectionMode = () => {
+    setSelectionMode(!selectionMode);
+    setSelectedOrders([]);
+  };
+
+  const toggleOrderSelection = (orderId) => {
+    if (selectedOrders.includes(orderId)) {
+      setSelectedOrders(selectedOrders.filter(id => id !== orderId));
+    } else {
+      setSelectedOrders([...selectedOrders, orderId]);
+    }
+  };
+
+  const selectAllOrders = () => {
+    if (selectedOrders.length === displayOrders.length) {
+      setSelectedOrders([]);
+    } else {
+      setSelectedOrders(displayOrders.map(o => o.id));
+    }
+  };
+
+  const handleBulkDelete = () => {
+    if (selectedOrders.length === 0) return;
+
+    Alert.alert(
+      "Bulk Delete",
+      `Are you sure you want to delete ${selectedOrders.length} orders?`,
+      [
+        { text: "Cancel", style: "cancel" },
+        {
+          text: "Delete",
+          style: "destructive",
+          onPress: async () => {
+            const newOrders = orders.filter(o => !selectedOrders.includes(o.id));
+            setOrders(newOrders);
+            const storageKey = `placed_orders_${currentUsername}`;
+            await AsyncStorage.setItem(storageKey, JSON.stringify(newOrders));
+            setSelectionMode(false);
+            setSelectedOrders([]);
+          }
+        }
+      ]
+    );
+  };
+
+  const handleBulkUpload = async () => {
+    if (selectedOrders.length === 0) return;
+
+    Alert.alert(
+      "Bulk Upload",
+      `Upload ${selectedOrders.length} orders?`,
+      [
+        { text: "Cancel", style: "cancel" },
+        {
+          text: "Upload",
+          onPress: async () => {
+            setLoadingUploaded(true);
+            let successCount = 0;
+            let failCount = 0;
+            const contextUsername = currentUsername;
+
+            // Get fresh copy of orders from reference or rely on state (using state for simplicity)
+            // We need to keep track of results to update state ONCE at the end or incrementally
+            let processedOrders = [...orders];
+
+            for (const orderId of selectedOrders) {
+              const orderIndex = processedOrders.findIndex(o => o.id === orderId);
+              if (orderIndex === -1) continue;
+
+              const order = processedOrders[orderIndex];
+
+              // Skip if already uploaded
+              if (order.uploadStatus === 'uploaded' || order.uploadStatus === 'uploaded to server') continue;
+
+              try {
+                const result = await uploadOrderToAPI(order);
+
+                if (result.success) {
+                  successCount++;
+                  // Update local processed array
+                  const itemsWithStatus = order.items.map(item => ({ ...item, uploadStatus: 'uploaded to server' }));
+                  processedOrders[orderIndex] = {
+                    ...order,
+                    status: 'uploaded to server',
+                    uploadStatus: 'uploaded to server',
+                    items: itemsWithStatus,
+                    uploadedAt: new Date().toISOString()
+                  };
+                } else {
+                  failCount++;
+                  // You could mark specific failure status here if needed
+                  const itemsWithStatus = order.items.map(item => ({ ...item, uploadStatus: 'failed' }));
+                  processedOrders[orderIndex] = {
+                    ...order,
+                    status: 'failed',
+                    uploadStatus: 'failed',
+                    items: itemsWithStatus
+                  };
+                }
+              } catch (e) {
+                failCount++;
+                console.error(e);
+              }
+            }
+
+            // Update state and storage once
+            setOrders(processedOrders);
+            const storageKey = `placed_orders_${contextUsername}`;
+            await AsyncStorage.setItem(storageKey, JSON.stringify(processedOrders));
+
+            setLoadingUploaded(false);
+            setSelectionMode(false);
+            setSelectedOrders([]);
+
+            Alert.alert(
+              "Bulk Upload Completed",
+              `Successfully uploaded: ${successCount}\nFailed: ${failCount}`
+            );
+          }
+        }
+      ]
+    );
+  };
 
   // Upload Logic with Retry Mechanism
   async function uploadOrderToAPI(order) {
@@ -713,10 +844,19 @@ export default function PlaceOrder() {
       <View style={styles.orderCard}>
         <TouchableOpacity
           style={styles.orderHeader}
-          onPress={() => toggleOrder(order.id)}
+          onPress={() => selectionMode ? toggleOrderSelection(order.id) : toggleOrder(order.id)}
           activeOpacity={0.7}
         >
           <View style={styles.orderHeaderLeft}>
+            {selectionMode && (
+              <View style={{ marginRight: 10 }}>
+                <Ionicons
+                  name={selectedOrders.includes(order.id) ? "checkbox" : "square-outline"}
+                  size={24}
+                  color={Colors.primary.main}
+                />
+              </View>
+            )}
             <LinearGradient
               colors={statusConfig.gradient}
               style={styles.statusBadge}
@@ -843,8 +983,26 @@ export default function PlaceOrder() {
           <TouchableOpacity onPress={() => router.back()} style={styles.iconButton}>
             <Ionicons name="arrow-back" size={24} color={Colors.primary.main} />
           </TouchableOpacity>
-          <Text style={styles.headerTitle}>Placed Orders</Text>
-          <View style={{ width: 24 }} />
+          <View>
+            <Text style={styles.headerTitle}>Order Management</Text>
+            <Text style={styles.headerSubtitle}>Manage & Track Orders</Text>
+          </View>
+          <View style={{ flexDirection: 'row', gap: 10 }}>
+            {filterStatus === 'pending' && (
+              <TouchableOpacity
+                style={[styles.iconButton, selectionMode && { backgroundColor: Colors.primary[100] }]}
+                onPress={toggleSelectionMode}
+              >
+                <Ionicons name={selectionMode ? "close" : "checkbox"} size={22} color={Colors.primary.main} />
+                <Text style={{ marginLeft: 5, color: Colors.primary.main, fontWeight: '600' }}>
+                  {selectionMode ? "Cancel" : "Select"}
+                </Text>
+              </TouchableOpacity>
+            )}
+            <TouchableOpacity style={styles.iconButton} onPress={handleRefresh}>
+              <Ionicons name="refresh" size={22} color={Colors.primary.main} />
+            </TouchableOpacity>
+          </View>
         </View>
 
         <View style={styles.filterContainer}>
@@ -887,6 +1045,34 @@ export default function PlaceOrder() {
             />
           )}
         </View>
+
+        {selectionMode && (
+          <View style={styles.bulkActionBar}>
+            <TouchableOpacity onPress={selectAllOrders} style={styles.bulkActionSelectAll}>
+              <Ionicons
+                name={selectedOrders.length === displayOrders.length ? "checkbox" : "square-outline"}
+                size={24}
+                color={Colors.primary.main}
+              />
+              <Text style={styles.bulkActionText}>Select All ({selectedOrders.length})</Text>
+            </TouchableOpacity>
+
+            <View style={{ flexDirection: 'row', gap: 10 }}>
+              <TouchableOpacity onPress={handleBulkDelete} style={styles.bulkActionButton}>
+                <LinearGradient colors={Gradients.danger} style={styles.actionButtonGradient}>
+                  <Ionicons name="trash" size={18} color="#fff" />
+                  <Text style={styles.actionButtonText}>Delete</Text>
+                </LinearGradient>
+              </TouchableOpacity>
+              <TouchableOpacity onPress={handleBulkUpload} style={styles.bulkActionButton}>
+                <LinearGradient colors={Gradients.success} style={styles.actionButtonGradient}>
+                  <Ionicons name="cloud-upload" size={18} color="#fff" />
+                  <Text style={styles.actionButtonText}>Upload</Text>
+                </LinearGradient>
+              </TouchableOpacity>
+            </View>
+          </View>
+        )}
 
         <Modal
           visible={printerModalVisible}
@@ -950,7 +1136,16 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     color: Colors.text.primary,
   },
-  iconButton: { padding: 4 },
+  headerSubtitle: {
+    fontSize: Typography.sizes.sm,
+    color: Colors.text.secondary,
+  },
+  iconButton: {
+    padding: 8,
+    borderRadius: BorderRadius.full,
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
 
   filterContainer: {
     paddingHorizontal: Spacing.lg,
@@ -1033,7 +1228,7 @@ const styles = StyleSheet.create({
   statusRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginTop: 2,
+    gap: 15,
   },
   orderTime: {
     fontSize: 10,
@@ -1164,5 +1359,35 @@ const styles = StyleSheet.create({
     fontSize: Typography.sizes.xl,
     fontWeight: '700',
     color: Colors.text.primary,
+  },
+  bulkActionBar: {
+    position: 'absolute',
+    bottom: 0,
+    left: 0,
+    right: 0,
+    backgroundColor: '#fff',
+    borderTopWidth: 1,
+    borderTopColor: Colors.border,
+    padding: 20,
+    paddingBottom: 65,
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    ...Shadows.medium
+  },
+  bulkActionSelectAll: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8
+  },
+  bulkActionText: {
+    fontSize: 16,
+    color: Colors.text.primary,
+    fontWeight: '600'
+  },
+  bulkActionButton: {
+    borderRadius: BorderRadius.md,
+    overflow: 'hidden',
+    minWidth: 120,
   },
 });

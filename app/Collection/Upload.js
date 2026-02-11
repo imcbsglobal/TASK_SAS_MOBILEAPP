@@ -15,6 +15,7 @@ import {
   ScrollView,
   StyleSheet,
   Text,
+  TextInput,
   TouchableOpacity,
   View,
 } from "react-native";
@@ -43,6 +44,14 @@ export default function UploadScreen() {
   const [connectionType, setConnectionType] = useState('ble'); // 'ble' | 'usb'
 
   const [selectedCollectionToPrint, setSelectedCollectionToPrint] = useState(null);
+
+  // Edit State
+  const [isEditModalVisible, setIsEditModalVisible] = useState(false);
+  const [editingCollection, setEditingCollection] = useState(null);
+  const [editAmount, setEditAmount] = useState("");
+  const [editPaymentType, setEditPaymentType] = useState("Cash");
+  const [editChequeNumber, setEditChequeNumber] = useState("");
+  const [editRemarks, setEditRemarks] = useState("");
 
   useEffect(() => {
     console.log("[Upload] Component Mounted");
@@ -304,6 +313,108 @@ export default function UploadScreen() {
     }
   };
 
+  const handleEdit = (collection) => {
+    setEditingCollection(collection);
+    setEditAmount(collection.amount.toString());
+    setEditPaymentType(collection.payment_type || "Cash");
+    setEditChequeNumber(collection.cheque_number || "");
+    setEditRemarks(collection.remarks || "");
+    setIsEditModalVisible(true);
+  };
+
+  const handleUpdate = async () => {
+    if (!editAmount || parseFloat(editAmount) <= 0) {
+      Alert.alert("Validation Error", "Please enter a valid amount.");
+      return;
+    }
+
+    if (editPaymentType === "Cheque" && !editChequeNumber.trim()) {
+      Alert.alert("Validation Error", "Please enter cheque number.");
+      return;
+    }
+
+    try {
+      const updatedData = {
+        amount: parseFloat(editAmount),
+        payment_type: editPaymentType,
+        cheque_number: editPaymentType === "Cheque" ? editChequeNumber : null,
+        remarks: editRemarks.trim() || null
+      };
+
+      const success = await dbService.updateOfflineCollection(editingCollection.id, updatedData);
+      if (success) {
+        setIsEditModalVisible(false);
+        await loadPendingCollections();
+        Alert.alert("Success", "Collection updated successfully.");
+      }
+    } catch (error) {
+      console.error("[Upload] Update error:", error);
+      Alert.alert("Error", "Failed to update collection.");
+    }
+  };
+
+  const handleDelete = (collection) => {
+    Alert.alert(
+      "Delete Collection",
+      `Are you sure you want to delete this payment for ${collection.customer_name}?`,
+      [
+        { text: "Cancel", style: "cancel" },
+        {
+          text: "Delete",
+          style: "destructive",
+          onPress: async () => {
+            try {
+              const success = await dbService.deleteCollection(collection.id);
+              if (success) {
+                await loadPendingCollections();
+                setSelectedCollections(prev => prev.filter(id => id !== collection.id));
+              } else {
+                Alert.alert("Error", "Failed to delete collection from database.");
+              }
+            } catch (error) {
+              console.error("[Upload] Delete error:", error);
+              Alert.alert("Error", "An unexpected error occurred while deleting.");
+            }
+          }
+        }
+      ]
+    );
+  };
+
+  const handleBulkDelete = () => {
+    if (selectedCollections.length === 0) return;
+
+    Alert.alert(
+      "Bulk Delete",
+      `Are you sure you want to delete ${selectedCollections.length} selected payment(s)?`,
+      [
+        { text: "Cancel", style: "cancel" },
+        {
+          text: "Delete",
+          style: "destructive",
+          onPress: async () => {
+            setLoading(true);
+            try {
+              let deletedCount = 0;
+              for (const id of selectedCollections) {
+                const success = await dbService.deleteCollection(id);
+                if (success) deletedCount++;
+              }
+              await loadPendingCollections();
+              setSelectedCollections([]);
+              Alert.alert("Success", `Deleted ${deletedCount} collection(s).`);
+            } catch (error) {
+              console.error("[Upload] Bulk delete error:", error);
+              Alert.alert("Error", "Failed to complete bulk deletion.");
+            } finally {
+              setLoading(false);
+            }
+          }
+        }
+      ]
+    );
+  };
+
   const renderCollectionItem = ({ item, index }) => {
     const isSelected = selectedCollections.includes(item.id);
 
@@ -353,6 +464,20 @@ export default function UploadScreen() {
               activeOpacity={0.7}
             >
               <Ionicons name="share-outline" size={20} color={Colors.secondary.main} />
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={styles.actionBtn}
+              onPress={() => handleEdit(item)}
+              activeOpacity={0.7}
+            >
+              <Ionicons name="pencil-outline" size={20} color={Colors.primary.main} />
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[styles.actionBtn, { borderColor: Colors.error.light }]}
+              onPress={() => handleDelete(item)}
+              activeOpacity={0.7}
+            >
+              <Ionicons name="trash-outline" size={20} color={Colors.error.main} />
             </TouchableOpacity>
           </View>
         </TouchableOpacity>
@@ -435,30 +560,45 @@ export default function UploadScreen() {
             />
 
             <View style={styles.footer}>
-              <TouchableOpacity
-                style={[
-                  styles.uploadButton,
-                  (!isOnline || selectedCollections.length === 0 || uploading) && styles.disabledButton
-                ]}
-                onPress={handleUpload}
-                disabled={!isOnline || selectedCollections.length === 0 || uploading}
-              >
-                <View style={[
-                  styles.gradientButton,
-                  (!isOnline || selectedCollections.length === 0 || uploading) && styles.disabledGradient
-                ]}>
-                  {uploading ? (
-                    <ActivityIndicator color="#FFF" size="small" />
-                  ) : (
-                    <>
-                      <Ionicons name="cloud-upload" size={20} color="#FFF" />
-                      <Text style={styles.uploadButtonText}>
-                        Upload {selectedCollections.length} Items
-                      </Text>
-                    </>
-                  )}
-                </View>
-              </TouchableOpacity>
+              <View style={styles.footerButtons}>
+                <TouchableOpacity
+                  style={[
+                    styles.bulkDeleteButton,
+                    (selectedCollections.length === 0 || uploading) && styles.disabledButton
+                  ]}
+                  onPress={handleBulkDelete}
+                  disabled={selectedCollections.length === 0 || uploading}
+                >
+                  <Ionicons name="trash-outline" size={20} color={Colors.error.main} />
+                  <Text style={styles.bulkDeleteText}>Delete</Text>
+                </TouchableOpacity>
+
+                <TouchableOpacity
+                  style={[
+                    styles.uploadButton,
+                    (!isOnline || selectedCollections.length === 0 || uploading) && styles.disabledButton,
+                    { flex: 1 }
+                  ]}
+                  onPress={handleUpload}
+                  disabled={!isOnline || selectedCollections.length === 0 || uploading}
+                >
+                  <View style={[
+                    styles.gradientButton,
+                    (!isOnline || selectedCollections.length === 0 || uploading) && styles.disabledGradient
+                  ]}>
+                    {uploading ? (
+                      <ActivityIndicator color="#FFF" size="small" />
+                    ) : (
+                      <>
+                        <Ionicons name="cloud-upload" size={20} color="#FFF" />
+                        <Text style={styles.uploadButtonText}>
+                          Upload {selectedCollections.length} Items
+                        </Text>
+                      </>
+                    )}
+                  </View>
+                </TouchableOpacity>
+              </View>
             </View>
           </>
         )}
@@ -546,6 +686,93 @@ export default function UploadScreen() {
                 {printers.length === 0 && !isScanningPrinters && (
                   <Text style={{ textAlign: 'center', marginTop: 20, color: Colors.text.tertiary }}>No printers found</Text>
                 )}
+              </ScrollView>
+            </View>
+          </View>
+        </Modal>
+
+        {/* Edit Collection Modal */}
+        <Modal
+          visible={isEditModalVisible}
+          animationType="slide"
+          transparent={true}
+          onRequestClose={() => setIsEditModalVisible(false)}
+        >
+          <View style={styles.modalOverlay}>
+            <View style={styles.modalContent}>
+              <View style={styles.modalHeader}>
+                <Text style={styles.modalTitle}>Edit Collection</Text>
+                <TouchableOpacity onPress={() => setIsEditModalVisible(false)}>
+                  <Ionicons name="close" size={24} color={Colors.text.primary} />
+                </TouchableOpacity>
+              </View>
+
+              <ScrollView style={styles.modalBody} contentContainerStyle={{ padding: 16 }}>
+                <Text style={styles.editLabel}>Customer: {editingCollection?.customer_name}</Text>
+
+                <Text style={styles.label}>Amount</Text>
+                <View style={styles.inputBox}>
+                  <Ionicons name="cash" size={20} color={Colors.text.tertiary} style={styles.inputIcon} />
+                  <TextInput
+                    style={styles.inputText}
+                    value={editAmount}
+                    onChangeText={setEditAmount}
+                    keyboardType="numeric"
+                    placeholder="Enter amount"
+                  />
+                </View>
+
+                <Text style={[styles.label, { marginTop: 16 }]}>Payment Type</Text>
+                <View style={{ flexDirection: 'row', gap: 10, marginBottom: 16 }}>
+                  <TouchableOpacity
+                    style={[styles.typeButton, editPaymentType === 'Cash' && styles.typeButtonActive]}
+                    onPress={() => setEditPaymentType('Cash')}
+                  >
+                    <Text style={[styles.typeButtonText, editPaymentType === 'Cash' && styles.typeButtonTextActive]}>Cash</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    style={[styles.typeButton, editPaymentType === 'Cheque' && styles.typeButtonActive]}
+                    onPress={() => setEditPaymentType('Cheque')}
+                  >
+                    <Text style={[styles.typeButtonText, editPaymentType === 'Cheque' && styles.typeButtonTextActive]}>Cheque</Text>
+                  </TouchableOpacity>
+                </View>
+
+                {editPaymentType === 'Cheque' && (
+                  <>
+                    <Text style={styles.label}>Cheque Number</Text>
+                    <View style={styles.inputBox}>
+                      <Ionicons name="card" size={20} color={Colors.text.tertiary} style={styles.inputIcon} />
+                      <TextInput
+                        style={styles.inputText}
+                        value={editChequeNumber}
+                        onChangeText={setEditChequeNumber}
+                        placeholder="Enter cheque number"
+                      />
+                    </View>
+                  </>
+                )}
+
+                <Text style={[styles.label, { marginTop: 16 }]}>Remarks</Text>
+                <TextInput
+                  style={[styles.inputBox, { height: 80, textAlignVertical: 'top', padding: 10 }]}
+                  value={editRemarks}
+                  onChangeText={setEditRemarks}
+                  multiline
+                  placeholder="Enter remarks"
+                />
+
+                <TouchableOpacity
+                  style={styles.updateButton}
+                  onPress={handleUpdate}
+                >
+                  <LinearGradient
+                    colors={Gradients.primary}
+                    style={styles.updateButtonGradient}
+                  >
+                    <Text style={styles.updateButtonText}>Update Collection</Text>
+                  </LinearGradient>
+                </TouchableOpacity>
               </ScrollView>
             </View>
           </View>
@@ -748,6 +975,27 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     fontSize: Typography.sizes.base,
   },
+  footerButtons: {
+    flexDirection: 'row',
+    gap: 12,
+    alignItems: 'center',
+  },
+  bulkDeleteButton: {
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    borderRadius: BorderRadius.lg,
+    borderWidth: 1,
+    borderColor: Colors.error.light,
+    backgroundColor: Colors.error[50],
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  bulkDeleteText: {
+    color: Colors.error.main,
+    fontWeight: '700',
+    fontSize: Typography.sizes.base,
+  },
   disabledButton: {
     opacity: 0.6,
   },
@@ -778,6 +1026,46 @@ const styles = StyleSheet.create({
   },
   modalBody: {
     paddingBottom: Spacing.lg,
+  },
+  editLabel: {
+    fontSize: 16,
+    fontWeight: '700',
+    color: Colors.primary.main,
+    marginBottom: 20,
+  },
+  typeButton: {
+    flex: 1,
+    paddingVertical: 10,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: Colors.border.light,
+    alignItems: 'center',
+    backgroundColor: '#F8F9FA'
+  },
+  typeButtonActive: {
+    backgroundColor: Colors.primary.main,
+    borderColor: Colors.primary.main
+  },
+  typeButtonText: {
+    fontWeight: '600',
+    color: Colors.text.secondary
+  },
+  typeButtonTextActive: {
+    color: '#FFF'
+  },
+  updateButton: {
+    marginTop: 24,
+    borderRadius: 12,
+    overflow: 'hidden',
+  },
+  updateButtonGradient: {
+    paddingVertical: 14,
+    alignItems: 'center',
+  },
+  updateButtonText: {
+    color: '#FFF',
+    fontSize: 16,
+    fontWeight: '700'
   },
   closeButton: {
     padding: 4,

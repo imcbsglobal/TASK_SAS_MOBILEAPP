@@ -152,6 +152,23 @@ export default function EntryScreen() {
       console.error('[Entry] Error loading settings:', e);
       setAvailablePriceCodes(DEFAULT_PRICE_CODES);
     }
+
+    // Load Default Payment Method from AsyncStorage
+    try {
+      const defaultPayment = await AsyncStorage.getItem('settings_default_payment_method');
+      if (defaultPayment) {
+        // Map "Cash" to "Cash/Bank" since that's what's used in Entry.js
+        const mappedPayment = defaultPayment === 'Cash' ? "Cash/Bank" :
+          (defaultPayment === 'Credit' ? "Credit" : null);
+
+        if (mappedPayment) {
+          setSelectedPayment(mappedPayment);
+          console.log(`[Entry] Applied default payment method: ${mappedPayment}`);
+        }
+      }
+    } catch (e) {
+      console.error('[Entry] Error loading default payment method:', e);
+    }
   };
 
   // Filter areas based on search

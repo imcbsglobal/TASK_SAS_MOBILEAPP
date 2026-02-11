@@ -2,7 +2,7 @@
 import * as SQLite from 'expo-sqlite';
 
 const DB_NAME = 'taskprime_v2.db';
-const DB_VERSION = 11; // Bumped to 11 for department_name
+const DB_VERSION = 12; // Bumped to 12 for updated_at in offline tables
 const CURRENT_VERSION = DB_VERSION;
 class DatabaseService {
     constructor() {
@@ -182,6 +182,24 @@ class DatabaseService {
                     }
                 }
 
+                // Migration for v12 (Add updated_at to offline tables)
+                if (currentVersion < 12) {
+                    try {
+                        console.log('[DB] Migrating to v12 - Adding updated_at to offline tables...');
+                        try {
+                            await this.db.runAsync('ALTER TABLE offline_collections ADD COLUMN updated_at TEXT');
+                            console.log('[DB] Added updated_at to offline_collections');
+                        } catch (e) { /* ignore */ }
+
+                        try {
+                            await this.db.runAsync('ALTER TABLE offline_orders ADD COLUMN updated_at TEXT');
+                            console.log('[DB] Added updated_at to offline_orders');
+                        } catch (e) { /* ignore */ }
+                    } catch (e) {
+                        console.log('[DB] Migration v12 minor error:', e);
+                    }
+                }
+
                 // Update version after ALL migrations
                 await this.db.runAsync('INSERT OR REPLACE INTO db_version (id, version) VALUES (1, ?)', [DB_VERSION]);
                 console.log('[DB] ✅ Migration complete to version ' + DB_VERSION);
@@ -226,11 +244,11 @@ class DatabaseService {
             );
 
             await this.db.runAsync(
-                'CREATE TABLE IF NOT EXISTS offline_collections (id INTEGER PRIMARY KEY AUTOINCREMENT, local_id TEXT UNIQUE, customer_code TEXT, customer_name TEXT, customer_place TEXT, customer_phone TEXT, amount REAL, payment_type TEXT, cheque_number TEXT, remarks TEXT, date TEXT, synced INTEGER DEFAULT 0, created_at TEXT, synced_at TEXT)'
+                'CREATE TABLE IF NOT EXISTS offline_collections (id INTEGER PRIMARY KEY AUTOINCREMENT, local_id TEXT UNIQUE, customer_code TEXT, customer_name TEXT, customer_place TEXT, customer_phone TEXT, amount REAL, payment_type TEXT, cheque_number TEXT, remarks TEXT, date TEXT, synced INTEGER DEFAULT 0, created_at TEXT, updated_at TEXT, synced_at TEXT)'
             );
 
             await this.db.runAsync(
-                'CREATE TABLE IF NOT EXISTS offline_orders (id INTEGER PRIMARY KEY AUTOINCREMENT, local_id TEXT UNIQUE, customer_code TEXT, customer_name TEXT, area TEXT, payment_type TEXT, items TEXT, total_amount REAL, date TEXT, synced INTEGER DEFAULT 0, created_at TEXT, synced_at TEXT)'
+                'CREATE TABLE IF NOT EXISTS offline_orders (id INTEGER PRIMARY KEY AUTOINCREMENT, local_id TEXT UNIQUE, customer_code TEXT, customer_name TEXT, area TEXT, payment_type TEXT, items TEXT, total_amount REAL, date TEXT, synced INTEGER DEFAULT 0, created_at TEXT, updated_at TEXT, synced_at TEXT)'
             );
 
             await this.db.runAsync(
@@ -1208,6 +1226,21 @@ class DatabaseService {
         } catch (error) {
             console.error('[DB] Error marking collection synced:', error);
             return false;
+        }
+    }
+
+    async updateOfflineCollection(id, collection) {
+        try {
+            await this.db.runAsync(
+                'UPDATE offline_collections SET amount = ?, payment_type = ?, cheque_number = ?, remarks = ?, updated_at = ? WHERE id = ?',
+                [collection.amount, collection.payment_type || collection.type, collection.cheque_number || null,
+                collection.remarks || null, new Date().toISOString(), id]
+            );
+            console.log('[DB] Offline collection updated:', id);
+            return true;
+        } catch (error) {
+            console.error('[DB] Error updating collection:', error);
+            throw error;
         }
     }
 
