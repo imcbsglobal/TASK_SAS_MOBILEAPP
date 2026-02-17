@@ -548,6 +548,16 @@ class DatabaseService {
         }
     }
 
+    async getProductByCode(code) {
+        try {
+            const result = await this.db.getFirstAsync('SELECT * FROM products WHERE code = ?', [code]);
+            return result;
+        } catch (error) {
+            console.error('[DB] Error getting product by code:', error);
+            return null;
+        }
+    }
+
     async getProductByBarcode(barcode) {
         try {
             console.log('[DB] Searching for barcode:', barcode);

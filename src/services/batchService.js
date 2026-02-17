@@ -327,7 +327,7 @@ class BatchService {
                             // Unique ID for the card
                             // Use batch.id (unique) + product code to guarantee uniqueness
                             // Fallback to barcode if id missing, but add index-like suffix if needed (though batch.id should exist)
-                            id: `${product.code}_${batch.id || batch.batch_id || batch.barcode}_${Math.random().toString(36).substr(2, 5)}`,
+                            id: `${product.code}_${batch.barcode || batch.id || batch.batch_id}`,
 
                             // Product info
                             code: product.code,

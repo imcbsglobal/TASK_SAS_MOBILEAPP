@@ -1,5 +1,6 @@
 
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import * as FileSystem from 'expo-file-system';
 import * as Print from 'expo-print';
 import * as Sharing from 'expo-sharing';
 import { Alert } from 'react-native';
@@ -63,6 +64,8 @@ const pdfService = {
    * @returns {String} HTML string
    */
   generateOrderHTML: (order, companyInfo) => {
+    console.log('PDF Items:', JSON.stringify(order.items, null, 2));
+
     // Format date
     const date = new Date(order.timestamp).toLocaleString();
 
@@ -211,19 +214,44 @@ const pdfService = {
     `;
   },
 
+
+
+  isSharing: false,
+
   /**
    * Generates PDF and opens system share sheet
    * @param {Object} order 
    */
   shareOrderPDF: async (order) => {
+    if (pdfService.isSharing) return;
+    pdfService.isSharing = true;
+
     try {
       const companyInfo = await pdfService.fetchCompanyInfo();
       const html = pdfService.generateOrderHTML(order, companyInfo);
 
-      const { uri } = await Print.printToFileAsync({
-        html: html,
-        base64: false
-      });
+      // Attempt PDF generation with retry
+      let uri = null;
+      try {
+        const { uri: pdfUri } = await Print.printToFileAsync({
+          html: html,
+          base64: false
+        });
+        uri = pdfUri;
+      } catch (printError) {
+        console.warn('First PDF generation attempt failed, retrying...', printError);
+        // Retry once
+        try {
+          const { uri: pdfUriRetry } = await Print.printToFileAsync({
+            html: html,
+            base64: false
+          });
+          uri = pdfUriRetry;
+        } catch (retryError) {
+          console.error('PDF generation failed after retry:', retryError);
+          throw retryError;
+        }
+      }
 
       await Sharing.shareAsync(uri, {
         UTI: '.pdf',
@@ -234,8 +262,33 @@ const pdfService = {
       return true;
     } catch (error) {
       console.error('Error generating PDF:', error);
-      Alert.alert('Error', 'Failed to generate or share PDF');
-      return false;
+
+      // Fallback: Share HTML if PDF fails
+      try {
+        Alert.alert(
+          "PDF Error",
+          "Failed to generate PDF. Sharing as HTML instead.",
+          [{ text: "OK" }]
+        );
+
+        const companyInfo = await pdfService.fetchCompanyInfo();
+        const html = pdfService.generateOrderHTML(order, companyInfo);
+        const htmlFileUri = FileSystem.documentDirectory + `order_${order.id || Date.now()}.html`;
+        await FileSystem.writeAsStringAsync(htmlFileUri, html);
+
+        await Sharing.shareAsync(htmlFileUri, {
+          UTI: '.html',
+          mimeType: 'text/html',
+          dialogTitle: `Share Order (HTML) - ${order.customer}`
+        });
+        return true;
+      } catch (fallbackError) {
+        console.error('HTML Fallback also failed:', fallbackError);
+        Alert.alert('Error', 'Failed to generate or share order receipt.');
+        return false;
+      }
+    } finally {
+      pdfService.isSharing = false;
     }
   },
 
@@ -446,6 +499,9 @@ const pdfService = {
    * Generates PDF for collection receipt and opens share sheet
    */
   shareCollectionPDF: async (collection) => {
+    if (pdfService.isSharing) return;
+    pdfService.isSharing = true;
+
     try {
       const companyInfo = await pdfService.fetchCompanyInfo();
       const html = pdfService.generateCollectionHTML(collection, companyInfo);
@@ -466,6 +522,8 @@ const pdfService = {
       console.error('Error generating collection PDF:', error);
       Alert.alert('Error', 'Failed to generate or share PDF');
       return false;
+    } finally {
+      pdfService.isSharing = false;
     }
   }
 };

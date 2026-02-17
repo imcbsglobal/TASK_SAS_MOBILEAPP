@@ -1,25 +1,31 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
-import { Alert, PermissionsAndroid, Platform } from "react-native";
-// import { BLEPrinter, USBPrinter } from "react-native-thermal-receipt-printer";
+import { Alert, NativeModules, PermissionsAndroid, Platform } from "react-native";
+
 // Safe Import Pattern
 let BLEPrinter, USBPrinter;
 try {
     const printerLib = require("react-native-thermal-receipt-printer");
+
+    // Check if Native Module exists (Prevents crash in Expo Go)
+    if (!NativeModules.RNBLEPrinter) {
+        throw new Error("Native Module RNBLEPrinter not found");
+    }
+
     BLEPrinter = printerLib.BLEPrinter;
     USBPrinter = printerLib.USBPrinter;
 } catch (e) {
-    console.warn("Printer library not found or failed to load. Using mocks.", e);
+    console.warn("Printer library not found or failed to load (Native Module missing?). Using mocks.", e);
     BLEPrinter = {
-        init: async () => console.log("Mock BLE Init"),
+        init: async () => { console.log("Mock BLE Init"); return Promise.resolve(); },
         getDeviceList: async () => [],
-        connectPrinter: async () => console.log("Mock BLE Connect"),
-        printBill: async () => console.log("Mock BLE Print"),
+        connectPrinter: async () => { console.log("Mock BLE Connect"); return Promise.resolve(true); },
+        printBill: async () => { console.log("Mock BLE Print"); return Promise.resolve(); },
     };
     USBPrinter = {
-        init: async () => console.log("Mock USB Init"),
+        init: async () => { console.log("Mock USB Init"); return Promise.resolve(); },
         getDeviceList: async () => [],
-        connectPrinter: async () => console.log("Mock USB Connect"),
-        printBill: async () => console.log("Mock USB Print"),
+        connectPrinter: async () => { console.log("Mock USB Connect"); return Promise.resolve(true); },
+        printBill: async () => { console.log("Mock USB Print"); return Promise.resolve(); },
     };
 }
 
@@ -176,11 +182,11 @@ class PrinterService {
             const hasPermissions = await this.requestPermissions();
 
             if (type === 'ble') {
-                if (this.isBLEInitialized) return;
+                if (this.isBLEInitialized) return true;
 
                 if (!hasPermissions) {
                     console.warn("[Printer] BLE Permissions denied.");
-                    return;
+                    return false;
                 }
 
                 try {
@@ -189,38 +195,51 @@ class PrinterService {
                         await BLEPrinter.init();
                         this.isBLEInitialized = true;
                         console.log("[Printer] BLE Init Success");
+                        return true;
                     } else {
                         console.warn("[Printer] BLEPrinter module undefined");
+                        return false;
                     }
                 } catch (err) {
                     console.warn("[Printer] BLE Init Failed:", err);
+                    return false;
                 }
             } else if (type === 'usb') {
-                if (this.isUSBInitialized) return;
+                if (this.isUSBInitialized) return true;
 
                 try {
                     if (USBPrinter && USBPrinter.init) {
                         await USBPrinter.init();
                         this.isUSBInitialized = true;
                         console.log("[Printer] USB Init Success");
+                        return true;
                     } else {
                         console.warn("[Printer] USBPrinter module undefined");
+                        return false;
                     }
                 } catch (err) {
                     console.warn("[Printer] USB Init Failed:", err);
+                    return false;
                 }
             }
         } catch (error) {
             console.error("[Printer] Init Critical Failure:", error);
+            return false;
         }
+        return false;
     }
 
     async getDeviceList(type = 'ble') {
         try {
-            await this.init(type);
+            const initSuccess = await this.init(type);
 
             this.connectionType = type;
             if (type === 'ble') {
+                if (!initSuccess && !this.isBLEInitialized) {
+                    console.warn("[Printer] Skipping BLE scan - not initialized (Bluetooth might be off)");
+                    return [];
+                }
+
                 const hasPerm = await this.requestPermissions();
                 if (!hasPerm) return [];
 
@@ -233,6 +252,10 @@ class PrinterService {
                     return [];
                 }
             } else {
+                if (!initSuccess && !this.isUSBInitialized) {
+                    console.warn("[Printer] Skipping USB scan - not initialized");
+                    return [];
+                }
                 try {
                     const devices = USBPrinter ? await USBPrinter.getDeviceList() : [];
                     console.log("[Printer] USB Devices found:", devices);

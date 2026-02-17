@@ -1,4 +1,4 @@
-// app/Order/OrderDetails.js - FIXED VERSION with better barcode handling
+// app/Order/SalesDetails.js - FIXED VERSION with better barcode handling
 import { Ionicons } from "@expo/vector-icons";
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as NetInfo from "@react-native-community/netinfo";
@@ -74,7 +74,7 @@ const FlyingItem = ({ startX, startY, endX, endY, onComplete }) => {
         width: 30,
         height: 30,
         borderRadius: 15,
-        backgroundColor: Colors.accent.main,
+        backgroundColor: Colors.success.main,
         zIndex: 9999, // Ensure it's on top of everything
         transform: [
           { translateX },
@@ -170,7 +170,7 @@ const CartItem = ({ item, changeQty, removeItem, isEditable, onPriceChange }) =>
               <TextInput
                 style={[styles.cartItemPrice, {
                   borderBottomWidth: 1,
-                  borderBottomColor: Colors.accent[200],
+                  borderBottomColor: Colors.success.light,
                   minWidth: 50,
                   padding: 0,
                   fontSize: 15,
@@ -199,7 +199,7 @@ const CartItem = ({ item, changeQty, removeItem, isEditable, onPriceChange }) =>
         {/* Quantity Section (Centered & Big) */}
         <View style={{ flexDirection: 'row', alignItems: 'center', backgroundColor: Colors.neutral[50], borderRadius: 8, padding: 2 }}>
           <TouchableOpacity onPress={() => changeQty(item.product.id, item.qty - 1)} style={{ padding: 8 }}>
-            <Ionicons name="remove-circle" size={32} color={Colors.accent.main} />
+            <Ionicons name="remove-circle" size={32} color={Colors.success.main} />
           </TouchableOpacity>
 
           <TextInput
@@ -224,7 +224,7 @@ const CartItem = ({ item, changeQty, removeItem, isEditable, onPriceChange }) =>
           />
 
           <TouchableOpacity onPress={(e) => changeQty(item.product.id, item.qty + 1, e)} style={{ padding: 8 }}>
-            <Ionicons name="add-circle" size={32} color={Colors.accent.main} />
+            <Ionicons name="add-circle" size={32} color={Colors.success.main} />
           </TouchableOpacity>
         </View>
 
@@ -234,13 +234,8 @@ const CartItem = ({ item, changeQty, removeItem, isEditable, onPriceChange }) =>
             {(item.qty * item.product.price).toFixed(2)}
           </Text>
         </View>
+
       </View>
-      {item.remark ? (
-        <View style={styles.cartItemRemark}>
-          <Ionicons name="chatbubble-outline" size={12} color={Colors.text.tertiary} />
-          <Text style={styles.cartItemRemarkText}>{item.remark}</Text>
-        </View>
-      ) : null}
     </View>
   );
 };
@@ -256,10 +251,7 @@ const PRICE_FIELD_MAP = {
   'CO': 'cost'
 };
 
-const REMARK_OPTIONS = ["NONE", "EXPIRED", "SHORT EXPIRY", "DAMAGE", "EXCHANGE"];
-
-
-export default function OrderDetails() {
+export default function SalesDetails() {
   const router = useRouter();
   const params = useLocalSearchParams();
   const { area = "", customer = "", customerCode = "", type = "", payment = "", priceCode: paramPriceCode = "", scanned, timestamp } = params;
@@ -333,14 +325,14 @@ export default function OrderDetails() {
         if (storedSettings) {
           const parsed = JSON.parse(storedSettings);
           setAppSettings(parsed);
-          console.log('[OrderDetails] App settings loaded');
-          console.log('[OrderDetails] barcode_based_list setting:', parsed.barcode_based_list);
+          console.log('[SalesDetails] App settings loaded');
+          console.log('[SalesDetails] barcode_based_list setting:', parsed.barcode_based_list);
         }
 
         const storedUser = await AsyncStorage.getItem('username');
         if (storedUser) {
           setUsername(storedUser);
-          console.log('[ReturnDetails] Username loaded:', storedUser);
+          console.log('[SalesDetails] Username loaded:', storedUser);
         }
 
         // LOAD SHOW STOCK ONLY SETTING (USER SPECIFIC)
@@ -349,18 +341,18 @@ export default function OrderDetails() {
         const showStockOnly = showStockOnlyStr === 'true';
 
         if (showStockOnly) {
-          console.log(`[ReturnDetails] "Show Stock Only" setting is ENABLED for ${storedUser || 'unknown'}`);
+          console.log(`[SalesDetails] "Show Stock Only" setting is ENABLED for ${storedUser || 'unknown'}`);
           setFilterInStock(true);
           setFilters(prev => ({
             ...prev,
             inStock: true
           }));
         } else {
-          console.log(`[ReturnDetails] "Show Stock Only" setting is DISABLED for ${storedUser || 'unknown'}`);
+          console.log(`[SalesDetails] "Show Stock Only" setting is DISABLED for ${storedUser || 'unknown'}`);
         }
 
       } catch (error) {
-        console.error('[OrderDetails] Failed to load settings/user:', error);
+        console.error('[SalesDetails] Failed to load settings/user:', error);
       }
     };
     loadSettings();
@@ -372,7 +364,7 @@ export default function OrderDetails() {
     if (appSettings) {
       if (allProducts.length > 0 && appSettings.barcode_based_list) {
         // Settings changed after products loaded - reload with new sort
-        console.log('[OrderDetails] Settings loaded with barcode_based_list=true, reloading products...');
+        console.log('[SalesDetails] Settings loaded with barcode_based_list=true, reloading products...');
         setPage(0);
         setHasMore(true);
         setAllProducts([]);
@@ -380,7 +372,7 @@ export default function OrderDetails() {
         setFilters(prev => ({ ...prev }));
       } else if (allProducts.length === 0) {
         // Initial load - trigger product fetch now that settings are available
-        console.log('[OrderDetails] Settings loaded, triggering initial product load...');
+        console.log('[SalesDetails] Settings loaded, triggering initial product load...');
         setFilters(prev => ({ ...prev }));
       }
     }
@@ -391,10 +383,6 @@ export default function OrderDetails() {
   const [selectedProduct, setSelectedProduct] = useState(null);
   const [tempQuantity, setTempQuantity] = useState("1");
   const [tempPrice, setTempPrice] = useState("");
-  const [tempRemark, setTempRemark] = useState("");
-  const [selectedRemarkOption, setSelectedRemarkOption] = useState("");
-  const [remarkDropdownVisible, setRemarkDropdownVisible] = useState(false);
-
 
   // Details modal state
   const [detailsModalVisible, setDetailsModalVisible] = useState(false);
@@ -439,7 +427,7 @@ export default function OrderDetails() {
     if (highlightedProductId && filteredProducts.length > 0) {
       const index = filteredProducts.findIndex(p => p.id === highlightedProductId);
       if (index >= 0 && flatListRef.current) {
-        console.log('[OrderDetails] Effect: Scrolling to index:', index);
+        console.log('[SalesDetails] Effect: Scrolling to index:', index);
         setTimeout(() => {
           flatListRef.current?.scrollToIndex({
             index: index,
@@ -462,9 +450,9 @@ export default function OrderDetails() {
           await dbService.init();
           currentCustomer = await dbService.getCustomerByCode(customerCode);
           setFullCustomer(currentCustomer);
-          console.log('[OrderDetails] Loaded full customer:', currentCustomer?.name, 'RemarkTitle:', currentCustomer?.remarkcolumntitle);
+          console.log('[SalesDetails] Loaded full customer:', currentCustomer?.name, 'RemarkTitle:', currentCustomer?.remarkcolumntitle);
         } catch (e) {
-          console.error('[OrderDetails] Error loading customer:', e);
+          console.error('[SalesDetails] Error loading customer:', e);
         }
       }
 
@@ -474,7 +462,7 @@ export default function OrderDetails() {
       // PRIORITY 1: Explicit Parameter from Entry Screen
       if (paramPriceCode) {
         priceCode = paramPriceCode;
-        console.log('[OrderDetails] Using Param Price Code:', priceCode);
+        console.log('[SalesDetails] Using Param Price Code:', priceCode);
       }
       // PRIORITY 2: App Settings / Customer Default (Only if no param)
       else if (appSettings) {
@@ -495,9 +483,9 @@ export default function OrderDetails() {
 
           if (isValidInSettings || isStandardCode) {
             priceCode = code;
-            console.log('[OrderDetails] Using Customer Price Code:', priceCode);
+            console.log('[SalesDetails] Using Customer Price Code:', priceCode);
           } else {
-            console.log('[OrderDetails] Customer Price Code ignored (invalid):', code);
+            console.log('[SalesDetails] Customer Price Code ignored (invalid):', code);
           }
         }
       }    // 3. Determine RESTRICTED Codes for this User (Protected Price Users = Deny List)
@@ -510,18 +498,18 @@ export default function OrderDetails() {
         // If the customer is assigned a specific price code (priceCode), it MUST be visible
         // even if the user is normally restricted from it.
         if (priceCode && restricted.includes(priceCode)) {
-          console.log(`[OrderDetails] Whitelisting effective code ${priceCode} for this customer (Auto-Show)`);
+          console.log(`[SalesDetails] Whitelisting effective code ${priceCode} for this customer (Auto-Show)`);
           restricted = restricted.filter(c => c !== priceCode);
         }
 
         setRestrictedPriceCodes(restricted); // DENY List
-        console.log('[OrderDetails] Restricted codes for', upperUser, ':', restricted);
+        console.log('[SalesDetails] Restricted codes for', upperUser, ':', restricted);
       } else {
         setRestrictedPriceCodes([]); // Empty array = No restrictions
       }
 
       setEffectivePriceCode(priceCode);
-      console.log('[OrderDetails] Effective Price Code:', priceCode);
+      console.log('[SalesDetails] Effective Price Code:', priceCode);
     };
 
     if (appSettings) {
@@ -574,7 +562,7 @@ export default function OrderDetails() {
       const restrictedChanged = JSON.stringify(currentRestricted) !== JSON.stringify(restrictedPriceCodes);
 
       if (currentCode !== effectivePriceCode || restrictedChanged) {
-        console.log('[OrderDetails] Re-applying pricing rules (Code mismatch or Restrictions changed)');
+        console.log('[SalesDetails] Re-applying pricing rules (Code mismatch or Restrictions changed)');
         const updatedAll = applyPricingToProducts(allProducts);
         setAllProducts(updatedAll);
 
@@ -590,7 +578,7 @@ export default function OrderDetails() {
   async function fetchAllProducts(isRefresh = false) {
     // Wait for appSettings to be loaded before fetching products
     if (!appSettings) {
-      console.log('[OrderDetails] Waiting for appSettings to load before fetching products...');
+      console.log('[SalesDetails] Waiting for appSettings to load before fetching products...');
       return;
     }
 
@@ -603,7 +591,7 @@ export default function OrderDetails() {
     }
 
     try {
-      console.log('[OrderDetails] Loading first batch of products...');
+      console.log('[SalesDetails] Loading first batch of products...');
       await dbService.init();
 
       const currentFilters = {
@@ -614,14 +602,14 @@ export default function OrderDetails() {
         sortBy: appSettings?.barcode_based_list ? 'barcode' : 'name'
       };
 
-      console.log('[OrderDetails] Using filters:', currentFilters);
+      console.log('[SalesDetails] Using filters:', currentFilters);
 
       // Load first page with LIMIT and FILTERS
       const products = await batchService.getProductBatchesOffline(PRODUCTS_PER_PAGE, 0, currentFilters);
 
       // Transform to cards (which expands batches) - pass sortBy for card-level sorting
       const sortBy = appSettings?.barcode_based_list ? 'barcode' : 'name';
-      console.log('[OrderDetails] Sorting by:', sortBy, '(barcode_based_list =', appSettings?.barcode_based_list, ')');
+      console.log('[SalesDetails] Sorting by:', sortBy, '(barcode_based_list =', appSettings?.barcode_based_list, ')');
       let cards = batchService.transformBatchesToCards(products, sortBy);
 
       // Additional Client-side filtering for In Stock
@@ -632,13 +620,13 @@ export default function OrderDetails() {
       // Apply Dynamic Pricing
       cards = applyPricingToProducts(cards);
 
-      console.log(`[OrderDetails] Loaded ${cards.length} cards`);
+      console.log(`[SalesDetails] Loaded ${cards.length} cards`);
       setAllProducts(cards);
       setFilteredProducts(cards);
       setPage(1); // Reset page to 1 after initial load
       setHasMore(products.length >= PRODUCTS_PER_PAGE); // Use products length for pagination check
     } catch (error) {
-      console.error('[OrderDetails] Error loading products:', error);
+      console.error('[SalesDetails] Error loading products:', error);
       Alert.alert(
         "Error",
         `Failed to load products: ${error.message}. Please try downloading data from Home screen.`,
@@ -659,7 +647,7 @@ export default function OrderDetails() {
 
     setLoadingMore(true);
     try {
-      console.log(`[OrderDetails] Loading more products... (page: ${page})`);
+      console.log(`[SalesDetails] Loading more products... (page: ${page})`);
 
       const offset = page * PRODUCTS_PER_PAGE;
       const currentFilters = {
@@ -677,7 +665,7 @@ export default function OrderDetails() {
       );
 
       if (products.length === 0) {
-        console.log('[OrderDetails] No more products to load');
+        console.log('[SalesDetails] No more products to load');
         setHasMore(false);
         return;
       }
@@ -694,7 +682,7 @@ export default function OrderDetails() {
       // Apply Dynamic Pricing
       newCards = applyPricingToProducts(newCards);
 
-      console.log(`[OrderDetails] Loaded ${newCards.length} more batch cards`);
+      console.log(`[SalesDetails] Loaded ${newCards.length} more batch cards`);
 
       setAllProducts(prev => [...prev, ...newCards]);
       setFilteredProducts(prev => [...prev, ...newCards]);
@@ -704,7 +692,7 @@ export default function OrderDetails() {
         setHasMore(false);
       }
     } catch (error) {
-      console.error('[OrderDetails] Error loading more products:', error);
+      console.error('[SalesDetails] Error loading more products:', error);
     } finally {
       setLoadingMore(false);
     }
@@ -713,22 +701,22 @@ export default function OrderDetails() {
   // Load filter options directly from DB
   async function loadFilterOptions() {
     try {
-      console.log('[OrderDetails] Loading distinct filter options from DB...');
+      console.log('[SalesDetails] Loading distinct filter options from DB...');
       await dbService.init();
       const brands = await dbService.getDistinctBrands();
       const categories = await dbService.getDistinctCategories();
       const departments = await dbService.getDistinctDepartments();
 
-      console.log(`[OrderDetails] Loaded ${brands.length} brands, ${categories.length} categories, and ${departments.length} departments`);
+      console.log(`[SalesDetails] Loaded ${brands.length} brands, ${categories.length} categories, and ${departments.length} departments`);
       setFilterOptions({ brands, products: categories, departments }); // Stores categories
     } catch (error) {
-      console.error('[OrderDetails] Error loading filter options:', error);
+      console.error('[SalesDetails] Error loading filter options:', error);
     }
   }
 
   // Apply filters by reloading from DB
   const applyFilters = () => {
-    console.log('[OrderDetails] === APPLYING FILTERS DB-SIDE ===');
+    console.log('[SalesDetails] === APPLYING FILTERS DB-SIDE ===');
     console.log('Selected Brands:', selectedBrands);
     console.log('Selected Categories:', selectedProducts);
     console.log('Search Query:', query);
@@ -746,7 +734,7 @@ export default function OrderDetails() {
 
   // Clear all filters
   const clearFilters = () => {
-    console.log('[OrderDetails] Clearing all filters');
+    console.log('[SalesDetails] Clearing all filters');
     setSelectedBrands([]);
     setSelectedProducts([]);
     setSelectedDepartments([]);
@@ -811,7 +799,7 @@ export default function OrderDetails() {
 
     setSearchLoading(true);
     try {
-      console.log('[OrderDetails] Searching for barcode:', cleanBarcode);
+      console.log('[SalesDetails] Searching for barcode:', cleanBarcode);
       await dbService.init();
 
       // First try exact barcode match
@@ -819,17 +807,17 @@ export default function OrderDetails() {
 
       // If not found by barcode, try by code
       if (!product) {
-        console.log('[OrderDetails] Not found by barcode, trying by code...');
+        console.log('[SalesDetails] Not found by barcode, trying by code...');
         const searchResults = await dbService.searchProducts(cleanBarcode);
 
         if (searchResults.length > 0) {
           product = searchResults[0];
-          console.log('[OrderDetails] Found by code:', product.name);
+          console.log('[SalesDetails] Found by code:', product.name);
         }
       }
 
       if (!product) {
-        console.log('[OrderDetails] Product not found in database');
+        console.log('[SalesDetails] Product not found in database');
         Alert.alert(
           "Not Found",
           `Product with barcode "${cleanBarcode}" not found in database.\n\nPlease ensure:\n• Product data is downloaded\n• Barcode is correct`
@@ -837,7 +825,7 @@ export default function OrderDetails() {
         return null;
       }
 
-      console.log('[OrderDetails] Product found:', product.name);
+      console.log('[SalesDetails] Product found:', product.name);
 
       return {
         ...product, // Preserve all fields (retail, dp, etc.)
@@ -858,7 +846,7 @@ export default function OrderDetails() {
       };
 
     } catch (error) {
-      console.error('[OrderDetails] Error searching product:', error);
+      console.error('[SalesDetails] Error searching product:', error);
       Alert.alert("Error", `Failed to search product: ${error.message}`);
       return null;
     } finally {
@@ -888,7 +876,7 @@ export default function OrderDetails() {
 
   // Effect to fetch products when filters change
   useEffect(() => {
-    console.log('[OrderDetails] Filters changed, fetching products...');
+    console.log('[SalesDetails] Filters changed, fetching products...');
     fetchAllProducts();
   }, [filters]);
 
@@ -916,7 +904,7 @@ export default function OrderDetails() {
   const loadPendingOrdersCount = async () => {
     try {
       const username = await AsyncStorage.getItem('username');
-      const storageKey = `placed_orders_${username}`;
+      const storageKey = `placed_sales_${username}`;
       const existingOrders = await AsyncStorage.getItem(storageKey);
       if (existingOrders) {
         const orders = JSON.parse(existingOrders);
@@ -930,14 +918,14 @@ export default function OrderDetails() {
         setPendingOrderCount(0);
       }
     } catch (error) {
-      console.error('[OrderDetails] Error loading pending orders:', error);
+      console.error('[SalesDetails] Error loading pending orders:', error);
     }
   };
 
   // Handle barcode scanning - IMPROVED VERSION
   useEffect(() => {
     if (scanned && scanned !== lastProcessedBarcode.current) {
-      console.log('[OrderDetails] New barcode received:', scanned);
+      console.log('[SalesDetails] New barcode received:', scanned);
       lastProcessedBarcode.current = scanned;
 
       const code = String(scanned).trim();
@@ -960,7 +948,7 @@ export default function OrderDetails() {
 
   // Handle search by text
   const handleSearch = () => {
-    console.log('[OrderDetails] Handle search called');
+    console.log('[SalesDetails] Handle search called');
     // Update the 'search' part of the filters state
     setFilters(prev => ({ ...prev, search: query }));
   };
@@ -968,22 +956,22 @@ export default function OrderDetails() {
   // Handle scanned barcode - ENHANCED VERSION with highlighting and scrolling
   const handleScannedBarcode = useCallback(async (code) => {
     console.log('🔴🔴🔴🔴🔴🔴🔴🔴🔴🔴🔴🔴🔴🔴🔴🔴🔴🔴🔴🔴🔴🔴🔴🔴');
-    console.log('[OrderDetails] 📱 BARCODE SCANNED:', code);
+    console.log('[SalesDetails] 📱 BARCODE SCANNED:', code);
 
     // First, check in already loaded products
     let productToShow = allProducts.find((p) =>
       p.barcode === code || p.code === code
     );
 
-    console.log('[OrderDetails] 🔍 Searching in loaded products...');
+    console.log('[SalesDetails] 🔍 Searching in loaded products...');
     if (productToShow) {
-      console.log('[OrderDetails] ✅ Found in loaded products!');
-      console.log('[OrderDetails] Product Name:', productToShow.name);
-      console.log('[OrderDetails] Product ID:', productToShow.id);
-      console.log('[OrderDetails] Product Code:', productToShow.code);
-      console.log('[OrderDetails] Product Barcode:', productToShow.barcode);
+      console.log('[SalesDetails] ✅ Found in loaded products!');
+      console.log('[SalesDetails] Product Name:', productToShow.name);
+      console.log('[SalesDetails] Product ID:', productToShow.id);
+      console.log('[SalesDetails] Product Code:', productToShow.code);
+      console.log('[SalesDetails] Product Barcode:', productToShow.barcode);
     } else {
-      console.log('[OrderDetails] ❌ NOT found in loaded products');
+      console.log('[SalesDetails] ❌ NOT found in loaded products');
     }
 
     if (productToShow) {
@@ -1009,13 +997,13 @@ export default function OrderDetails() {
     }
 
     // If not found in loaded products, search database
-    console.log('[OrderDetails] Product not in loaded list, searching database...');
+    console.log('[SalesDetails] Product not in loaded list, searching database...');
     setSearchLoading(true);
     const fetchedProduct = await fetchProductByBarcode(code);
     setSearchLoading(false);
 
     if (fetchedProduct) {
-      console.log('[OrderDetails] Product found in database:', fetchedProduct.name);
+      console.log('[SalesDetails] Product found in database:', fetchedProduct.name);
 
       // CRITICAL FIX: Check if this product already exists in allProducts or filteredProducts
       // to ensure we use the SAME ID and avoid duplicates
@@ -1037,7 +1025,7 @@ export default function OrderDetails() {
 
       if (existingProduct) {
         // Use the existing product card to ensure ID consistency
-        console.log('[OrderDetails] Found existing product in list, using its ID:', existingProduct.id);
+        console.log('[SalesDetails] Found existing product in list, using its ID:', existingProduct.id);
         productCard = existingProduct;
       } else {
         // Product not in list yet, create new card with consistent ID
@@ -1064,7 +1052,7 @@ export default function OrderDetails() {
           productCategory: fetchedProduct.productCategory || fetchedProduct.category || '',
         };
 
-        console.log('[OrderDetails] Generated new product card with ID:', productCard.id);
+        console.log('[SalesDetails] Generated new product card with ID:', productCard.id);
 
         // Apply dynamic pricing to the new card
         const [pricedCard] = applyPricingToProducts([productCard]);
@@ -1075,13 +1063,13 @@ export default function OrderDetails() {
         // Add to both lists
         setAllProducts(prev => {
           const exists = prev.find(p => p.id === productCard.id);
-          if (!exists) console.log('[OrderDetails] Adding new item to AllProducts:', productCard.id);
+          if (!exists) console.log('[SalesDetails] Adding new item to AllProducts:', productCard.id);
           return exists ? prev : [productCard, ...prev];
         });
 
         setFilteredProducts(prev => {
           const exists = prev.find(p => p.id === productCard.id);
-          if (!exists) console.log('[OrderDetails] Adding new item to filteredProducts:', productCard.id);
+          if (!exists) console.log('[SalesDetails] Adding new item to filteredProducts:', productCard.id);
           return exists ? prev : [productCard, ...prev];
         });
       }
@@ -1092,13 +1080,13 @@ export default function OrderDetails() {
       // Open quantity modal
       openQuantityModal(productCard);
     } else {
-      console.log('[OrderDetails] Product not found in database');
+      console.log('[SalesDetails] Product not found in database');
     }
   }, [allProducts, filteredProducts, addToCart, applyPricingToProducts]);
 
   // Highlight and scroll to a product in the list
   function highlightAndScrollToProduct(product) {
-    console.log('[OrderDetails] Highlighting product:', product.name);
+    console.log('[SalesDetails] Highlighting product:', product.name);
 
     // Set highlighted state
     setHighlightedProductId(product.id);
@@ -1132,7 +1120,7 @@ export default function OrderDetails() {
   }
 
   function openQuantityModal(product) {
-    console.log('[OrderDetails] Opening quantity modal for:', product.name, 'Price:', product.price);
+    console.log('[SalesDetails] Opening quantity modal for:', product.name, 'Price:', product.price);
     setSelectedProduct(product);
 
     // Check if item is already in cart to provide better initial quantity
@@ -1143,18 +1131,13 @@ export default function OrderDetails() {
     // Initialize temp price (ensure it's a valid string)
     const initialPrice = product.price || product.retail || product.mrp || 0;
     setTempPrice(String(initialPrice));
-    setTempRemark(existing?.remark || "");
-    setSelectedRemarkOption("NONE"); // Default to NONE
-    setRemarkDropdownVisible(false);
     setQuantityModalVisible(true);
-
   }
 
   function closeQuantityModal() {
     setQuantityModalVisible(false);
     setSelectedProduct(null);
     setTempQuantity("1");
-    setRemarkDropdownVisible(false);
   }
 
   function handleConfirmQuantity() {
@@ -1174,20 +1157,13 @@ export default function OrderDetails() {
         }
       }
 
-      // Merge selected option and manual text
-      const finalRemark = [
-        selectedRemarkOption !== "NONE" ? selectedRemarkOption : "",
-        tempRemark
-      ].filter(Boolean).join(" - ");
-
-      addToCart(productToAdd, qty, null, true, finalRemark); // Use overwrite=true for modal
-
+      addToCart(productToAdd, qty, null, true); // Use overwrite=true for modal
       closeQuantityModal();
     }
   }
 
   // Key for persisting temporary cart - dynamic based on username
-  const getCartKey = (user) => `temp_return_cart_${user}`;
+  const getCartKey = (user) => `temp_active_cart_${user}`;
 
   // Load cart from storage when username changes
   useEffect(() => {
@@ -1200,14 +1176,14 @@ export default function OrderDetails() {
         let initialCart = [];
         if (savedCartStr) {
           initialCart = JSON.parse(savedCartStr);
-          console.log('[OrderDetails] 📥 Loaded persisted cart for', username, ':', initialCart.length, 'items');
+          console.log('[SalesDetails] 📥 Loaded persisted cart for', username, ':', initialCart.length, 'items');
         }
 
         // MERGE LOGIC: Combine persisted cart with any items added to cartRef while loading
         const currentItems = cartRef.current || [];
 
         if (currentItems.length > 0) {
-          console.log('[OrderDetails] ⚠️ Merging loaded cart with currently added items');
+          console.log('[SalesDetails] ⚠️ Merging loaded cart with currently added items');
           const merged = [...currentItems];
           initialCart.forEach(loadedItem => {
             // Add loaded items only if they aren't already in the current (newest) list
@@ -1227,7 +1203,7 @@ export default function OrderDetails() {
           saveCartToStorage(initialCart);
         }
       } catch (error) {
-        console.error('[OrderDetails] Error loading cart:', error);
+        console.error('[SalesDetails] Error loading cart:', error);
       } finally {
         setCartLoaded(true); // Mark as loaded so future updates can save
       }
@@ -1241,9 +1217,9 @@ export default function OrderDetails() {
     try {
       const key = getCartKey(username);
       await AsyncStorage.setItem(key, JSON.stringify(newCart));
-      console.log('[OrderDetails] 💾 Cart saved:', newCart.length, 'items');
+      console.log('[SalesDetails] 💾 Cart saved:', newCart.length, 'items');
     } catch (error) {
-      console.error('[OrderDetails] Error saving cart:', error);
+      console.error('[SalesDetails] Error saving cart:', error);
     }
   }, [username]);
 
@@ -1268,13 +1244,12 @@ export default function OrderDetails() {
     ]).start();
   }, []);
 
-  const addToCart = useCallback((product, quantity = 1, startCoords = null, overwrite = false, remark = "") => {
-
+  const addToCart = useCallback((product, quantity = 1, startCoords = null, overwrite = false) => {
     console.log('═══════════════════════════════════════════════════════');
-    console.log('[OrderDetails] ➕ ADD TO CART CALLED');
-    console.log('[OrderDetails] Product:', product.name, 'ID:', product.id);
-    console.log('[OrderDetails] Quantity:', quantity);
-    console.log('[OrderDetails] Current cartRef length:', cartRef.current?.length || 0);
+    console.log('[SalesDetails] ➕ ADD TO CART CALLED');
+    console.log('[SalesDetails] Product:', product.name, 'ID:', product.id);
+    console.log('[SalesDetails] Quantity:', quantity);
+    console.log('[SalesDetails] Current cartRef length:', cartRef.current?.length || 0);
 
     // Trigger Flying Animation first
     if (startCoords) {
@@ -1285,29 +1260,27 @@ export default function OrderDetails() {
 
     // CRITICAL FIX: Use cartRef as source of truth with safe initialization
     const currentCart = [...(cartRef.current || [])];
-    console.log('[OrderDetails] Current cart contents:', currentCart.map(i => ({ name: i.product.name, id: i.product.id, qty: i.qty })));
+    console.log('[SalesDetails] Current cart contents:', currentCart.map(i => ({ name: i.product.name, id: i.product.id, qty: i.qty })));
 
     const idx = currentCart.findIndex((it) => it.product.id === product.id);
 
     let newCart;
     if (idx >= 0) {
       // Item already exists - update quantity
-      console.log('[OrderDetails] ✏️  Updating existing item at index', idx);
+      console.log('[SalesDetails] ✏️  Updating existing item at index', idx);
       newCart = [...currentCart];
       newCart[idx] = {
         ...newCart[idx],
-        qty: overwrite ? quantity : newCart[idx].qty + quantity,
-        remark: remark || (overwrite ? "" : newCart[idx].remark)
+        qty: overwrite ? quantity : newCart[idx].qty + quantity
       };
     } else {
       // New item - add to beginning
-      console.log('[OrderDetails] ➕ Adding NEW item to cart');
-      newCart = [{ product, qty: quantity, remark }, ...currentCart];
+      console.log('[SalesDetails] ➕ Adding NEW item to cart');
+      newCart = [{ product, qty: quantity }, ...currentCart];
     }
 
-
-    console.log('[OrderDetails] New cart length:', newCart.length);
-    console.log('[OrderDetails] New cart contents:', newCart.map(i => ({ name: i.product.name, id: i.product.id, qty: i.qty })));
+    console.log('[SalesDetails] New cart length:', newCart.length);
+    console.log('[SalesDetails] New cart contents:', newCart.map(i => ({ name: i.product.name, id: i.product.id, qty: i.qty })));
 
     // Update state, ref, and storage
     cartRef.current = newCart;
@@ -1317,7 +1290,7 @@ export default function OrderDetails() {
     if (cartLoaded) {
       saveCartToStorage(newCart);
     } else {
-      console.log('[OrderDetails] ⚠️ Skipping save to storage (Wait for loadCart merge)');
+      console.log('[SalesDetails] ⚠️ Skipping save to storage (Wait for loadCart merge)');
     }
 
     console.log('═══════════════════════════════════════════════════════');
@@ -1394,7 +1367,7 @@ export default function OrderDetails() {
     setCurrentPhotoIndex(0);
   }
 
-  function handleBackPress(targetRoute = "/SalesReturn/ReturnEntry") {
+  function handleBackPress(targetRoute = "/Sales/SalesEntry") {
     // 1. Close Modals if open
     if (imageModalVisible) {
       closeImageModal();
@@ -1473,8 +1446,7 @@ export default function OrderDetails() {
           qty: item.qty,
           total: item.qty * item.product.price,
           hsn: item.product.text6 || '', // Save HSN
-          gst: item.product.taxcode || '', // Save GST
-          remark: item.remark || "" // Save Remark
+          gst: item.product.taxcode || '' // Save GST
         })),
         total: cart.reduce((s, it) => s + it.qty * it.product.price, 0),
         timestamp: new Date().toISOString(),
@@ -1482,7 +1454,7 @@ export default function OrderDetails() {
       };
 
       const username = await AsyncStorage.getItem('username');
-      const storageKey = `return_orders_${username}`;
+      const storageKey = `placed_sales_${username}`;
       const existingOrders = await AsyncStorage.getItem(storageKey);
       const orders = existingOrders ? JSON.parse(existingOrders) : [];
       orders.push(order);
@@ -1502,7 +1474,7 @@ export default function OrderDetails() {
         [
           {
             text: "View Orders",
-            onPress: () => router.push("/SalesReturn/PlaceReturn")
+            onPress: () => router.push("/Sales/PlaceSales")
           },
           {
             text: "Continue Shopping",
@@ -1523,7 +1495,7 @@ export default function OrderDetails() {
     return (
       <View style={styles.emptyState}>
         <View style={styles.emptyIconContainer}>
-          <Ionicons name="cube-outline" size={60} color={Colors.accent[200]} />
+          <Ionicons name="cube-outline" size={60} color={Colors.success.light} />
         </View>
         <Text style={styles.emptyStateTitle}>
           {allProducts.length === 0 ? "No Products Available" : "No Search Results"}
@@ -1536,12 +1508,12 @@ export default function OrderDetails() {
         <TouchableOpacity
           style={styles.scanActionBtn}
           onPress={() => router.push({
-            pathname: "/SalesReturn/ReturnScanner",
+            pathname: "/Sales/SalesScanner",
             params: { area, customer, customerCode, type, payment }
           })}
         >
           <LinearGradient
-            colors={Gradients.accent}
+            colors={Gradients.success}
             style={styles.scanActionGradient}
           >
             <Ionicons name="qr-code" size={20} color="#fff" />
@@ -1554,7 +1526,7 @@ export default function OrderDetails() {
             style={styles.refreshActionBtn}
             onPress={onRefresh}
           >
-            <Ionicons name="refresh" size={20} color={Colors.accent.main} />
+            <Ionicons name="refresh" size={20} color={Colors.success.main} />
             <Text style={styles.refreshActionText}>Refresh Products</Text>
           </TouchableOpacity>
         )}
@@ -1583,9 +1555,9 @@ export default function OrderDetails() {
         {/* Header */}
         <View style={styles.header}>
           <TouchableOpacity onPress={() => handleBackPress()} style={styles.backButton}>
-            <Ionicons name="arrow-back" size={24} color={Colors.accent.main} />
+            <Ionicons name="arrow-back" size={24} color={Colors.success.main} />
           </TouchableOpacity>
-          <Text style={styles.headerTitle}>Sales Return Details</Text>
+          <Text style={styles.headerTitle}>Sales Details</Text>
           <View style={{ width: 32 }} />
         </View>
 
@@ -1593,7 +1565,7 @@ export default function OrderDetails() {
           {/* Customer Card */}
           <View style={styles.customerCard}>
             <LinearGradient
-              colors={Gradients.accent}
+              colors={Gradients.success}
               start={{ x: 0, y: 0 }}
               end={{ x: 1, y: 1 }}
               style={styles.customerGradient}
@@ -1621,28 +1593,28 @@ export default function OrderDetails() {
               style={styles.actionIconButton}
               onPress={() => handleBackPress("/(tabs)/Home")}
             >
-              <Ionicons name="home" size={20} color={Colors.accent.main} />
+              <Ionicons name="home" size={20} color={Colors.success.main} />
             </TouchableOpacity>
             <TouchableOpacity
               style={styles.actionIconButton}
               onPress={() => {
-                console.log('[OrderDetails] Scanner button pressed');
+                console.log('[SalesDetails] Scanner button pressed');
                 router.push({
-                  pathname: "/SalesReturn/ReturnScanner",
+                  pathname: "/Sales/SalesScanner",
                   params: { area, customer, customerCode, type, payment }
                 });
               }}
             >
-              <Ionicons name="qr-code" size={20} color={Colors.accent.main} />
+              <Ionicons name="qr-code" size={20} color={Colors.success.main} />
             </TouchableOpacity>
             <TouchableOpacity
               style={[styles.actionIconButton, activeFiltersCount > 0 && styles.actionIconButtonActive]}
               onPress={() => {
-                console.log('[OrderDetails] Filter button pressed');
+                console.log('[SalesDetails] Filter button pressed');
                 setFilterModalVisible(true);
               }}
             >
-              <Ionicons name="filter" size={20} color={activeFiltersCount > 0 ? "#FFF" : Colors.accent.main} />
+              <Ionicons name="filter" size={20} color={activeFiltersCount > 0 ? "#FFF" : Colors.success.main} />
               {activeFiltersCount > 0 && (
                 <View style={styles.filterBadge}>
                   <Text style={styles.filterBadgeText}>{activeFiltersCount}</Text>
@@ -1652,20 +1624,20 @@ export default function OrderDetails() {
             <TouchableOpacity
               style={styles.actionIconButton}
               onPress={() => {
-                console.log('[OrderDetails] Refresh button pressed');
+                console.log('[SalesDetails] Refresh button pressed');
                 onRefresh();
               }}
             >
-              <Ionicons name="refresh" size={20} color={Colors.accent.main} />
+              <Ionicons name="refresh" size={20} color={Colors.success.main} />
             </TouchableOpacity>
             <TouchableOpacity
               style={[styles.actionIconButton, pendingOrderCount > 0 && styles.actionIconButtonActive]}
               onPress={() => {
-                console.log('[OrderDetails] View Orders button pressed');
-                router.push("/SalesReturn/PlaceReturn");
+                console.log('[SalesDetails] View Orders button pressed');
+                router.push("/Sales/PlaceSales");
               }}
             >
-              <Ionicons name="receipt-outline" size={20} color={pendingOrderCount > 0 ? "#FFF" : Colors.accent.main} />
+              <Ionicons name="receipt-outline" size={20} color={pendingOrderCount > 0 ? "#FFF" : Colors.success.main} />
               {pendingOrderCount > 0 && (
                 <View style={styles.cartBadge}>
                   <Text style={styles.cartBadgeText}>{pendingOrderCount}</Text>
@@ -1677,12 +1649,12 @@ export default function OrderDetails() {
               style={[styles.actionIconButton, itemCount > 0 && styles.actionIconButtonActive]}
               onLayout={measureCartPosition} // Capture layout on mount/change
               onPress={() => {
-                console.log('[OrderDetails] Cart button pressed');
+                console.log('[SalesDetails] Cart button pressed');
                 toggleSheet(true);
               }}
             >
               <Animated.View style={{ transform: [{ scale: cartScale }] }}>
-                <Ionicons name="cart-outline" size={22} color={itemCount > 0 ? "#FFF" : Colors.accent.main} />
+                <Ionicons name="cart-outline" size={22} color={itemCount > 0 ? "#FFF" : Colors.success.main} />
               </Animated.View>
               {itemCount > 0 && (
                 <View style={styles.cartBadge}>
@@ -1737,7 +1709,7 @@ export default function OrderDetails() {
                       toggleBrandSelection(brand);
                       setTimeout(() => applyFilters(), 100);
                     }}>
-                      <Ionicons name="close-circle" size={16} color={Colors.accent.main} />
+                      <Ionicons name="close-circle" size={16} color={Colors.success.main} />
                     </TouchableOpacity>
                   </View>
                 ))}
@@ -1748,7 +1720,7 @@ export default function OrderDetails() {
                       toggleCategorySelection(product);
                       setTimeout(() => applyFilters(), 100);
                     }}>
-                      <Ionicons name="close-circle" size={16} color={Colors.accent.main} />
+                      <Ionicons name="close-circle" size={16} color={Colors.success.main} />
                     </TouchableOpacity>
                   </View>
                 ))}
@@ -1759,7 +1731,7 @@ export default function OrderDetails() {
                       toggleDepartmentSelection(dept);
                       setTimeout(() => applyFilters(), 100);
                     }}>
-                      <Ionicons name="close-circle" size={16} color={Colors.accent.main} />
+                      <Ionicons name="close-circle" size={16} color={Colors.success.main} />
                     </TouchableOpacity>
                   </View>
                 ))}
@@ -1770,7 +1742,7 @@ export default function OrderDetails() {
                       setFilterInStock(false);
                       setTimeout(() => applyFilters(), 100);
                     }}>
-                      <Ionicons name="close-circle" size={16} color={Colors.accent.main} />
+                      <Ionicons name="close-circle" size={16} color={Colors.success.main} />
                     </TouchableOpacity>
                   </View>
                 )}
@@ -1784,7 +1756,7 @@ export default function OrderDetails() {
           {/* Loading States */}
           {(loading || searchLoading) && (
             <View style={styles.loadingContainer}>
-              <ActivityIndicator size="large" color={Colors.accent.main} />
+              <ActivityIndicator size="large" color={Colors.success.main} />
               <Text style={styles.loadingText}>
                 {searchLoading ? 'Searching product...' : 'Loading products...'}
               </Text>
@@ -1804,15 +1776,15 @@ export default function OrderDetails() {
                 <RefreshControl
                   refreshing={refreshing}
                   onRefresh={onRefresh}
-                  colors={[Colors.accent.main]}
-                  tintColor={Colors.accent.main}
+                  colors={[Colors.success.main]}
+                  tintColor={Colors.success.main}
                 />
               }
               ListEmptyComponent={renderEmptyState}
               onEndReached={loadMoreProducts}
               onEndReachedThreshold={0.5}
               onScrollToIndexFailed={(info) => {
-                console.warn('[OrderDetails] Scroll to index failed:', info);
+                console.warn('[SalesDetails] Scroll to index failed:', info);
                 // Fallback: scroll to offset
                 flatListRef.current?.scrollToOffset({
                   offset: info.averageItemLength * info.index,
@@ -1831,7 +1803,7 @@ export default function OrderDetails() {
                 if (loadingMore) {
                   return (
                     <View style={{ padding: 20, alignItems: 'center' }}>
-                      <ActivityIndicator size="small" color={Colors.accent.main} />
+                      <ActivityIndicator size="small" color={Colors.success.main} />
                       <Text style={{ marginTop: 8, color: Colors.text.secondary, fontSize: 12 }}>
                         Loading more products...
                       </Text>
@@ -1853,7 +1825,7 @@ export default function OrderDetails() {
                       style={{ padding: 20, alignItems: 'center' }}
                       onPress={loadMoreProducts}
                     >
-                      <Text style={{ color: Colors.accent.main, fontSize: 14, fontWeight: '600' }}>
+                      <Text style={{ color: Colors.success.main, fontSize: 14, fontWeight: '600' }}>
                         Load More Products
                       </Text>
                     </TouchableOpacity>
@@ -1871,9 +1843,9 @@ export default function OrderDetails() {
                 const isHighlighted = highlightedProductId === item.id;
 
                 if (isInCart) {
-                  console.log(`[ReturnDetails] Render Item ${item.id} IS IN CART.`);
+                  console.log(`[SalesDetails] Render Item ${item.id} IS IN CART.`);
                 } else if (cart.length > 0 && item.id.includes('_')) {
-                  console.log(`[ReturnDetails] Render Item ${item.id} NOT in cart. Cart IDs:`, cart.map(c => c.product.id));
+                  console.log(`[SalesDetails] Render Item ${item.id} NOT in cart. Cart IDs:`, cart.map(c => c.product.id));
                 }
 
                 return (
@@ -2098,7 +2070,7 @@ export default function OrderDetails() {
                   onPress={applyFilters}
                 >
                   <LinearGradient
-                    colors={Gradients.accent}
+                    colors={Gradients.success}
                     style={styles.filterApplyGradient}
                   >
                     <Text style={styles.filterApplyButtonText}>
@@ -2117,7 +2089,7 @@ export default function OrderDetails() {
         )}
         <Animated.View style={[styles.bottomSheet, { transform: [{ translateY: sheetAnim }] }]}>
           <View style={styles.sheetHeader}>
-            <Text style={styles.sheetTitle}>Current Return ({itemCount} items)</Text>
+            <Text style={styles.sheetTitle}>Current Order ({itemCount} items)</Text>
             <TouchableOpacity onPress={() => toggleSheet(false)}>
               <Ionicons name="close" size={24} color={Colors.text.secondary} />
             </TouchableOpacity>
@@ -2162,7 +2134,7 @@ export default function OrderDetails() {
                 style={styles.proceedGradient}
               >
                 <View style={styles.PlaceOrderButton}>
-                  <Text style={styles.checkoutText}>Place Return</Text>
+                  <Text style={styles.checkoutText}>Place Order</Text>
                   <Ionicons name="checkmark-circle" size={20} color="#FFF" />
                 </View>
               </LinearGradient>
@@ -2216,7 +2188,7 @@ export default function OrderDetails() {
                           keyboardType="numeric"
                           style={{
                             borderBottomWidth: 1,
-                            borderBottomColor: Colors.accent.main,
+                            borderBottomColor: Colors.success.main,
                             minWidth: 80,
                             textAlign: 'center',
                             fontWeight: '700',
@@ -2239,7 +2211,7 @@ export default function OrderDetails() {
                         setTempQuantity(String(Math.max(1, current - 1)));
                       }}
                     >
-                      <Ionicons name="remove" size={24} color={Colors.accent.main} />
+                      <Ionicons name="remove" size={24} color={Colors.success.main} />
                     </TouchableOpacity>
 
                     <TextInput
@@ -2265,7 +2237,7 @@ export default function OrderDetails() {
                         setTempQuantity(String(current + 1));
                       }}
                     >
-                      <Ionicons name="add" size={24} color={Colors.accent.main} />
+                      <Ionicons name="add" size={24} color={Colors.success.main} />
                     </TouchableOpacity>
                   </View>
 
@@ -2275,69 +2247,6 @@ export default function OrderDetails() {
                       {((parseFloat(tempQuantity) || 0) * (appSettings?.order_rate_editable ? (parseFloat(tempPrice) || 0) : selectedProduct.price)).toFixed(2)}
                     </Text>
                   </View>
-
-                  {/* Remarks Section */}
-                  <View style={styles.remarksContainer}>
-                    <Text style={styles.remarksLabel}>Remark (Optional)</Text>
-
-                    {/* Dropdown Trigger */}
-                    <TouchableOpacity
-                      style={styles.dropdownTrigger}
-                      onPress={() => setRemarkDropdownVisible(!remarkDropdownVisible)}
-                      activeOpacity={0.7}
-                    >
-                      <Text style={[
-                        styles.dropdownTriggerText,
-                        selectedRemarkOption === "NONE" && { color: Colors.text.tertiary }
-                      ]}>
-                        {selectedRemarkOption}
-                      </Text>
-                      <Ionicons
-                        name={remarkDropdownVisible ? "chevron-up" : "chevron-down"}
-                        size={20}
-                        color={Colors.text.secondary}
-                      />
-                    </TouchableOpacity>
-
-                    {/* Dropdown Options List */}
-                    {remarkDropdownVisible && (
-                      <View style={styles.dropdownList}>
-                        {REMARK_OPTIONS.map((option) => (
-                          <TouchableOpacity
-                            key={option}
-                            style={[
-                              styles.dropdownItem,
-                              selectedRemarkOption === option && styles.dropdownItemActive
-                            ]}
-                            onPress={() => {
-                              setSelectedRemarkOption(option);
-                              setRemarkDropdownVisible(false);
-                            }}
-                          >
-                            <Text style={[
-                              styles.dropdownItemText,
-                              selectedRemarkOption === option && styles.dropdownItemTextActive
-                            ]}>
-                              {option}
-                            </Text>
-                            {selectedRemarkOption === option && (
-                              <Ionicons name="checkmark" size={18} color={Colors.accent.main} />
-                            )}
-                          </TouchableOpacity>
-                        ))}
-                      </View>
-                    )}
-
-                    <TextInput
-                      style={[styles.remarkInput, { marginTop: 12 }]}
-                      placeholder="Add manual remark..."
-                      placeholderTextColor={Colors.text.tertiary}
-                      value={tempRemark}
-                      onChangeText={setTempRemark}
-                      multiline={false}
-                    />
-                  </View>
-
 
                   <TouchableOpacity
                     style={styles.quantityConfirmButton}
@@ -2493,10 +2402,10 @@ export default function OrderDetails() {
 
                             return (
                               <View key={index} style={[styles.priceItem, isEffective && styles.priceItemHighlight]}>
-                                <Text style={[styles.priceLabel, isEffective && { color: Colors.accent.main }]}>
+                                <Text style={[styles.priceLabel, isEffective && { color: Colors.success.main }]}>
                                   {priceObj.price_name} ({priceObj.price_code})
                                 </Text>
-                                <Text style={[styles.priceValue, isEffective && { color: Colors.accent.main }]}>
+                                <Text style={[styles.priceValue, isEffective && { color: Colors.success.main }]}>
                                   {parseFloat(priceObj.value || 0).toFixed(2)}
                                 </Text>
                               </View>
@@ -2513,8 +2422,8 @@ export default function OrderDetails() {
                             )}
                             {selectedBatchDetails.price > 0 && !selectedBatchDetails.restrictedCodes?.includes(selectedBatchDetails.priceCodeUsed || 'S2') && (
                               <View style={[styles.priceItem, styles.priceItemHighlight]}>
-                                <Text style={[styles.priceLabel, { color: Colors.accent.main }]}>Rate ({selectedBatchDetails.priceCodeUsed || 'S2'})</Text>
-                                <Text style={[styles.priceValue, { color: Colors.accent.main }]}>{selectedBatchDetails.price?.toFixed(2)}</Text>
+                                <Text style={[styles.priceLabel, { color: Colors.success.main }]}>Rate ({selectedBatchDetails.priceCodeUsed || 'S2'})</Text>
+                                <Text style={[styles.priceValue, { color: Colors.success.main }]}>{selectedBatchDetails.price?.toFixed(2)}</Text>
                               </View>
                             )}
                             {selectedBatchDetails.retail > 0 && !selectedBatchDetails.restrictedCodes?.includes('S2') && (
@@ -2582,7 +2491,7 @@ export default function OrderDetails() {
           </View>
         </Modal>
 
-      </SafeAreaView >
+      </SafeAreaView>
     </LinearGradient >
   );
 }
@@ -2645,7 +2554,7 @@ const CodeItem = ({ item, inStock, stockQty, currentQty, displayValue, isInCart,
           style={styles.detailsLinkButton}
         >
           <Text style={styles.detailsLinkText}>View Details</Text>
-          <Ionicons name="chevron-forward" size={14} color={Colors.accent.main} />
+          <Ionicons name="chevron-forward" size={14} color={Colors.success.main} />
         </TouchableOpacity>
       </View>
 
@@ -2713,7 +2622,7 @@ const CodeItem = ({ item, inStock, stockQty, currentQty, displayValue, isInCart,
             disabled={!inStock}
           >
             <LinearGradient
-              colors={inStock ? Gradients.accent : [Colors.neutral[200], Colors.neutral[200]]}
+              colors={inStock ? Gradients.success : [Colors.neutral[200], Colors.neutral[200]]}
               style={styles.addButtonGradient}
             >
               <Ionicons name="cart-outline" size={20} color={inStock ? '#FFF' : Colors.text.tertiary} />
@@ -2790,8 +2699,8 @@ const styles = StyleSheet.create({
     position: 'relative',
   },
   actionIconButtonActive: {
-    backgroundColor: Colors.accent.main,
-    borderColor: Colors.accent.main,
+    backgroundColor: Colors.success.main,
+    borderColor: Colors.success.main,
   },
   filterBadge: {
     position: 'absolute',
@@ -2872,7 +2781,7 @@ const styles = StyleSheet.create({
   activeFilterChip: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: Colors.accent[50],
+    backgroundColor: Colors.primary[50],
     paddingHorizontal: Spacing.sm,
     paddingVertical: 4,
     borderRadius: BorderRadius.full,
@@ -2882,7 +2791,7 @@ const styles = StyleSheet.create({
   },
   activeFilterChipText: {
     fontSize: Typography.sizes.xs,
-    color: Colors.accent.main,
+    color: Colors.success.main,
     fontWeight: '600',
   },
   clearFiltersBtn: {
@@ -2943,24 +2852,24 @@ const styles = StyleSheet.create({
   mrpLabel: {
     fontSize: Typography.sizes.sm,
     fontWeight: '700',
-    color: Colors.accent.main,
+    color: Colors.success.main,
     marginBottom: 0,
   },
   price: {
     fontSize: Typography.sizes.sm,
     fontWeight: '700',
-    color: Colors.accent.main,
+    color: Colors.success.main,
   },
 
   productActions: { marginTop: 4, flexDirection: 'row', justifyContent: 'flex-end' },
   addButton: {
-    backgroundColor: Colors.accent[50],
+    backgroundColor: Colors.primary[50],
     paddingHorizontal: Spacing.sm,
     paddingVertical: 4,
     borderRadius: BorderRadius.full,
   },
   disabledAddButton: { backgroundColor: Colors.neutral[100] },
-  addButtonText: { color: Colors.accent.main, fontWeight: '600', fontSize: 10 },
+  addButtonText: { color: Colors.success.main, fontWeight: '600', fontSize: 10 },
 
   qtyControl: { flexDirection: 'row', alignItems: 'center', backgroundColor: Colors.neutral[50], borderRadius: BorderRadius.md },
   qtyBtn: { width: 28, height: 28, justifyContent: 'center', alignItems: 'center' },
@@ -2980,7 +2889,7 @@ const styles = StyleSheet.create({
   },
   detailsLinkText: {
     fontSize: 10,
-    color: Colors.accent.main,
+    color: Colors.success.main,
     fontWeight: '600',
   },
   actionsContainer: {
@@ -3066,7 +2975,7 @@ const styles = StyleSheet.create({
   scanActionGradient: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: Spacing.xl, paddingVertical: Spacing.md, gap: 8 },
   scanActionText: { color: '#FFF', fontWeight: '700' },
   refreshActionBtn: { marginTop: Spacing.lg, flexDirection: 'row', alignItems: 'center', gap: 6 },
-  refreshActionText: { color: Colors.accent.main, fontWeight: '600' },
+  refreshActionText: { color: Colors.success.main, fontWeight: '600' },
 
   // Filter Modal
   filterModalOverlay: {
@@ -3116,7 +3025,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   filterTabActive: {
-    backgroundColor: Colors.accent.main,
+    backgroundColor: Colors.success.main,
   },
   filterTabText: {
     fontSize: Typography.sizes.base,
@@ -3178,8 +3087,8 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   checkboxChecked: {
-    backgroundColor: Colors.accent.main,
-    borderColor: Colors.accent.main,
+    backgroundColor: Colors.success.main,
+    borderColor: Colors.success.main,
   },
   filterItemText: {
     fontSize: Typography.sizes.base,
@@ -3209,13 +3118,13 @@ const styles = StyleSheet.create({
     paddingVertical: Spacing.md,
     borderRadius: BorderRadius.full,
     borderWidth: 1,
-    borderColor: Colors.accent.main,
+    borderColor: Colors.success.main,
     alignItems: 'center',
   },
   filterClearButtonText: {
     fontSize: Typography.sizes.base,
     fontWeight: '600',
-    color: Colors.accent.main,
+    color: Colors.success.main,
   },
   filterApplyButton: {
     flex: 1,
@@ -3272,7 +3181,7 @@ const styles = StyleSheet.create({
   cartItemInfo: { flex: 1 },
   cartItemName: { fontSize: Typography.sizes.base, fontWeight: '700', color: Colors.text.primary, flex: 1, marginRight: 10 },
   cartItemPrice: { fontSize: Typography.sizes.sm, color: Colors.text.secondary },
-  cartItemTotal: { fontSize: Typography.sizes.base, fontWeight: '600', color: Colors.accent.main, marginHorizontal: Spacing.md },
+  cartItemTotal: { fontSize: Typography.sizes.base, fontWeight: '600', color: Colors.success.main, marginHorizontal: Spacing.md },
   removeCartItem: { padding: 4 },
 
   sheetFooter: { padding: Spacing.lg, borderTopWidth: 1, borderTopColor: Colors.border.light },
@@ -3344,7 +3253,7 @@ const styles = StyleSheet.create({
     width: 50,
     height: 50,
     borderRadius: BorderRadius.full,
-    backgroundColor: Colors.accent[50],
+    backgroundColor: Colors.primary[50],
     justifyContent: 'center',
     alignItems: 'center',
   },
@@ -3352,7 +3261,7 @@ const styles = StyleSheet.create({
     width: 80,
     height: 60,
     borderWidth: 2,
-    borderColor: Colors.accent.main,
+    borderColor: Colors.success.main,
     borderRadius: BorderRadius.lg,
     textAlign: 'center',
     fontSize: Typography.sizes['2xl'],
@@ -3377,7 +3286,7 @@ const styles = StyleSheet.create({
   quantityTotalValue: {
     fontSize: Typography.sizes['2xl'],
     fontWeight: '700',
-    color: Colors.accent.main,
+    color: Colors.success.main,
   },
   quantityConfirmButton: {
     borderRadius: BorderRadius.full,
@@ -3580,7 +3489,7 @@ const styles = StyleSheet.create({
     ...Shadows.sm,
   },
   priceItemHighlight: {
-    backgroundColor: Colors.accent[50],
+    backgroundColor: Colors.primary[50],
     borderColor: Colors.primary[200],
   },
   priceLabel: {
@@ -3667,120 +3576,7 @@ const styles = StyleSheet.create({
   },
   goddownQty: {
     fontSize: 13,
-    color: Colors.accent.main,
+    color: Colors.success.main,
     fontWeight: '700',
-  },
-  cartItemRemark: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
-    marginTop: 6,
-    backgroundColor: Colors.neutral[50],
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 4,
-    alignSelf: 'flex-start',
-  },
-  cartItemRemarkText: {
-    fontSize: 11,
-    color: Colors.text.secondary,
-    fontStyle: 'italic',
-  },
-  remarksContainer: {
-    marginBottom: Spacing.xl,
-    width: '100%',
-  },
-  remarksLabel: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: Colors.text.secondary,
-    marginBottom: 8,
-  },
-  remarkOptionsGrid: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 8,
-    marginBottom: 12,
-  },
-  remarkOptionChip: {
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 20,
-    backgroundColor: Colors.neutral[100],
-    borderWidth: 1,
-    borderColor: Colors.neutral[200],
-  },
-  remarkOptionChipActive: {
-    backgroundColor: Colors.accent.main,
-    borderColor: Colors.accent.main,
-  },
-  remarkOptionText: {
-    fontSize: 12,
-    color: Colors.text.primary,
-    fontWeight: '600',
-  },
-  remarkOptionTextActive: {
-    color: '#FFF',
-  },
-  remarkInput: {
-    width: '100%',
-    height: 45,
-    borderWidth: 1,
-    borderColor: Colors.border.light,
-    borderRadius: BorderRadius.lg,
-    paddingHorizontal: Spacing.md,
-    fontSize: 14,
-    color: Colors.text.primary,
-    backgroundColor: Colors.neutral[50],
-  },
-  dropdownTrigger: {
-    width: '100%',
-    height: 48,
-    borderWidth: 1,
-    borderColor: Colors.border.light,
-    borderRadius: BorderRadius.lg,
-    backgroundColor: Colors.neutral[50],
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: Spacing.md,
-  },
-  dropdownTriggerText: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: Colors.text.primary,
-  },
-  dropdownList: {
-    width: '100%',
-    backgroundColor: '#FFF',
-    borderWidth: 1,
-    borderColor: Colors.border.light,
-    borderRadius: BorderRadius.lg,
-    marginTop: 4,
-    overflow: 'hidden',
-    ...Shadows.md,
-    position: 'absolute',
-    top: 75, // Below label and trigger
-    zIndex: 1000,
-  },
-  dropdownItem: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingVertical: 12,
-    paddingHorizontal: Spacing.md,
-    borderBottomWidth: 1,
-    borderBottomColor: Colors.neutral[50],
-  },
-  dropdownItemActive: {
-    backgroundColor: Colors.accent[50],
-  },
-  dropdownItemText: {
-    fontSize: 14,
-    color: Colors.text.primary,
-  },
-  dropdownItemTextActive: {
-    fontWeight: '700',
-    color: Colors.accent.main,
   },
 });

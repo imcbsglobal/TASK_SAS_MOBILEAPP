@@ -124,7 +124,7 @@ const CartItem = ({ item, changeQty, removeItem, isEditable, onPriceChange }) =>
   const [localQty, setLocalQty] = useState(String(item.qty));
 
   useEffect(() => {
-    setLocalQty(item.qty % 1 === 0 ? String(item.qty) : parseFloat(item.qty).toFixed(2));
+    setLocalQty(String(item.qty));
   }, [item.qty]);
 
   const handleTextChange = (text) => {
@@ -143,9 +143,9 @@ const CartItem = ({ item, changeQty, removeItem, isEditable, onPriceChange }) =>
   const handleBlur = () => {
     const val = parseFloat(localQty);
     if (!localQty || isNaN(val) || val <= 0) {
-      setLocalQty(item.qty % 1 === 0 ? String(item.qty) : parseFloat(item.qty).toFixed(2));
+      setLocalQty(String(item.qty));
     } else {
-      setLocalQty(val % 1 === 0 ? String(val) : val.toFixed(2));
+      setLocalQty(String(val));
     }
   };
 
@@ -1031,7 +1031,7 @@ export default function OrderDetails() {
         // Product not in list yet, create new card with consistent ID
         // Match the ID format from batchService.transformBatchesToCards
         let generatedId;
-        if (fetchedProduct.batchId || fetchedProduct.barcode) {
+        if (fetchedProduct.barcode || fetchedProduct.batchId) {
           // Has batch info - use format: code_barcode
           generatedId = `${fetchedProduct.code}_${fetchedProduct.barcode || fetchedProduct.batchId}`;
         } else {
@@ -1443,7 +1443,7 @@ export default function OrderDetails() {
           batchId: item.product.batchId || null,
           mrp: item.product.mrp || 0,
           price: item.product.price,
-          qty: parseFloat(item.qty).toFixed(2),
+          qty: item.qty,
           total: item.qty * item.product.price,
           hsn: item.product.text6 || '', // Save HSN
           gst: item.product.taxcode || '' // Save GST
@@ -1836,7 +1836,7 @@ export default function OrderDetails() {
               renderItem={({ item }) => {
                 const cartItem = cart.find(c => c.product.id === item.id);
                 const currentQty = cartItem?.qty || 0;
-                const displayValue = editingQty[item.id] !== undefined ? editingQty[item.id] : (currentQty % 1 === 0 ? String(currentQty) : currentQty.toFixed(2));
+                const displayValue = editingQty[item.id] !== undefined ? editingQty[item.id] : String(currentQty);
                 const inStock = true;
                 const stockQty = item.stock || 0;
                 const isInCart = currentQty > 0;
@@ -2829,8 +2829,8 @@ const styles = StyleSheet.create({
     ...Shadows.colored.primary,
   },
   productContainer: { flexDirection: 'row', gap: Spacing.md },
-  productImage: { width: 60, height: 60, borderRadius: BorderRadius.md, backgroundColor: Colors.neutral[50] },
-  placeholderImage: { width: 60, height: 60, borderRadius: BorderRadius.md, backgroundColor: Colors.neutral[100], justifyContent: 'center', alignItems: 'center' },
+  productImage: { width: 95, height: 90, borderRadius: BorderRadius.md, backgroundColor: Colors.neutral[50] },
+  placeholderImage: { width: 95, height: 90, borderRadius: BorderRadius.md, backgroundColor: Colors.neutral[100], justifyContent: 'center', alignItems: 'center' },
   productInfo: { flex: 1 },
   productHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 2 },
   productName: { fontSize: Typography.sizes.sm, fontWeight: '600', color: Colors.text.primary, flex: 1, marginRight: 8 },

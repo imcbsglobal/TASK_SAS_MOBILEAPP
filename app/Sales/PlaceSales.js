@@ -1,4 +1,4 @@
-// app/Order/PlaceOrder.js
+// app/Sales/PlaceSales.js
 import { Ionicons } from '@expo/vector-icons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as FileSystem from 'expo-file-system/legacy';
@@ -33,9 +33,9 @@ if (Platform.OS === 'android') {
   }
 }
 
-export default function PlaceOrder() {
+export default function PlaceSales() {
   const router = useRouter();
-  const [orders, setOrders] = useState([]); // Local orders (Pending/Failed)
+  const [orders, setOrders] = useState([]); // Local sales (Pending/Failed)
   const [uploadedOrders, setUploadedOrders] = useState([]); // API orders
   const [loadingUploaded, setLoadingUploaded] = useState(false);
 
@@ -95,7 +95,7 @@ export default function PlaceOrder() {
     try {
       if (!currentUsername) return;
 
-      const storageKey = `placed_orders_${currentUsername}`;
+      const storageKey = `placed_sales_${currentUsername}`;
       const storedOrders = await AsyncStorage.getItem(storageKey);
       if (storedOrders) {
         let parsedOrders = JSON.parse(storedOrders);
@@ -105,13 +105,13 @@ export default function PlaceOrder() {
         const now = Date.now();
 
         const validOrders = parsedOrders.filter(order => {
-          if (!order.timestamp) return true; // Keep orders without timestamp (legacy)
+          if (!order.timestamp) return true; // Keep entries without timestamp (legacy)
 
           const orderTime = new Date(order.timestamp).getTime();
           const age = now - orderTime;
 
           if (age > THIRTY_HOURS_MS) {
-            console.log(`[PlaceOrder] Removing expired order (${Math.round(age / 3600000)}h old):`, order.id);
+            console.log(`[PlaceSales] Removing expired entry (${Math.round(age / 3600000)}h old):`, order.id);
             return false;
           }
           return true;
@@ -120,7 +120,7 @@ export default function PlaceOrder() {
         // Save cleaned list back to storage
         if (validOrders.length !== parsedOrders.length) {
           await AsyncStorage.setItem(storageKey, JSON.stringify(validOrders));
-          console.log(`[PlaceOrder] Removed ${parsedOrders.length - validOrders.length} expired orders`);
+          console.log(`[PlaceSales] Removed ${parsedOrders.length - validOrders.length} expired entries`);
         }
 
         // Sort by timestamp, newest first
@@ -130,8 +130,8 @@ export default function PlaceOrder() {
         setOrders(sortedOrders);
       }
     } catch (error) {
-      console.error('Error loading orders:', error);
-      Alert.alert('Error', 'Failed to load orders');
+      console.error('Error loading sales:', error);
+      Alert.alert('Error', 'Failed to load sales');
     }
   }
 
@@ -140,10 +140,9 @@ export default function PlaceOrder() {
     setLoadingUploaded(true);
     try {
       const username = await AsyncStorage.getItem('username');
-      const clientId = await AsyncStorage.getItem('client_id');
       const authToken = await AsyncStorage.getItem('authToken');
 
-      if (!authToken || !clientId) {
+      if (!authToken) {
         Alert.alert("Error", "Authentication missing. Please login again.");
         return;
       }
@@ -153,7 +152,7 @@ export default function PlaceOrder() {
         'Authorization': `Bearer ${authToken}`
       };
 
-      const response = await fetch(`https://tasksas.com/api/item-orders/list?client_id=${clientId}`, {
+      const response = await fetch('https://tasksas.com/api/sales/list', {
         method: 'GET',
         headers: headers
       });
@@ -163,40 +162,37 @@ export default function PlaceOrder() {
       }
 
       const json = await response.json();
-      const apiData = Array.isArray(json) ? json : (json.orders || json.data || []);
+      const apiData = json.sales || []; // Use 'sales' array from response
 
       console.log('Current User:', username);
 
-      // Map API data to App's Order Structure
+      // Map API data to App's Sales Structure
       const mappedOrders = apiData
         .filter(apiOrder => {
           if (!username) return false; // If no user is logged in, show nothing
           const apiUser = apiOrder.username ? String(apiOrder.username).trim() : '';
           const currentUser = String(username).trim();
 
-          // Separate Orders from Returns based on payment_type
-          const isReturn = apiOrder.payment_type === 'Return';
-          if (isReturn) return false;
-
           // Case insensitive comparison for user
           return apiUser.toLowerCase() === currentUser.toLowerCase();
         })
         .map(apiOrder => {
           const items = apiOrder.items || [];
+          // Calculate total if not provided (though items have amount, order total isn't explicit in sample)
           const calcTotal = items.reduce((sum, item) => sum + (parseFloat(item.amount) || 0), 0);
 
           return {
-            id: apiOrder.order_id, // Use API Order ID
+            id: apiOrder.sales_id, // Use API Sales ID
             isApiOrder: true,      // Flag to identify source
             customer: apiOrder.customer_name,
             customerCode: apiOrder.customer_code,
             area: apiOrder.area,
-            type: 'Order',
+            type: 'Sales',
             payment: apiOrder.payment_type,
             remark: apiOrder.remark,
             status: 'uploaded',
             uploadStatus: 'uploaded',
-            timestamp: `${apiOrder.created_date}T${apiOrder.created_time}`,
+            timestamp: `${apiOrder.created_date}T${apiOrder.created_time}`, // Construct ISO-like string
             uploadedAt: `${apiOrder.created_date}T${apiOrder.created_time}`,
             total: calcTotal,
             items: items.map(item => ({
@@ -216,8 +212,8 @@ export default function PlaceOrder() {
       setUploadedOrders(mappedOrders);
 
     } catch (error) {
-      console.error('Error fetching uploaded orders:', error);
-      // Alert.alert('Error', 'Failed to fetch uploaded orders');
+      console.error('Error fetching uploaded sales:', error);
+      // Alert.alert('Error', 'Failed to fetch uploaded sales');
     } finally {
       setLoadingUploaded(false);
     }
@@ -257,7 +253,7 @@ export default function PlaceOrder() {
         return order;
       });
       setOrders(updatedOrders);
-      const storageKey = `placed_orders_${currentUsername}`;
+      const storageKey = `placed_sales_${currentUsername}`;
       await AsyncStorage.setItem(storageKey, JSON.stringify(updatedOrders));
     } catch (error) {
       console.error('Error updating quantity:', error);
@@ -287,7 +283,7 @@ export default function PlaceOrder() {
                 return order;
               }).filter(Boolean);
               setOrders(updatedOrders);
-              const storageKey = `placed_orders_${currentUsername}`;
+              const storageKey = `placed_sales_${currentUsername}`;
               await AsyncStorage.setItem(storageKey, JSON.stringify(updatedOrders));
             } catch (e) {
               console.error(e);
@@ -335,7 +331,7 @@ export default function PlaceOrder() {
           onPress: async () => {
             const newOrders = orders.filter(o => !selectedOrders.includes(o.id));
             setOrders(newOrders);
-            const storageKey = `placed_orders_${currentUsername}`;
+            const storageKey = `placed_sales_${currentUsername}`;
             await AsyncStorage.setItem(storageKey, JSON.stringify(newOrders));
             setSelectionMode(false);
             setSelectedOrders([]);
@@ -407,7 +403,7 @@ export default function PlaceOrder() {
 
             // Update state and storage once
             setOrders(processedOrders);
-            const storageKey = `placed_orders_${contextUsername}`;
+            const storageKey = `placed_sales_${contextUsername}`;
             await AsyncStorage.setItem(storageKey, JSON.stringify(processedOrders));
 
             setLoadingUploaded(false);
@@ -428,7 +424,6 @@ export default function PlaceOrder() {
   async function uploadOrderToAPI(order) {
     try {
       const username = await AsyncStorage.getItem('username');
-      const clientId = await AsyncStorage.getItem('client_id');
       const authToken = await AsyncStorage.getItem('authToken');
       const deviceId = (await AsyncStorage.getItem('device_hardware_id')) || (await AsyncStorage.getItem('deviceId'));
 
@@ -437,7 +432,7 @@ export default function PlaceOrder() {
         throw new Error('Authentication token missing. Please login again.');
       }
 
-      if (!username || !clientId) {
+      if (!username) {
         throw new Error('Missing credentials. Please login again.');
       }
 
@@ -469,14 +464,13 @@ export default function PlaceOrder() {
       }
 
       const payload = {
-        client_id: cleanString(clientId),
+        device_id: cleanString(deviceId || 'unknown'),
         customer_name: cleanString(order.customer),
         customer_code: cleanString(order.customerCode),
         area: cleanString(order.area),
         payment_type: cleanString(order.payment),
         username: cleanString(username),
         remark: cleanString(order.remark),
-        device_id: cleanString(deviceId || 'unknown'),
         items: validItems
       };
 
@@ -508,7 +502,7 @@ export default function PlaceOrder() {
             await new Promise(resolve => setTimeout(resolve, delay));
           }
 
-          const response = await fetch('https://tasksas.com/api/item-orders/create', {
+          const response = await fetch('https://tasksas.com/api/sales/create', {
             method: 'POST',
             headers: headers,
             body: JSON.stringify(payload),
@@ -606,7 +600,7 @@ export default function PlaceOrder() {
     if (uploadingOrder) return; // Prevent multiple simultaneous uploads
 
     Alert.alert(
-      'Confirm & Upload Order',
+      'Confirm & Upload Sales',
       'This will upload the order to the server. Continue?',
       [
         { text: 'Cancel', style: 'cancel' },
@@ -637,7 +631,7 @@ export default function PlaceOrder() {
                 return o;
               });
 
-              const storageKey = `placed_orders_${currentUsername}`;
+              const storageKey = `placed_sales_${currentUsername}`;
               await AsyncStorage.setItem(storageKey, JSON.stringify(updatedOrders));
               setOrders(updatedOrders);
 
@@ -677,13 +671,13 @@ export default function PlaceOrder() {
   }
 
   async function deleteOrder(orderId) {
-    Alert.alert('Delete Order', 'Are you sure?', [
+    Alert.alert('Delete Sales Entry', 'Are you sure?', [
       { text: 'Cancel', style: 'cancel' },
       {
         text: 'Delete', style: 'destructive', onPress: async () => {
           const newOrders = orders.filter(o => o.id !== orderId);
           setOrders(newOrders);
-          const storageKey = `placed_orders_${currentUsername}`;
+          const storageKey = `placed_sales_${currentUsername}`;
           await AsyncStorage.setItem(storageKey, JSON.stringify(newOrders));
         }
       }
@@ -749,59 +743,41 @@ export default function PlaceOrder() {
       const isUploaded = order.isApiOrder || order.uploadStatus === 'uploaded' || order.uploadStatus === 'uploaded to server';
       const printContext = filterStatus === 'uploaded' || isUploaded ? 'uploaded' : 'pending';
 
-      // 1. Enrich items if HSN/GST missing (specifically for uploaded orders that might lack this data)
+      // 1. Enrich items if HSN/GST missing
       let enrichedItems = order.items;
 
-      // Check if we need enrichment (if any item has empty HSN/GST)
-      // Check if we need enrichment (if any item has empty HSN/GST)
       const needsEnrichment = order.items.some(item =>
         (!item.hsn || item.hsn === '') || (!item.gst || item.gst === '')
       );
 
       if (needsEnrichment) {
-        console.log('[PDF] Enriching order data from local DB...', order.items.length, 'items');
         try {
-          // Initialize DB just in case
           await dbService.init();
-
           enrichedItems = await Promise.all(order.items.map(async (item) => {
-            // faster check
             if ((item.hsn && item.hsn !== '') && (item.gst && item.gst !== '')) {
               return item;
             }
 
-            console.log(`[PDF] Looking up item: Code="${item.code}", Barcode="${item.barcode}"`);
-
-            // Look up by Code then Barcode
             let product = null;
             if (item.code) {
               product = await dbService.getProductByCode(item.code);
-              if (product) console.log(`[PDF] Found by code: ${item.code}`);
             }
-
             if (!product && item.barcode) {
               product = await dbService.getProductByBarcode(item.barcode);
-              if (product) console.log(`[PDF] Found by barcode: ${item.barcode}`);
             }
 
             if (product) {
-              console.log(`[PDF] Enriched ${item.name}: HSN=${product.text6}, GST=${product.taxcode}`);
               return {
                 ...item,
                 hsn: item.hsn || product.text6 || '',
                 gst: item.gst || product.taxcode || ''
               };
-            } else {
-              console.log(`[PDF] Failed to find product for ${item.name} (${item.code})`);
             }
             return item;
           }));
         } catch (enrichError) {
           console.warn('[PDF] Enrichment failed:', enrichError);
-          // Continue with original items if enrichment fails
         }
-      } else {
-        console.log('[PDF] No enrichment needed - all items have HSN/GST');
       }
 
       const orderToPdf = {
@@ -945,7 +921,7 @@ export default function PlaceOrder() {
                 <Ionicons
                   name={selectedOrders.includes(order.id) ? "checkbox" : "square-outline"}
                   size={24}
-                  color={Colors.primary.main}
+                  color={Colors.success.main}
                 />
               </View>
             )}
@@ -1012,7 +988,7 @@ export default function PlaceOrder() {
               </TouchableOpacity>
 
               <TouchableOpacity style={styles.actionButton} onPress={() => handlePrint(order)}>
-                <LinearGradient colors={[Colors.primary.main, Colors.primary[700]]} style={styles.actionButtonGradient}>
+                <LinearGradient colors={[Colors.success.main, Colors.success[700]]} style={styles.actionButtonGradient}>
                   <Ionicons name="print" size={18} color="#fff" />
                   <Text style={styles.actionButtonText}>Print</Text>
                 </LinearGradient>
@@ -1063,26 +1039,26 @@ export default function PlaceOrder() {
         <StatusBar barStyle="dark-content" />
         <View style={styles.header}>
           <TouchableOpacity onPress={() => router.back()} style={styles.iconButton}>
-            <Ionicons name="arrow-back" size={24} color={Colors.primary.main} />
+            <Ionicons name="arrow-back" size={24} color={Colors.success.main} />
           </TouchableOpacity>
           <View>
-            <Text style={styles.headerTitle}>Order Management</Text>
-            <Text style={styles.headerSubtitle}>Manage & Track Orders</Text>
+            <Text style={styles.headerTitle}>Sales Management</Text>
+            <Text style={styles.headerSubtitle}>Manage & Track Sales</Text>
           </View>
           <View style={{ flexDirection: 'row', gap: 10 }}>
             {filterStatus === 'pending' && (
               <TouchableOpacity
-                style={[styles.iconButton, selectionMode && { backgroundColor: Colors.primary[100] }]}
+                style={[styles.iconButton, selectionMode && { backgroundColor: Colors.success[100] }]}
                 onPress={toggleSelectionMode}
               >
-                <Ionicons name={selectionMode ? "close" : "checkbox"} size={22} color={Colors.primary.main} />
-                <Text style={{ marginLeft: 5, color: Colors.primary.main, fontWeight: '600' }}>
+                <Ionicons name={selectionMode ? "close" : "checkbox"} size={22} color={Colors.success.main} />
+                <Text style={{ marginLeft: 5, color: Colors.success.main, fontWeight: '600' }}>
                   {selectionMode ? "Cancel" : "Select"}
                 </Text>
               </TouchableOpacity>
             )}
             <TouchableOpacity style={styles.iconButton} onPress={handleRefresh}>
-              <Ionicons name="refresh" size={22} color={Colors.primary.main} />
+              <Ionicons name="refresh" size={22} color={Colors.success.main} />
             </TouchableOpacity>
           </View>
         </View>
@@ -1107,7 +1083,7 @@ export default function PlaceOrder() {
         <View style={styles.container}>
           {loadingUploaded && filterStatus === 'uploaded' ? (
             <View style={[styles.emptyState, { justifyContent: 'center' }]}>
-              <ActivityIndicator size="large" color={Colors.primary.main} />
+              <ActivityIndicator size="large" color={Colors.success.main} />
               <Text style={{ marginTop: 10, color: Colors.text.secondary }}>Loading from Server...</Text>
             </View>
           ) : (
@@ -1121,7 +1097,7 @@ export default function PlaceOrder() {
               ListEmptyComponent={
                 <View style={styles.emptyState}>
                   <Ionicons name="receipt-outline" size={60} color={Colors.neutral[300]} />
-                  <Text style={styles.emptyTitle}>No orders found</Text>
+                  <Text style={styles.emptyTitle}>No sales found</Text>
                 </View>
               }
             />
@@ -1134,7 +1110,7 @@ export default function PlaceOrder() {
               <Ionicons
                 name={selectedOrders.length === displayOrders.length ? "checkbox" : "square-outline"}
                 size={24}
-                color={Colors.primary.main}
+                color={Colors.success.main}
               />
               <Text style={styles.bulkActionText}>Select All ({selectedOrders.length})</Text>
             </TouchableOpacity>
@@ -1173,15 +1149,15 @@ export default function PlaceOrder() {
 
               <View style={{ padding: 16 }}>
                 <View style={{ flexDirection: 'row', justifyContent: 'center', marginBottom: 15, gap: 10 }}>
-                  <TouchableOpacity onPress={() => scanPrinters('ble')} style={{ padding: 8, backgroundColor: connectionType === 'ble' ? Colors.primary.light : Colors.neutral[100], borderRadius: 5 }}>
+                  <TouchableOpacity onPress={() => scanPrinters('ble')} style={{ padding: 8, backgroundColor: connectionType === 'ble' ? Colors.success.light : Colors.neutral[100], borderRadius: 5 }}>
                     <Text>Bluetooth</Text>
                   </TouchableOpacity>
-                  <TouchableOpacity onPress={() => scanPrinters('usb')} style={{ padding: 8, backgroundColor: connectionType === 'usb' ? Colors.primary.light : Colors.neutral[100], borderRadius: 5 }}>
+                  <TouchableOpacity onPress={() => scanPrinters('usb')} style={{ padding: 8, backgroundColor: connectionType === 'usb' ? Colors.success.light : Colors.neutral[100], borderRadius: 5 }}>
                     <Text>USB</Text>
                   </TouchableOpacity>
                 </View>
 
-                {isScanningPrinters ? <ActivityIndicator color={Colors.primary.main} /> : null}
+                {isScanningPrinters ? <ActivityIndicator color={Colors.success.main} /> : null}
 
                 <FlatList
                   data={printers}
@@ -1249,8 +1225,8 @@ const styles = StyleSheet.create({
     gap: 4,
   },
   filterTabActive: {
-    backgroundColor: Colors.primary.main,
-    borderColor: Colors.primary.main,
+    backgroundColor: Colors.success.main,
+    borderColor: Colors.success.main,
   },
   filterTabText: {
     fontSize: Typography.sizes.sm,
@@ -1327,7 +1303,7 @@ const styles = StyleSheet.create({
   orderTotal: {
     fontSize: Typography.sizes.lg,
     fontWeight: '700',
-    color: Colors.primary.main,
+    color: Colors.success.main,
   },
   itemCount: {
     fontSize: Typography.sizes.sm,

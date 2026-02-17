@@ -45,6 +45,7 @@ export default function PlaceOrder() {
   const [uploadingOrder, setUploadingOrder] = useState(null);
   const [filterStatus, setFilterStatus] = useState('pending'); // pending, uploaded, failed
   const [uploadDetailsModal, setUploadDetailsModal] = useState(false);
+  const [isSharing, setIsSharing] = useState(false);
 
   const [selectedOrderDetails, setSelectedOrderDetails] = useState(null);
   const [currentUsername, setCurrentUsername] = useState(null);
@@ -449,6 +450,8 @@ export default function PlaceOrder() {
         price: cleanNumber(item.price),
         quantity: cleanNumber(item.qty),
         amount: cleanNumber(item.total),
+        hsn: cleanString(item.hsn),      // Add HSN
+        gst: cleanString(item.gst),      // Add GST
         remark: cleanString(item.remark)
       }));
 
@@ -688,19 +691,19 @@ export default function PlaceOrder() {
   }
 
   const handlePrint = async (order) => {
-    const isUploaded = order.isApiOrder || order.uploadStatus === 'uploaded' || order.uploadStatus === 'uploaded to server';
-    const printContext = filterStatus === 'uploaded' || isUploaded ? 'uploaded' : 'pending';
-
-    // Status 'S' for uploaded, 'F' for pending
-    // Order ID: API ID if uploaded, NA if pending
-    const orderToPrint = {
-      ...order,
-      description: printContext === 'uploaded' ? 'S' : 'F',
-      formattedOrderId: printContext === 'uploaded' ? order.id : 'NA',
-      printStatus: printContext === 'uploaded' ? 'S' : 'F'
-    };
-
     try {
+      const isUploaded = order.isApiOrder || order.uploadStatus === 'uploaded' || order.uploadStatus === 'uploaded to server';
+      const printContext = filterStatus === 'uploaded' || isUploaded ? 'uploaded' : 'pending';
+
+      // Status 'S' for uploaded, 'F' for pending
+      // Order ID: API ID if uploaded, NA if pending
+      const orderToPrint = {
+        ...order,
+        description: printContext === 'uploaded' ? 'S' : 'F',
+        formattedOrderId: printContext === 'uploaded' ? order.id : 'NA',
+        printStatus: printContext === 'uploaded' ? 'S' : 'F'
+      };
+
       if (printerService.connected) {
         Alert.alert("Printing", "Sending data to printer...");
         await printerService.printOrder(orderToPrint);
@@ -713,7 +716,8 @@ export default function PlaceOrder() {
         setIsScanningPrinters(false);
       }
     } catch (error) {
-      Alert.alert("Error", "Failed to initiate printing");
+      console.error("Print Crash Prevented:", error);
+      Alert.alert("Error", "Failed to initiate printing: " + error.message);
     }
   };
 
@@ -726,6 +730,69 @@ export default function PlaceOrder() {
       setPrinters(devices);
     } catch (e) { Alert.alert("Error", "Scan failed"); }
     finally { setIsScanningPrinters(false); }
+  };
+
+  const handleSharePDF = async (order) => {
+    if (isSharing) return;
+    setIsSharing(true);
+
+    try {
+      // Determine context
+      const isUploaded = order.isApiOrder || order.uploadStatus === 'uploaded' || order.uploadStatus === 'uploaded to server';
+      const printContext = filterStatus === 'uploaded' || isUploaded ? 'uploaded' : 'pending';
+
+      // 1. Enrich items if HSN/GST missing
+      let enrichedItems = order.items;
+
+      const needsEnrichment = order.items.some(item =>
+        (!item.hsn || item.hsn === '') || (!item.gst || item.gst === '')
+      );
+
+      if (needsEnrichment) {
+        try {
+          await dbService.init();
+          enrichedItems = await Promise.all(order.items.map(async (item) => {
+            if ((item.hsn && item.hsn !== '') && (item.gst && item.gst !== '')) {
+              return item;
+            }
+
+            let product = null;
+            if (item.code) {
+              product = await dbService.getProductByCode(item.code);
+            }
+            if (!product && item.barcode) {
+              product = await dbService.getProductByBarcode(item.barcode);
+            }
+
+            if (product) {
+              return {
+                ...item,
+                hsn: item.hsn || product.text6 || '',
+                gst: item.gst || product.taxcode || ''
+              };
+            }
+            return item;
+          }));
+        } catch (enrichError) {
+          console.warn('[PDF] Enrichment failed:', enrichError);
+        }
+      }
+
+      const orderToPdf = {
+        ...order,
+        items: enrichedItems,
+        formattedOrderId: printContext === 'uploaded' ? order.id : 'NA',
+        printStatus: printContext === 'uploaded' ? 'S' : 'F'
+      };
+
+      await pdfService.shareOrderPDF(orderToPdf);
+
+    } catch (e) {
+      console.error("PDF Share Error:", e);
+      Alert.alert("Error", "Failed to share PDF");
+    } finally {
+      setIsSharing(false);
+    }
   };
 
   // JSON Download Logic - FIXED (MOBILE SAFE)
@@ -909,17 +976,7 @@ export default function PlaceOrder() {
                 </TouchableOpacity>
               )}
 
-              <TouchableOpacity style={styles.actionButton} onPress={() => {
-                const isUploaded = order.isApiOrder || order.uploadStatus === 'uploaded' || order.uploadStatus === 'uploaded to server';
-                const printContext = filterStatus === 'uploaded' || isUploaded ? 'uploaded' : 'pending';
-
-                const orderToPdf = {
-                  ...order,
-                  formattedOrderId: printContext === 'uploaded' ? order.id : 'NA',
-                  printStatus: printContext === 'uploaded' ? 'S' : 'F'
-                };
-                pdfService.shareOrderPDF(orderToPdf);
-              }}>
+              <TouchableOpacity style={styles.actionButton} onPress={() => handleSharePDF(order)}>
                 <LinearGradient colors={[Colors.secondary.main, Colors.secondary[700]]} style={styles.actionButtonGradient}>
                   <Ionicons name="share-social" size={18} color="#fff" />
                   <Text style={styles.actionButtonText}>PDF</Text>
