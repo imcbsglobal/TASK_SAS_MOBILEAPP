@@ -13,7 +13,9 @@ import {
   Dimensions,
   FlatList,
   Image,
+  KeyboardAvoidingView,
   Modal,
+  Platform,
   Pressable,
   RefreshControl,
   SafeAreaView,
@@ -145,7 +147,7 @@ const CartItem = ({ item, changeQty, removeItem, isEditable, onPriceChange }) =>
     if (!localQty || isNaN(val) || val <= 0) {
       setLocalQty(String(item.qty));
     } else {
-      setLocalQty(String(val));
+      setLocalQty(val.toFixed(3));
     }
   };
 
@@ -258,8 +260,14 @@ export default function SalesDetails() {
 
   // CRITICAL: Use ref as source of truth for cart to prevent state loss
   const cartRef = useRef([]);
+  const flatListRef = useRef(null);
+  const cartButtonRef = useRef(null);
+  const quantityInputRef = useRef(null);
   const [cart, setCart] = useState([]);
   const [cartLoaded, setCartLoaded] = useState(false); // Flag to prevent overwriting storage before load
+
+  // Default Quantity State
+  const [defaultQuantity, setDefaultQuantity] = useState(1);
 
   // Missing state variables
   const [loading, setLoading] = useState(false);
@@ -351,6 +359,15 @@ export default function SalesDetails() {
           console.log(`[SalesDetails] "Show Stock Only" setting is DISABLED for ${storedUser || 'unknown'}`);
         }
 
+        // LOAD DEFAULT QUANTITY SETTING
+        const qtyKey = storedUser ? `settings_default_quantity_${storedUser}` : 'settings_default_quantity';
+        const defaultQtyStr = await AsyncStorage.getItem(qtyKey);
+        if (defaultQtyStr !== null) {
+          const qty = parseInt(defaultQtyStr, 10);
+          setDefaultQuantity(qty);
+          console.log(`[SalesDetails] Default Quantity loaded: ${qty}`);
+        }
+
       } catch (error) {
         console.error('[SalesDetails] Failed to load settings/user:', error);
       }
@@ -395,7 +412,6 @@ export default function SalesDetails() {
   // Flying Animation State
   const [flyingItems, setFlyingItems] = useState([]);
   const [cartPosition, setCartPosition] = useState({ x: 0, y: 0 });
-  const cartButtonRef = useRef(null);
 
   const measureCartPosition = () => {
     cartButtonRef.current?.measure((x, y, width, height, pageX, pageY) => {
@@ -415,7 +431,6 @@ export default function SalesDetails() {
   // For highlighting scanned items
   // For highlighting scanned items
   const [highlightedProductId, setHighlightedProductId] = useState(null);
-  const flatListRef = useRef(null);
 
   // Pagination State
   const [page, setPage] = useState(1);
@@ -1125,7 +1140,8 @@ export default function SalesDetails() {
 
     // Check if item is already in cart to provide better initial quantity
     const existing = cartRef.current?.find(it => it.product.id === product.id);
-    const initialQty = existing ? existing.qty + 1 : 1;
+    // Use default quantity preference if not in cart (0 or 1)
+    const initialQty = existing ? existing.qty + 1 : (defaultQuantity !== undefined ? defaultQuantity : 1);
 
     setTempQuantity(String(initialQty));
     // Initialize temp price (ensure it's a valid string)
@@ -1164,6 +1180,23 @@ export default function SalesDetails() {
 
   // Key for persisting temporary cart - dynamic based on username
   const getCartKey = (user) => `temp_active_cart_${user}`;
+
+  // Load default quantity setting
+  useEffect(() => {
+    async function loadDefaultQty() {
+      if (!username) return;
+      try {
+        const qtyKey = `settings_default_quantity_${username}`;
+        const qtyVal = await AsyncStorage.getItem(qtyKey);
+        if (qtyVal !== null) {
+          setDefaultQuantity(parseInt(qtyVal, 10));
+        }
+      } catch (e) {
+        console.log("Error loading default quantity", e);
+      }
+    }
+    loadDefaultQty();
+  }, [username]);
 
   // Load cart from storage when username changes
   useEffect(() => {
@@ -2089,7 +2122,7 @@ export default function SalesDetails() {
         )}
         <Animated.View style={[styles.bottomSheet, { transform: [{ translateY: sheetAnim }] }]}>
           <View style={styles.sheetHeader}>
-            <Text style={styles.sheetTitle}>Current Order ({itemCount} items)</Text>
+            <Text style={styles.sheetTitle}>Current CART ({itemCount} items)</Text>
             <TouchableOpacity onPress={() => toggleSheet(false)}>
               <Ionicons name="close" size={24} color={Colors.text.secondary} />
             </TouchableOpacity>
@@ -2111,7 +2144,7 @@ export default function SalesDetails() {
                     item={item}
                     changeQty={changeQty}
                     removeItem={removeItem}
-                    isEditable={appSettings?.order_rate_editable}
+                    isEditable={appSettings?.order_rate_editable === true || String(appSettings?.order_rate_editable) === 'true'}
                     onPriceChange={handleCartItemPriceChange}
                   />
                 )}
@@ -2134,7 +2167,7 @@ export default function SalesDetails() {
                 style={styles.proceedGradient}
               >
                 <View style={styles.PlaceOrderButton}>
-                  <Text style={styles.checkoutText}>Place Order</Text>
+                  <Text style={styles.checkoutText}>Place Sales</Text>
                   <Ionicons name="checkmark-circle" size={20} color="#FFF" />
                 </View>
               </LinearGradient>
@@ -2163,107 +2196,131 @@ export default function SalesDetails() {
           transparent={true}
           animationType="fade"
           onRequestClose={closeQuantityModal}
+          onShow={() => {
+            setTimeout(() => {
+              quantityInputRef.current?.focus();
+            }, 150);
+          }}
         >
-          <View style={styles.quantityModalOverlay}>
-            <View style={styles.quantityModalContent}>
-              <View style={styles.quantityModalHeader}>
-                <Text style={styles.quantityModalTitle}>Select Quantity</Text>
-                <TouchableOpacity onPress={closeQuantityModal}>
-                  <Ionicons name="close" size={24} color={Colors.text.secondary} />
-                </TouchableOpacity>
-              </View>
+          <KeyboardAvoidingView
+            behavior={Platform.OS === "ios" ? "padding" : "height"}
+            style={{ flex: 1 }}
+          >
+            <View style={styles.quantityModalOverlay}>
+              <View style={[styles.quantityModalContent, { maxHeight: height * 0.85, paddingBottom: 0 }]}>
+                <ScrollView
+                  showsVerticalScrollIndicator={false}
+                  contentContainerStyle={{ padding: Spacing.xl, flexGrow: 1 }}
+                  keyboardShouldPersistTaps="handled"
+                >
+                  <View style={styles.quantityModalHeader}>
+                    <Text style={styles.quantityModalTitle}>Select Quantity</Text>
+                    <TouchableOpacity onPress={closeQuantityModal}>
+                      <Ionicons name="close" size={24} color={Colors.text.secondary} />
+                    </TouchableOpacity>
+                  </View>
 
-              {selectedProduct && (
-                <>
-                  <View style={styles.quantityProductInfo}>
-                    <Text style={styles.quantityProductName} numberOfLines={2}>
-                      {selectedProduct.name}
-                    </Text>
-                    {appSettings?.order_rate_editable ? (
-                      <View style={{ flexDirection: 'row', alignItems: 'center', marginTop: 4 }}>
-                        <Text style={{ marginRight: 8 }}>Price:</Text>
-                        <TextInput
-                          value={tempPrice}
-                          onChangeText={setTempPrice}
-                          keyboardType="numeric"
-                          style={{
-                            borderBottomWidth: 1,
-                            borderBottomColor: Colors.success.main,
-                            minWidth: 80,
-                            textAlign: 'center',
-                            fontWeight: '700',
-                            fontSize: 16
-                          }}
-                        />
+                  {selectedProduct && (
+                    <>
+                      <View style={styles.quantityProductInfo}>
+                        <Text style={styles.quantityProductName} numberOfLines={2}>
+                          {selectedProduct.name}
+                        </Text>
+                        {(appSettings?.order_rate_editable === true || String(appSettings?.order_rate_editable) === 'true') ? (
+                          <View style={{ flexDirection: 'row', alignItems: 'center', marginTop: 4 }}>
+                            <Text style={{ marginRight: 8 }}>Price:</Text>
+                            <TextInput
+                              value={tempPrice}
+                              onChangeText={setTempPrice}
+                              keyboardType="numeric"
+                              style={{
+                                borderBottomWidth: 1,
+                                borderBottomColor: Colors.success.main,
+                                minWidth: 80,
+                                textAlign: 'center',
+                                fontWeight: '700',
+                                fontSize: 16
+                              }}
+                              selectTextOnFocus={true}
+                            />
+                          </View>
+                        ) : (
+                          <Text style={styles.quantityProductPrice}>
+                            {(selectedProduct.price || selectedProduct.retail || 0).toFixed(2)} per unit
+                          </Text>
+                        )}
                       </View>
-                    ) : (
-                      <Text style={styles.quantityProductPrice}>
-                        {(selectedProduct.price || selectedProduct.retail || 0).toFixed(2)} per unit
-                      </Text>
-                    )}
-                  </View>
 
-                  <View style={styles.quantityInputContainer}>
-                    <TouchableOpacity
-                      style={styles.quantityButton}
-                      onPress={() => {
-                        const current = parseFloat(tempQuantity) || 1;
-                        setTempQuantity(String(Math.max(1, current - 1)));
-                      }}
-                    >
-                      <Ionicons name="remove" size={24} color={Colors.success.main} />
-                    </TouchableOpacity>
+                      <View style={styles.quantityInputContainer}>
+                        <TouchableOpacity
+                          style={styles.quantityButton}
+                          onPress={() => {
+                            const current = parseFloat(tempQuantity) || 0;
+                            setTempQuantity(String(Math.max(0, current - 1)));
+                          }}
+                        >
+                          <Ionicons name="remove" size={24} color={Colors.success.main} />
+                        </TouchableOpacity>
 
-                    <TextInput
-                      style={styles.quantityInput}
-                      value={String(tempQuantity)}
-                      keyboardType="numeric"
-                      autoFocus={true}
-                      onChangeText={(text) => {
-                        // Allow decimals
-                        const cleaned = text.replace(/[^0-9.]/g, '');
-                        // Prevent multiple dots
-                        const parts = cleaned.split('.');
-                        if (parts.length > 2) return;
-                        setTempQuantity(cleaned);
-                      }}
-                      selectTextOnFocus={true}
-                    />
+                        <TextInput
+                          ref={quantityInputRef}
+                          style={styles.quantityInput}
+                          value={String(tempQuantity)}
+                          keyboardType="numeric"
+                          autoFocus={true} // Auto-focus on open
+                          onLayout={() => {
+                            // Double insurance for focus
+                            setTimeout(() => {
+                              quantityInputRef.current?.focus();
+                            }, 100);
+                          }}
+                          onChangeText={(text) => {
+                            // Allow decimals
+                            const cleaned = text.replace(/[^0-9.]/g, '');
+                            // Prevent multiple dots
+                            const parts = cleaned.split('.');
+                            if (parts.length > 2) return;
+                            setTempQuantity(cleaned);
+                          }}
+                          selectTextOnFocus={true}
+                        />
 
-                    <TouchableOpacity
-                      style={styles.quantityButton}
-                      onPress={() => {
-                        const current = parseFloat(tempQuantity) || 1;
-                        setTempQuantity(String(current + 1));
-                      }}
-                    >
-                      <Ionicons name="add" size={24} color={Colors.success.main} />
-                    </TouchableOpacity>
-                  </View>
+                        <TouchableOpacity
+                          style={styles.quantityButton}
+                          onPress={() => {
+                            const current = parseFloat(tempQuantity) || 0;
+                            setTempQuantity(String(current + 1));
+                          }}
+                        >
+                          <Ionicons name="add" size={24} color={Colors.success.main} />
+                        </TouchableOpacity>
+                      </View>
 
-                  <View style={styles.quantityTotalContainer}>
-                    <Text style={styles.quantityTotalLabel}>Total:</Text>
-                    <Text style={styles.quantityTotalValue}>
-                      {((parseFloat(tempQuantity) || 0) * (appSettings?.order_rate_editable ? (parseFloat(tempPrice) || 0) : selectedProduct.price)).toFixed(2)}
-                    </Text>
-                  </View>
+                      <View style={styles.quantityTotalContainer}>
+                        <Text style={styles.quantityTotalLabel}>Total:</Text>
+                        <Text style={styles.quantityTotalValue}>
+                          {((parseFloat(tempQuantity) || 0) * ((appSettings?.order_rate_editable === true || String(appSettings?.order_rate_editable) === 'true') ? (parseFloat(tempPrice) || 0) : selectedProduct.price)).toFixed(2)}
+                        </Text>
+                      </View>
 
-                  <TouchableOpacity
-                    style={styles.quantityConfirmButton}
-                    onPress={handleConfirmQuantity}
-                  >
-                    <LinearGradient
-                      colors={Gradients.success}
-                      style={styles.quantityConfirmGradient}
-                    >
-                      <Ionicons name="checkmark-circle" size={20} color="#FFF" />
-                      <Text style={styles.quantityConfirmText}>Add to Cart</Text>
-                    </LinearGradient>
-                  </TouchableOpacity>
-                </>
-              )}
+                      <TouchableOpacity
+                        style={styles.quantityConfirmButton}
+                        onPress={handleConfirmQuantity}
+                      >
+                        <LinearGradient
+                          colors={Gradients.success}
+                          style={styles.quantityConfirmGradient}
+                        >
+                          <Ionicons name="checkmark-circle" size={20} color="#FFF" />
+                          <Text style={styles.quantityConfirmText}>Add to Cart</Text>
+                        </LinearGradient>
+                      </TouchableOpacity>
+                    </>
+                  )}
+                </ScrollView>
+              </View>
             </View>
-          </View>
+          </KeyboardAvoidingView>
         </Modal>
 
         {/* Image Modal */}
@@ -2894,6 +2951,7 @@ const styles = StyleSheet.create({
   },
   actionsContainer: {
     gap: 4,
+    alignItems: 'center',
   },
   stockDisplayContainer: {
     flexDirection: 'row',
@@ -2915,6 +2973,7 @@ const styles = StyleSheet.create({
     borderRadius: BorderRadius.md,
     overflow: 'hidden',
     ...Shadows.sm,
+    width: '100%',
   },
   addButtonGradient: {
     flexDirection: 'row',
@@ -3200,13 +3259,13 @@ const styles = StyleSheet.create({
     gap: 8,
   },
 
-  // Quantity Modal
+  // Quantity Modal - FIXED for resizing
   quantityModalOverlay: {
     flex: 1,
     backgroundColor: 'rgba(0,0,0,0.5)',
     justifyContent: 'center',
-    alignItems: 'center',
-    padding: Spacing.xl,
+    alignItems: 'center', // Center specifically
+    padding: Spacing.md,
   },
   quantityModalContent: {
     backgroundColor: '#FFF',
@@ -3215,6 +3274,8 @@ const styles = StyleSheet.create({
     maxWidth: 400,
     padding: Spacing.xl,
     ...Shadows.xl,
+    // Ensure it doesn't get too squeezed
+    minHeight: 300,
   },
   quantityModalHeader: {
     flexDirection: 'row',
@@ -3258,7 +3319,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   quantityInput: {
-    width: 80,
+    width: 140,
     height: 60,
     borderWidth: 2,
     borderColor: Colors.success.main,

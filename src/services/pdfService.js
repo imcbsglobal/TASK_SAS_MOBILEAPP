@@ -111,7 +111,7 @@ const pdfService = {
           <div style="font-size: 10px; color: #666;">${item.code || ''}</div>
         </td>
         <td style="text-align: center; padding: 5px; border-bottom: 1px solid #eee;">${item.hsn || item.text6 || '-'}</td>
-        <td style="text-align: center; padding: 5px; border-bottom: 1px solid #eee;">${parseFloat(item.qty).toFixed(2)}</td>
+        <td style="text-align: center; padding: 5px; border-bottom: 1px solid #eee;">${parseFloat(item.qty).toFixed(3)}</td>
         <td style="text-align: center; padding: 5px; border-bottom: 1px solid #eee;">${item.taxcode || item.gst || '-'}</td>
         <td style="text-align: right; padding: 5px; border-bottom: 1px solid #eee;">${item.price.toFixed(2)}</td>
         <td style="text-align: right; padding: 5px; border-bottom: 1px solid #eee;">${item.total.toFixed(2)}</td>

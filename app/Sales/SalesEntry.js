@@ -751,7 +751,7 @@ export default function SalesEntryScreen() {
                     </View>
                     <View style={styles.customerInfo}>
                       <Text style={styles.customerName}>{item.name}</Text>
-                      <Text style={styles.customerCode}>Code: {item.code}</Text>
+                      <Text style={styles.customerCode}>Code: {item.code} • {item.place || item.area}</Text>
                     </View>
                     {selectedCustomer?.code === item.code && (
                       <Ionicons name="checkmark-circle" size={20} color={Colors.success.main} />

@@ -42,6 +42,7 @@ const Home = ({ navigation }) => {
   const [paperSize, setPaperSize] = useState(58); // Default 58mm
   const [showStockOnly, setShowStockOnly] = useState(false);
   const [defaultPaymentMethod, setDefaultPaymentMethod] = useState('Cash');
+  const [defaultQuantity, setDefaultQuantity] = useState(1); // Default to 1
 
   useEffect(() => {
     // Load username from storage
@@ -93,7 +94,38 @@ const Home = ({ navigation }) => {
     }, [])
   );
 
-  const quickActions = [
+  // MODULE PERMISSIONS
+  const [allowedModules, setAllowedModules] = useState(null);
+
+  useFocusEffect(
+    useCallback(() => {
+      const fetchModules = async () => {
+        try {
+          const modulesStr = await AsyncStorage.getItem("activatedModules");
+          if (modulesStr) {
+            const modules = JSON.parse(modulesStr);
+            console.log("Loaded Modules:", modules.length);
+            // Create a set of module codes for faster lookup
+            const moduleCodes = new Set(modules.map(m => m.module_code));
+            setAllowedModules(moduleCodes);
+          } else {
+            // Fallback: If no modules saved (e.g. old login), maybe show all or fetch?
+            // For now, let's assume if it's not present, we might be in a legacy state or offline.
+            // BUT strict requirement says "check packages".
+            // If we want to be strict: setAllowedModules(new Set());
+            // If we want to be backward compatible until re-login: setAllowedModules(null);
+            setAllowedModules(null);
+          }
+        } catch (e) {
+          console.log("Error loading modules", e);
+        }
+      };
+
+      fetchModules();
+    }, [])
+  );
+
+  const allQuickActions = [
     {
       icon: 'wallet-outline',
       title: 'COLLECTION',
@@ -101,6 +133,7 @@ const Home = ({ navigation }) => {
       onPress: () => router.push("/Collection/Collection"),
       gradient: Gradients.accent,
       shadowColor: Colors.accent.main,
+      moduleCode: 'MOD009',
     },
     {
       icon: 'cube-outline',
@@ -109,6 +142,7 @@ const Home = ({ navigation }) => {
       onPress: () => router.push("/Order/Entry"),
       gradient: Gradients.secondary,
       shadowColor: Colors.secondary.main,
+      moduleCode: 'MOD007',
     },
     {
       icon: 'cart-outline',
@@ -117,6 +151,7 @@ const Home = ({ navigation }) => {
       onPress: () => router.push("/Sales/SalesEntry"),
       gradient: Gradients.success,
       shadowColor: Colors.success.main,
+      moduleCode: 'MOD008',
     },
     {
       icon: 'return-up-back-outline',
@@ -125,6 +160,7 @@ const Home = ({ navigation }) => {
       onPress: () => router.push("/SalesReturn/ReturnEntry"),
       gradient: Colors.primary[400] ? [Colors.primary[400], Colors.primary[600]] : Gradients.primary,
       shadowColor: Colors.primary.main,
+      moduleCode: 'MOD010',
     },
     {
       icon: 'cloud-download-outline',
@@ -133,6 +169,7 @@ const Home = ({ navigation }) => {
       onPress: () => router.push("/SyncData"),
       gradient: Gradients.info || [Colors.primary[400], Colors.primary[600]],
       shadowColor: Colors.primary.main,
+      // Always allowed
     },
     {
       icon: 'finger-print',
@@ -141,6 +178,7 @@ const Home = ({ navigation }) => {
       onPress: () => router.push("/Punch-In"),
       gradient: Gradients.success,
       shadowColor: Colors.success.main,
+      moduleCode: 'MOD011',
     },
     {
       icon: 'settings-outline',
@@ -156,8 +194,21 @@ const Home = ({ navigation }) => {
       },
       gradient: [Colors.text.secondary, Colors.text.primary],
       shadowColor: '#000',
+      // Always allowed
     },
   ];
+
+  const quickActions = allQuickActions.filter(action => {
+    // If it has no moduleCode, it is always allowed (Basic features)
+    if (!action.moduleCode) return true;
+
+    // If we haven't loaded modules yet (null), show all (or hide all? decision: show all for UX speed/backward compat)
+    // OR strict mode: valid active license MUST have modules.
+    if (allowedModules === null) return true; // Show until we know otherwise
+
+    // Check if the module code exists in the allowed set
+    return allowedModules.has(action.moduleCode);
+  });
 
   const loadPrinterSettings = async () => {
     // We can rely on printerService to load its own settings, but we need to know the current value for UI
@@ -187,6 +238,15 @@ const Home = ({ navigation }) => {
       const val = await AsyncStorage.getItem(key);
       if (val === 'true') setShowStockOnly(true);
       else setShowStockOnly(false);
+
+      // Load Default Quantity
+      const qtyKey = `settings_default_quantity_${currentUsername}`;
+      const qtyVal = await AsyncStorage.getItem(qtyKey);
+      if (qtyVal !== null) {
+        setDefaultQuantity(parseInt(qtyVal, 10));
+      } else {
+        setDefaultQuantity(1); // Default if not set
+      }
     } catch (e) {
       console.log("Error loading product settings", e);
     }
@@ -203,6 +263,20 @@ const Home = ({ navigation }) => {
       }
     } catch (e) {
       console.log("Error saving product settings", e);
+    }
+  };
+
+  const toggleDefaultQuantity = async () => {
+    const newValue = defaultQuantity === 1 ? 0 : 1;
+    setDefaultQuantity(newValue);
+    try {
+      const currentUsername = await AsyncStorage.getItem('username');
+      if (currentUsername) {
+        const key = `settings_default_quantity_${currentUsername}`;
+        await AsyncStorage.setItem(key, String(newValue));
+      }
+    } catch (e) {
+      console.log("Error saving default quantity settings", e);
     }
   };
 
@@ -439,6 +513,33 @@ const Home = ({ navigation }) => {
                       name={showStockOnly ? "toggle" : "toggle-outline"}
                       size={32}
                       color={showStockOnly ? Colors.success.main : Colors.text.tertiary}
+                    />
+                  </TouchableOpacity>
+
+                  <View style={{ height: 1, backgroundColor: '#f0f0f0', marginVertical: 8 }} />
+
+                  <TouchableOpacity
+                    style={[styles.menuItem, { borderBottomWidth: 0 }]}
+                    onPress={toggleDefaultQuantity}
+                    activeOpacity={0.8}
+                  >
+                    <View style={styles.menuItemLeft}>
+                      <View style={[styles.menuIconContainer, { backgroundColor: defaultQuantity === 1 ? 'rgba(76, 175, 80, 0.1)' : 'rgba(158, 158, 158, 0.1)' }]}>
+                        <Text style={{ fontSize: 16, fontWeight: 'bold', color: defaultQuantity === 1 ? Colors.success.main : Colors.text.tertiary }}>
+                          {defaultQuantity}
+                        </Text>
+                      </View>
+                      <View style={{ flex: 1 }}>
+                        <Text style={styles.menuItemTitle}>Default Form Quantity</Text>
+                        <Text style={styles.menuItemSubtitle} numberOfLines={2}>
+                          {defaultQuantity === 1 ? "Start with quantity 1" : "Start with quantity 0 (Manual Entry)"}
+                        </Text>
+                      </View>
+                    </View>
+                    <Ionicons
+                      name={defaultQuantity === 1 ? "toggle" : "toggle-outline"}
+                      size={32}
+                      color={defaultQuantity === 1 ? Colors.success.main : Colors.text.tertiary}
                     />
                   </TouchableOpacity>
                 </View>

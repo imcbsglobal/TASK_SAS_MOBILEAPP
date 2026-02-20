@@ -283,6 +283,15 @@ export default function LicenseActivationScreen({ onActivationSuccess }) {
               await AsyncStorage.setItem("customerName", customer.customer_name);
               await AsyncStorage.setItem("projectName", data.project_name);
               await AsyncStorage.setItem("clientId", customer.client_id);
+
+              // Save Modules
+              if (customer.modules) {
+                await AsyncStorage.setItem("activatedModules", JSON.stringify(customer.modules));
+                console.log("✅ Saved modules:", customer.modules.length);
+              } else {
+                await AsyncStorage.removeItem("activatedModules");
+              }
+
               await AsyncStorage.removeItem("isDemo"); // Clear demo flag if found in normal customers
 
               console.log("✅ Stored client_id:", customer.client_id);
@@ -439,7 +448,16 @@ export default function LicenseActivationScreen({ onActivationSuccess }) {
         await AsyncStorage.setItem("deviceId", deviceId);
         await AsyncStorage.setItem("customerName", customer.customer_name);
         await AsyncStorage.setItem("projectName", checkData.project_name);
+        await AsyncStorage.setItem("projectName", checkData.project_name);
         await AsyncStorage.setItem("clientId", customer.client_id);
+
+        // Save Modules
+        if (customer.modules) {
+          await AsyncStorage.setItem("activatedModules", JSON.stringify(customer.modules));
+          console.log("✅ Saved modules:", customer.modules.length);
+        } else {
+          await AsyncStorage.removeItem("activatedModules");
+        }
 
         if (isDemo) {
           await AsyncStorage.setItem("isDemo", "true");
@@ -529,7 +547,16 @@ export default function LicenseActivationScreen({ onActivationSuccess }) {
         await AsyncStorage.setItem("deviceId", deviceId);
         await AsyncStorage.setItem("customerName", customer.customer_name);
         await AsyncStorage.setItem("projectName", checkData.project_name);
+        await AsyncStorage.setItem("projectName", checkData.project_name);
         await AsyncStorage.setItem("clientId", customer.client_id);
+
+        // Save Modules
+        if (customer.modules) {
+          await AsyncStorage.setItem("activatedModules", JSON.stringify(customer.modules));
+          console.log("✅ Saved modules:", customer.modules.length);
+        } else {
+          await AsyncStorage.removeItem("activatedModules");
+        }
 
         if (isDemo) {
           await AsyncStorage.setItem("isDemo", "true");

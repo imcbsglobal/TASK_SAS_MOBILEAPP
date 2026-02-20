@@ -448,7 +448,7 @@ export default function PlaceOrder() {
         item_code: cleanString(item.code),
         barcode: cleanString(item.barcode || item.code),
         price: cleanNumber(item.price),
-        quantity: cleanNumber(item.qty),
+        quantity: cleanNumber(item.qty).toFixed(3),
         amount: cleanNumber(item.total),
         hsn: cleanString(item.hsn),      // Add HSN
         gst: cleanString(item.gst),      // Add GST
@@ -960,7 +960,7 @@ export default function PlaceOrder() {
                       Note: {item.remark}
                     </Text>
                   ) : null}
-                  <Text style={styles.itemPrice}>{item.price.toFixed(2)} x {parseFloat(item.qty).toFixed(2)}</Text>
+                  <Text style={styles.itemPrice}>{item.price.toFixed(2)} x {parseFloat(item.qty).toFixed(3)}</Text>
                 </View>
                 <Text style={styles.itemTotal}>{item.total.toFixed(2)}</Text>
               </View>

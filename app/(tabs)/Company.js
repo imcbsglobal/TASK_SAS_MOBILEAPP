@@ -67,7 +67,30 @@ const Company = () => {
     router.replace("/LoginScreen");
   };
 
-  const quickActions = [
+  // MODULE PERMISSIONS
+  const [allowedModules, setAllowedModules] = useState(null);
+
+  useEffect(() => {
+    const fetchModules = async () => {
+      try {
+        const modulesStr = await AsyncStorage.getItem("activatedModules");
+        if (modulesStr) {
+          const modules = JSON.parse(modulesStr);
+          // Create a set of module codes for faster lookup
+          const moduleCodes = new Set(modules.map(m => m.module_code));
+          setAllowedModules(moduleCodes);
+        } else {
+          setAllowedModules(null);
+        }
+      } catch (e) {
+        console.log("Error loading modules", e);
+      }
+    };
+
+    fetchModules();
+  }, []);
+
+  const allQuickActions = [
     {
       icon: "business",
       title: "About Company",
@@ -75,6 +98,7 @@ const Company = () => {
       onPress: () => router.push("/company-info"),
       color: Colors.primary.main,
       bg: Colors.primary[50],
+      // Always allowed
     },
     {
       icon: "people",
@@ -83,8 +107,17 @@ const Company = () => {
       onPress: () => router.push("/customers"),
       color: Colors.secondary.main,
       bg: Colors.secondary[50],
+      moduleCode: 'MOD012', // Customers Module
     }
   ];
+
+  const quickActions = allQuickActions.filter(action => {
+    if (!action.moduleCode) return true;
+    if (allowedModules === null) return true;
+    return allowedModules.has(action.moduleCode);
+  });
+
+  const showLocationCapture = allowedModules === null || allowedModules.has('MOD011'); // Punch In Module
 
   return (
     <LinearGradient colors={Gradients.background} style={styles.container}>
@@ -143,21 +176,23 @@ const Company = () => {
 
 
           {/* Attendance Section */}
-          <View style={styles.section}>
-            <Text style={styles.sectionTitle}>Attendance</Text>
-            <View style={styles.attendanceCard}>
-              <TouchableOpacity
-                style={styles.attendanceItem}
-                activeOpacity={0.7}
-                onPress={() => router.push("/location-capture")}
-              >
-                <View style={[styles.attendanceIcon, { backgroundColor: Colors.warning[50] }]}>
-                  <Ionicons name="location" size={24} color={Colors.warning.main} />
-                </View>
-                <Text style={styles.attendanceLabel}>Location Capture</Text>
-              </TouchableOpacity>
+          {showLocationCapture && (
+            <View style={styles.section}>
+              <Text style={styles.sectionTitle}>Attendance</Text>
+              <View style={styles.attendanceCard}>
+                <TouchableOpacity
+                  style={styles.attendanceItem}
+                  activeOpacity={0.7}
+                  onPress={() => router.push("/location-capture")}
+                >
+                  <View style={[styles.attendanceIcon, { backgroundColor: Colors.warning[50] }]}>
+                    <Ionicons name="location" size={24} color={Colors.warning.main} />
+                  </View>
+                  <Text style={styles.attendanceLabel}>Location Capture</Text>
+                </TouchableOpacity>
+              </View>
             </View>
-          </View>
+          )}
 
           <View style={styles.infoSection}>
             <View style={styles.infoCard}>

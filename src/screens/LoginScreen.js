@@ -229,6 +229,14 @@ export default function LoginScreen() {
             await AsyncStorage.removeItem("demoExpiresAt");
           }
         }
+
+        // Save Modules
+        if (matched.modules) {
+          await AsyncStorage.setItem("activatedModules", JSON.stringify(matched.modules));
+          console.log("✅ Saved modules from Login:", matched.modules.length);
+        } else {
+          await AsyncStorage.removeItem("activatedModules");
+        }
       } catch (err) {
         console.error("Storage error in validateLicense:", err);
       }
