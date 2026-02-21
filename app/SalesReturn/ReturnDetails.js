@@ -264,7 +264,19 @@ const REMARK_OPTIONS = ["NONE", "EXPIRED", "SHORT EXPIRY", "DAMAGE", "EXCHANGE"]
 export default function ReturnDetails() {
   const router = useRouter();
   const params = useLocalSearchParams();
-  const { area = "", customer = "", customerCode = "", type = "", payment = "", priceCode: paramPriceCode = "", scanned, timestamp } = params;
+  const { area: paramArea = "", customer: paramCustomer = "", customerCode: paramCustomerCode = "", type = "", payment: paramPayment = "", priceCode: paramPriceCode = "", scanned, timestamp } = params;
+
+  // Internalized states for customer details
+  const [currentCustomer, setCurrentCustomer] = useState(paramCustomer);
+  const [currentCustomerCode, setCurrentCustomerCode] = useState(paramCustomerCode);
+  const [currentArea, setCurrentArea] = useState(paramArea);
+  const [currentPayment, setCurrentPayment] = useState(paramPayment);
+
+  // Customer selection states
+  const [debtorsData, setDebtorsData] = useState([]);
+  const [filteredCustomers, setFilteredCustomers] = useState([]);
+  const [showCustomerModal, setShowCustomerModal] = useState(false);
+  const [customerSearchQuery, setCustomerSearchQuery] = useState("");
 
   // CRITICAL: Use ref as source of truth for cart to prevent state loss
   const cartRef = useRef([]);
@@ -374,12 +386,49 @@ export default function ReturnDetails() {
           console.log(`[ReturnDetails] Default Quantity loaded: ${qty}`);
         }
 
+        // LOAD DEBTORS DATA
+        await loadDebtors();
+
       } catch (error) {
         console.error('[ReturnDetails] Failed to load settings/user:', error);
       }
     };
     loadSettings();
   }, []);
+
+  const loadDebtors = async () => {
+    try {
+      await dbService.init();
+      const allCustomers = await dbService.getCustomers();
+      const filteredDebtors = allCustomers.filter((debtor) => debtor.super_code === "DEBTO");
+      setDebtorsData(filteredDebtors);
+      setFilteredCustomers(filteredDebtors);
+    } catch (error) {
+      console.error('[ReturnDetails] Error loading debtors:', error);
+    }
+  };
+
+  // Filter customers based on search
+  useEffect(() => {
+    if (customerSearchQuery.trim() === "") {
+      setFilteredCustomers(debtorsData);
+    } else {
+      const filtered = debtorsData.filter(customer =>
+        customer.name.toLowerCase().includes(customerSearchQuery.toLowerCase()) ||
+        customer.code.toLowerCase().includes(customerSearchQuery.toLowerCase())
+      );
+      setFilteredCustomers(filtered);
+    }
+  }, [customerSearchQuery, debtorsData]);
+
+  const handleSelectCustomer = (selected) => {
+    setCurrentCustomer(selected.name);
+    setCurrentCustomerCode(selected.code);
+    setCurrentArea(selected.area || selected.place || "");
+    setShowCustomerModal(false);
+    setCustomerSearchQuery("");
+    console.log('[ReturnDetails] Changed customer to:', selected.name);
+  };
 
   // Reload products when appSettings changes and barcode_based_list is true
   // OR trigger initial load when settings first become available
@@ -467,15 +516,15 @@ export default function ReturnDetails() {
   // Fetch Full Customer Details & Calculate Effective Price Code
   useEffect(() => {
     const loadCustomerAndCalcPrice = async () => {
-      let currentCustomer = fullCustomer;
+      let currentCustomerObj = fullCustomer;
 
       // 1. Fetch Customer if needed
-      if ((!currentCustomer || currentCustomer.code !== customerCode) && customerCode) {
+      if ((!currentCustomerObj || currentCustomerObj.code !== currentCustomerCode) && currentCustomerCode) {
         try {
           await dbService.init();
-          currentCustomer = await dbService.getCustomerByCode(customerCode);
-          setFullCustomer(currentCustomer);
-          console.log('[ReturnDetails] Loaded full customer:', currentCustomer?.name, 'RemarkTitle:', currentCustomer?.remarkcolumntitle);
+          currentCustomerObj = await dbService.getCustomerByCode(currentCustomerCode);
+          setFullCustomer(currentCustomerObj);
+          console.log('[ReturnDetails] Loaded full customer:', currentCustomerObj?.name, 'RemarkTitle:', currentCustomerObj?.remarkcolumntitle);
         } catch (e) {
           console.error('[ReturnDetails] Error loading customer:', e);
         }
@@ -540,7 +589,7 @@ export default function ReturnDetails() {
     if (appSettings) {
       loadCustomerAndCalcPrice();
     }
-  }, [customerCode, appSettings, username]);
+  }, [currentCustomerCode, appSettings, username]);
 
   // Apply Pricing Rules to a list of products
   const applyPricingToProducts = useCallback((products) => {
@@ -1471,11 +1520,11 @@ export default function ReturnDetails() {
     try {
       const order = {
         id: `order_${Date.now()}`,
-        customer: customer || "Unknown Customer",
-        customerCode: customerCode || "",
-        area: area,
+        customer: currentCustomer || "Unknown Customer",
+        customerCode: currentCustomerCode || "",
+        area: currentArea,
         type: type,
-        payment: payment,
+        payment: currentPayment,
         items: cart.map(item => ({
           productId: item.product.id,
           code: item.product.code,
@@ -1512,7 +1561,7 @@ export default function ReturnDetails() {
 
       Alert.alert(
         "Order Placed Successfully",
-        `Order placed for ${customer}\nTotal:  ${order.total.toFixed(2)}`,
+        `Order placed for ${currentCustomer}\nTotal:  ${order.total.toFixed(2)}`,
         [
           {
             text: "View Orders",
@@ -1551,7 +1600,7 @@ export default function ReturnDetails() {
           style={styles.scanActionBtn}
           onPress={() => router.push({
             pathname: "/SalesReturn/ReturnScanner",
-            params: { area, customer, customerCode, type, payment }
+            params: { area: currentArea, customer: currentCustomer, customerCode: currentCustomerCode, type, payment: currentPayment }
           })}
         >
           <LinearGradient
@@ -1605,7 +1654,11 @@ export default function ReturnDetails() {
 
         <View style={styles.content}>
           {/* Customer Card */}
-          <View style={styles.customerCard}>
+          <TouchableOpacity
+            style={styles.customerCard}
+            onPress={() => setShowCustomerModal(true)}
+            activeOpacity={0.8}
+          >
             <LinearGradient
               colors={Gradients.accent}
               start={{ x: 0, y: 0 }}
@@ -1613,21 +1666,25 @@ export default function ReturnDetails() {
               style={styles.customerGradient}
             >
               <View style={styles.customerIcon}>
-                <Text style={styles.customerInitial}>{customer ? customer.charAt(0) : '?'}</Text>
+                <Text style={styles.customerInitial}>{currentCustomer ? currentCustomer.charAt(0) : '?'}</Text>
               </View>
               <View style={{ flex: 1 }}>
-                <Text style={styles.customerName} numberOfLines={1}>{customer || "Unknown Customer"}</Text>
+                <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <Text style={styles.customerName} numberOfLines={1}>{currentCustomer || "Unknown Customer"}</Text>
+                  <Ionicons name="chevron-down" size={20} color="#FFF" style={{ opacity: 0.8 }} />
+                </View>
                 <Text style={styles.customerDetails}>
-                  {area && `${area}`}
+                  {currentArea && `${currentArea}`}
                   {type && ` • ${type}`}
-                  {payment && ` • ${payment}`}
+                  {currentPayment && ` • ${currentPayment}`}
                 </Text>
                 <Text style={[styles.customerDetails, { marginTop: 4, opacity: 0.9, fontWeight: '600', color: Colors.secondary.light }]}>
                   Price Level: {effectivePriceCode}
                 </Text>
               </View>
             </LinearGradient>
-          </View>
+          </TouchableOpacity>
+
 
           {/* Action Buttons Row */}
           <View style={styles.actionButtonsRow}>
@@ -1643,7 +1700,7 @@ export default function ReturnDetails() {
                 console.log('[ReturnDetails] Scanner button pressed');
                 router.push({
                   pathname: "/SalesReturn/ReturnScanner",
-                  params: { area, customer, customerCode, type, payment }
+                  params: { area: currentArea, customer: currentCustomer, customerCode: currentCustomerCode, type, payment: currentPayment }
                 });
               }}
             >
@@ -2406,6 +2463,65 @@ export default function ReturnDetails() {
                 resizeMode="contain"
               />
             )}
+          </View>
+        </Modal>
+
+        {/* Customer Selection Modal */}
+        <Modal
+          visible={showCustomerModal}
+          animationType="fade"
+          transparent={true}
+          onRequestClose={() => setShowCustomerModal(false)}
+        >
+          <View style={styles.customerModalOverlay}>
+            <View style={styles.customerModalContent}>
+              <View style={styles.customerModalHeader}>
+                <Text style={styles.customerModalTitle}>Change Customer</Text>
+                <TouchableOpacity onPress={() => setShowCustomerModal(false)} style={styles.customerCloseBtn}>
+                  <Ionicons name="close" size={24} color={Colors.text.primary} />
+                </TouchableOpacity>
+              </View>
+
+              <View style={styles.customerSearchContainer}>
+                <Ionicons name="search" size={20} color={Colors.text.tertiary} style={styles.customerSearchIcon} />
+                <TextInput
+                  style={styles.customerSearchInput}
+                  placeholder="Search name or code..."
+                  placeholderTextColor={Colors.text.tertiary}
+                  value={customerSearchQuery}
+                  onChangeText={setCustomerSearchQuery}
+                  autoFocus={false}
+                />
+              </View>
+
+              <FlatList
+                data={filteredCustomers}
+                keyExtractor={(item) => item.code}
+                renderItem={({ item }) => (
+                  <TouchableOpacity
+                    style={styles.customerListItem}
+                    onPress={() => handleSelectCustomer(item)}
+                  >
+                    <View style={styles.customerListAvatar}>
+                      <Text style={styles.customerAvatarText}>{item.name.charAt(0)}</Text>
+                    </View>
+                    <View style={styles.customerListInfo}>
+                      <Text style={styles.customerListItemName}>{item.name}</Text>
+                      <Text style={styles.customerListItemCode}>Code: {item.code} • {item.place || item.area}</Text>
+                    </View>
+                    {currentCustomerCode === item.code && (
+                      <Ionicons name="checkmark-circle" size={20} color={Colors.accent.main} />
+                    )}
+                  </TouchableOpacity>
+                )}
+                ListEmptyComponent={
+                  <View style={styles.customerEmptyContainer}>
+                    <Text style={styles.customerEmptyText}>No customers found</Text>
+                  </View>
+                }
+                showsVerticalScrollIndicator={true}
+              />
+            </View>
           </View>
         </Modal>
 
@@ -3816,7 +3932,107 @@ const styles = StyleSheet.create({
     color: Colors.text.primary,
   },
   dropdownItemTextActive: {
-    fontWeight: '700',
+    fontSize: 14,
     color: Colors.accent.main,
+  },
+
+  // Customer Selection Modal Styles
+  customerModalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.6)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: Spacing.xl,
+    zIndex: 999,
+  },
+  customerModalContent: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: BorderRadius.xl,
+    width: '100%',
+    maxWidth: 500,
+    maxHeight: '70%',
+    padding: Spacing.lg,
+    ...Shadows.xl,
+  },
+  customerModalHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: Spacing.lg,
+    paddingBottom: Spacing.sm,
+    borderBottomWidth: 1,
+    borderBottomColor: Colors.neutral[100],
+  },
+  customerModalTitle: {
+    fontSize: Typography.sizes.lg,
+    fontWeight: '800',
+    color: Colors.text.primary,
+  },
+  customerCloseBtn: {
+    padding: 4,
+  },
+  customerSearchContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: Colors.neutral[50],
+    borderRadius: BorderRadius.lg,
+    paddingHorizontal: Spacing.md,
+    marginBottom: Spacing.lg,
+    height: 48,
+    borderWidth: 1,
+    borderColor: Colors.neutral[200],
+  },
+  customerSearchIcon: {
+    marginRight: Spacing.sm,
+  },
+  customerSearchInput: {
+    flex: 1,
+    fontSize: Typography.sizes.base,
+    color: Colors.text.primary,
+    paddingVertical: 0,
+  },
+  customerListItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: Spacing.md,
+    borderBottomWidth: 1,
+    borderBottomColor: Colors.neutral[50],
+  },
+  customerListAvatar: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    backgroundColor: Colors.accent[50],
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: Spacing.md,
+  },
+  customerAvatarText: {
+    fontSize: Typography.sizes.lg,
+    fontWeight: '800',
+    color: Colors.accent.main,
+  },
+  customerListInfo: {
+    flex: 1,
+  },
+  customerListItemName: {
+    fontSize: Typography.sizes.base,
+    fontWeight: '700',
+    color: Colors.text.primary,
+    marginBottom: 2,
+  },
+  customerListItemCode: {
+    fontSize: Typography.sizes.xs,
+    color: Colors.text.secondary,
+    fontWeight: '500',
+  },
+  customerEmptyContainer: {
+    padding: Spacing.xl * 2,
+    alignItems: 'center',
+  },
+  customerEmptyText: {
+    color: Colors.text.tertiary,
+    fontSize: Typography.sizes.base,
+    fontWeight: '600',
   },
 });
