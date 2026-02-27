@@ -205,7 +205,11 @@ export default function PlaceSales() {
               hsn: item.text6 || item.hsn || '',
               gst: item.taxcode || item.gst || item.tax_code || '',
               uploadStatus: 'uploaded'
-            }))
+            })).sort((a, b) => {
+              const codeA = String(a.code || '').toLowerCase();
+              const codeB = String(b.code || '').toLowerCase();
+              return codeA.localeCompare(codeB, undefined, { numeric: true, sensitivity: 'base' });
+            })
           };
         });
 
@@ -702,7 +706,8 @@ export default function PlaceSales() {
         ...order,
         description: printContext === 'uploaded' ? 'S' : 'F',
         formattedOrderId: printContext === 'uploaded' ? order.id : 'NA',
-        printStatus: printContext === 'uploaded' ? 'S' : 'F'
+        printStatus: printContext === 'uploaded' ? 'S' : 'F',
+        receiptTitle: 'return reciept'
       };
 
       if (printerService.connected) {
@@ -963,6 +968,9 @@ export default function PlaceSales() {
               <View key={index} style={styles.itemRow}>
                 <View style={{ flex: 1 }}>
                   <Text style={styles.itemName}>{item.name}</Text>
+                  <Text style={{ fontSize: 11, color: Colors.text.secondary, marginTop: 2, marginBottom: 2 }}>
+                    Code: {item.code}
+                  </Text>
                   <Text style={styles.itemPrice}>{item.price.toFixed(2)} x {parseFloat(item.qty).toFixed(3)}</Text>
                 </View>
                 <Text style={styles.itemTotal}>{item.total.toFixed(2)}</Text>

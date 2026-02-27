@@ -632,14 +632,29 @@ export default function PunchInScreen() {
       console.log('[PunchIn] Response:', result);
 
       if (response.ok && result.success) {
+        // Immediately update punch status from the response — no second API call needed.
+        // This avoids a timing issue where checkPunchStatus() might not yet see the new punch-in.
+        setPunchStatus({
+          ...result.data,
+          is_punched_in: true,
+          firm_name: result.data.firm_name,
+          punchin_id: result.data.punchin_id,
+        });
+        setWorkHours(0);
+
         Alert.alert(
           "Punch In Successful",
-          `Punched in at ${result.data.firm_name}\nTime: ${new Date(result.data.punchin_time).toLocaleTimeString()}`
+          `Punched in at ${result.data.firm_name}\nTime: ${new Date(result.data.punchin_time).toLocaleTimeString()}`,
+          [
+            {
+              text: "OK",
+              onPress: () => {
+                closeConfirmModal();
+                setStep(2);
+              }
+            }
+          ]
         );
-
-        // Update status immediately
-        await checkPunchStatus();
-        closeConfirmModal();
       } else {
         Alert.alert("Error", result.message || "Failed to punch in");
       }
@@ -673,6 +688,42 @@ export default function PunchInScreen() {
               const token = await AsyncStorage.getItem("authToken");
 
               const url = `https://tasksas.com/api/punch-out/${punchStatus.punchin_id}/`;
+              console.log('[PunchOut] URL:', url);
+              console.log('[PunchOut] punchin_id:', punchStatus.punchin_id);
+              console.log('[PunchOut] currentLocation:', currentLocation);
+
+              // Reverse geocode for address
+              let punchOutAddress = '';
+              try {
+                if (currentLocation) {
+                  const geocode = await Location.reverseGeocodeAsync({
+                    latitude: currentLocation.latitude,
+                    longitude: currentLocation.longitude
+                  });
+                  if (geocode && geocode.length > 0) {
+                    const loc = geocode[0];
+                    punchOutAddress = [loc.street, loc.city, loc.region, loc.country].filter(Boolean).join(', ');
+                  }
+                }
+              } catch (e) {
+                console.warn('[PunchOut] Geocoding failed:', e);
+              }
+
+              // Build request body with all available fields the server might need
+              const punchOutBody = {
+                notes: notes || '',
+                customerCode: punchStatus.firm_code || '',
+              };
+              if (currentLocation) {
+                punchOutBody.latitude = currentLocation.latitude;
+                punchOutBody.longitude = currentLocation.longitude;
+                punchOutBody.current_location = `${currentLocation.latitude},${currentLocation.longitude}`;
+              }
+              if (punchOutAddress) {
+                punchOutBody.address = punchOutAddress;
+              }
+              console.log('[PunchOut] Request body:', JSON.stringify(punchOutBody));
+
               const response = await fetch(url, {
                 method: 'POST',
                 headers: {
@@ -680,10 +731,12 @@ export default function PunchInScreen() {
                   'Content-Type': 'application/json',
                   'Accept': 'application/json'
                 },
-                body: JSON.stringify({ notes: notes || '' })
+                body: JSON.stringify(punchOutBody)
               });
 
+              console.log('[PunchOut] HTTP Status:', response.status);
               const result = await response.json();
+              console.log('[PunchOut] Response body:', JSON.stringify(result));
 
               if (response.ok && result.success) {
                 Alert.alert(
@@ -697,7 +750,9 @@ export default function PunchInScreen() {
                   checkPunchStatus();
                 }, 1000);
               } else {
-                Alert.alert("Error", result.message || "Failed to punch out");
+                const errMsg = result.message || result.detail || result.error || `HTTP ${response.status}`;
+                console.error('[PunchOut] API Error:', errMsg, result);
+                Alert.alert("Punch Out Failed", errMsg);
               }
             } catch (error) {
               console.error("[PunchOut] Error:", error);

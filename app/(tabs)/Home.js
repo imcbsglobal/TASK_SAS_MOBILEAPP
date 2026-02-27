@@ -608,10 +608,21 @@ const Home = ({ navigation }) => {
                         <Text style={styles.sizeOptionSubtitle}>Wide Receipt</Text>
                       </View>
                     </TouchableOpacity>
+
+                    <TouchableOpacity
+                      style={[styles.sizeOption, paperSize === 104 && styles.sizeOptionSelected]}
+                      onPress={() => handlePaperSizeSelection(104)}
+                    >
+                      <Ionicons name={paperSize === 104 ? "radio-button-on" : "radio-button-off"} size={24} color={paperSize === 104 ? Colors.primary.main : Colors.text.tertiary} />
+                      <View>
+                        <Text style={[styles.sizeOptionTitle, paperSize === 104 && styles.sizeOptionTitleSelected]}>4 Inch</Text>
+                        <Text style={styles.sizeOptionSubtitle}>Extra Wide Receipt</Text>
+                      </View>
+                    </TouchableOpacity>
                   </View>
 
                   <Text style={styles.helperText}>
-                    Select 2 Inch for portable printers, 3 Inch for desktop printers.
+                    Select 2 Inch for portable printers, 3 Inch for desktop, 4 Inch for extra wide.
                   </Text>
 
                   <View style={styles.visualizerContainer}>
@@ -891,12 +902,11 @@ const styles = StyleSheet.create({
     color: Colors.text.secondary
   },
   sizeSelectionContainer: {
-    flexDirection: 'row',
+    flexDirection: 'column',
     gap: Spacing.md,
     marginBottom: Spacing.md
   },
   sizeOption: {
-    flex: 1,
     flexDirection: 'row',
     alignItems: 'center',
     padding: Spacing.md,

@@ -153,9 +153,14 @@ const CartItem = ({ item, changeQty, removeItem, isEditable, onPriceChange }) =>
 
   return (
     <View style={styles.cartItem}>
-      {/* Row 1: Item Name */}
+      {/* Row 1: Item Name and Code */}
       <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 8 }}>
-        <Text style={styles.cartItemName} numberOfLines={2}>{item.product.name}</Text>
+        <View style={{ flex: 1, paddingRight: 8 }}>
+          <Text style={styles.cartItemName} numberOfLines={2}>{item.product.name}</Text>
+          <Text style={{ fontSize: 12, color: Colors.text.secondary, marginTop: 2 }}>
+            Code: {item.product.code}
+          </Text>
+        </View>
         <TouchableOpacity onPress={() => removeItem(item.product.id)} style={[styles.removeCartItem, { padding: 8 }]}>
           <Ionicons name="trash-outline" size={22} color={Colors.error.main} />
         </TouchableOpacity>
@@ -1307,6 +1312,12 @@ export default function SalesDetails() {
 
 
 
+  // Sort cart items by product code ascending (numeric-aware)
+  const sortCartByCode = (items) =>
+    [...items].sort((a, b) =>
+      String(a.product.code || '').localeCompare(String(b.product.code || ''), undefined, { numeric: true, sensitivity: 'base' })
+    );
+
   // Cart Animation State
   const cartScale = useRef(new Animated.Value(1)).current;
 
@@ -1356,10 +1367,12 @@ export default function SalesDetails() {
         qty: overwrite ? quantity : newCart[idx].qty + quantity
       };
     } else {
-      // New item - add to beginning
+      // New item - add to end then sort
       console.log('[SalesDetails] ➕ Adding NEW item to cart');
-      newCart = [{ product, qty: quantity }, ...currentCart];
+      newCart = [...currentCart, { product, qty: quantity }];
     }
+    // Sort by product code ascending
+    newCart = sortCartByCode(newCart);
 
     console.log('[SalesDetails] New cart length:', newCart.length);
     console.log('[SalesDetails] New cart contents:', newCart.map(i => ({ name: i.product.name, id: i.product.id, qty: i.qty })));
@@ -1393,7 +1406,9 @@ export default function SalesDetails() {
       triggerFlyAnimation(startCoords?.x, startCoords?.y);
     }
 
-    const newCart = currentCart.map((it) => (it.product.id === productId ? { ...it, qty: Math.max(0, qty) } : it)).filter((it) => it.qty > 0);
+    const newCart = sortCartByCode(
+      currentCart.map((it) => (it.product.id === productId ? { ...it, qty: Math.max(0, qty) } : it)).filter((it) => it.qty > 0)
+    );
 
     cartRef.current = newCart;
     setCart(newCart);

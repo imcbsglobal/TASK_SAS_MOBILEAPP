@@ -369,7 +369,8 @@ class PrinterService {
                 }
             }
 
-            receipt += centerText("Order Receipt");
+            const receiptTitle = order.receiptTitle || "Order Reciept";
+            receipt += centerText(receiptTitle);
             receipt += line;
 
             // --- META ---

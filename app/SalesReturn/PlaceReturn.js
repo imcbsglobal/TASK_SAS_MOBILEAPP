@@ -207,7 +207,11 @@ export default function PlaceOrder() {
               gst: item.taxcode || item.gst || item.tax_code || '',
               remark: item.remark || '',
               uploadStatus: 'uploaded'
-            }))
+            })).sort((a, b) => {
+              const codeA = String(a.code || '').toLowerCase();
+              const codeB = String(b.code || '').toLowerCase();
+              return codeA.localeCompare(codeB, undefined, { numeric: true, sensitivity: 'base' });
+            })
           };
         });
 
@@ -701,7 +705,8 @@ export default function PlaceOrder() {
         ...order,
         description: printContext === 'uploaded' ? 'S' : 'F',
         formattedOrderId: printContext === 'uploaded' ? order.id : 'NA',
-        printStatus: printContext === 'uploaded' ? 'S' : 'F'
+        printStatus: printContext === 'uploaded' ? 'S' : 'F',
+        receiptTitle: 'Rsturn reciept'
       };
 
       if (printerService.connected) {
@@ -955,6 +960,9 @@ export default function PlaceOrder() {
               <View key={index} style={styles.itemRow}>
                 <View style={{ flex: 1 }}>
                   <Text style={styles.itemName}>{item.name}</Text>
+                  <Text style={{ fontSize: 11, color: Colors.text.secondary, marginTop: 2, marginBottom: 2 }}>
+                    Code: {item.code}
+                  </Text>
                   {item.remark ? (
                     <Text style={{ fontSize: 11, color: Colors.text.tertiary, fontStyle: 'italic', marginBottom: 2 }}>
                       Note: {item.remark}
