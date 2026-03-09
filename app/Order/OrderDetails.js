@@ -1188,14 +1188,14 @@ export default function OrderDetails() {
     }, 300);
   }
 
-  function openQuantityModal(product) {
+  function openQuantityModal(product, forcedQty = null) {
     console.log('[OrderDetails] Opening quantity modal for:', product.name, 'Price:', product.price);
     setSelectedProduct(product);
 
     // Check if item is already in cart to provide better initial quantity
     const existing = cartRef.current?.find(it => it.product.id === product.id);
     // Use default quantity preference if not in cart (0 or 1)
-    const initialQty = existing ? existing.qty + 1 : (defaultQuantity !== undefined ? defaultQuantity : 1);
+    const initialQty = forcedQty ?? (existing ? existing.qty + 1 : (defaultQuantity !== undefined ? defaultQuantity : 1));
 
     setTempQuantity(String(initialQty));
     // Initialize temp price (ensure it's a valid string)
@@ -1947,7 +1947,15 @@ export default function OrderDetails() {
                     setEditingQty={setEditingQty}
                     changeQty={changeQty}
                     removeItem={removeItem}
-                    addToCart={() => openQuantityModal(item)}
+                    defaultQuantity={defaultQuantity}
+                    editingQty={editingQty}
+                    addToCart={(product, qty) => {
+                      if (appSettings?.order_rate_editable) {
+                        openQuantityModal(product, qty);
+                      } else {
+                        addToCart(product, qty, null, false);
+                      }
+                    }}
                     openImageModal={openImageModal}
                     openDetailsModal={openDetailsModal}
                   />
@@ -2661,7 +2669,7 @@ export default function OrderDetails() {
 }
 
 // Separated Component for better performance
-const CodeItem = ({ item, inStock, stockQty, currentQty, displayValue, isInCart, isHighlighted, setEditingQty, changeQty, removeItem, addToCart, openImageModal, openDetailsModal }) => (
+const CodeItem = ({ item, inStock, stockQty, currentQty, displayValue, isInCart, isHighlighted, setEditingQty, changeQty, removeItem, addToCart, openImageModal, openDetailsModal, defaultQuantity, editingQty }) => (
   <View style={[
     styles.productCard,
     isInCart && styles.productCardInCart,
@@ -2778,23 +2786,68 @@ const CodeItem = ({ item, inStock, stockQty, currentQty, displayValue, isInCart,
             </TouchableOpacity>
           </View>
         ) : (
-          <TouchableOpacity
-            style={[styles.addButtonLarge, !inStock && styles.disabledAddButton]}
-            onPress={(e) => {
-              addToCart(item);
-            }}
-            disabled={!inStock}
-          >
-            <LinearGradient
-              colors={inStock ? Gradients.primary : [Colors.neutral[200], Colors.neutral[200]]}
-              style={styles.addButtonGradient}
+          <View style={{ flexDirection: 'row', alignItems: 'stretch', gap: 8, height: 44, width: '100%' }}>
+            {/* Quantity Input for not-in-cart items */}
+            <TextInput
+              style={{
+                flex: 0.35,
+                borderWidth: 1,
+                borderColor: Colors.border.medium,
+                borderRadius: BorderRadius.md,
+                textAlign: 'center',
+                fontSize: 16,
+                fontWeight: '600',
+                color: Colors.text.primary,
+                backgroundColor: '#FFF'
+              }}
+              value={editingQty[item.id] !== undefined ? String(editingQty[item.id]) : String(defaultQuantity || 1)}
+              keyboardType="numeric"
+              selectTextOnFocus={true}
+              onChangeText={(text) => {
+                const cleaned = text.replace(/[^0-9.]/g, '');
+                const parts = cleaned.split('.');
+                if (parts.length > 2) return;
+                setEditingQty(prev => ({ ...prev, [item.id]: cleaned }));
+              }}
+              onFocus={() => {
+                setEditingQty(prev => ({ ...prev, [item.id]: prev[item.id] !== undefined ? String(prev[item.id]) : String(defaultQuantity || 1) }));
+              }}
+              onBlur={() => {
+                setEditingQty(prev => {
+                  const newState = { ...prev };
+                  if (!newState[item.id] || isNaN(parseFloat(newState[item.id])) || parseFloat(newState[item.id]) <= 0) {
+                    newState[item.id] = String(defaultQuantity || 1);
+                  }
+                  return newState;
+                });
+              }}
+            />
+            <TouchableOpacity
+              style={[styles.addButtonLarge, !inStock && styles.disabledAddButton, { flex: 0.65, height: '100%', marginTop: 0 }]}
+              onPress={(e) => {
+                const qtyStr = editingQty[item.id] !== undefined ? String(editingQty[item.id]) : String(defaultQuantity || 1);
+                const qtyVal = parseFloat(qtyStr);
+                const finalQty = (!isNaN(qtyVal) && qtyVal > 0) ? qtyVal : (defaultQuantity || 1);
+                addToCart(item, finalQty);
+                setEditingQty(prev => {
+                  const newState = { ...prev };
+                  delete newState[item.id];
+                  return newState;
+                });
+              }}
+              disabled={!inStock}
             >
-              <Ionicons name="cart-outline" size={20} color={inStock ? '#FFF' : Colors.text.tertiary} />
-              <Text style={[styles.addButtonTextLarge, !inStock && { color: Colors.text.tertiary }]}>
-                {inStock ? 'Add to Cart' : 'Out of Stock'}
-              </Text>
-            </LinearGradient>
-          </TouchableOpacity>
+              <LinearGradient
+                colors={inStock ? Gradients.primary : [Colors.neutral[200], Colors.neutral[200]]}
+                style={[styles.addButtonGradient, { height: '100%', paddingVertical: 0, justifyContent: 'center' }]}
+              >
+                <Ionicons name="cart-outline" size={18} color={inStock ? '#FFF' : Colors.text.tertiary} />
+                <Text style={[styles.addButtonTextLarge, !inStock && { color: Colors.text.tertiary }, { fontSize: 13, marginLeft: 4 }]}>
+                  {inStock ? 'Add' : 'Stock'}
+                </Text>
+              </LinearGradient>
+            </TouchableOpacity>
+          </View>
         )}
       </View>
     </View>
