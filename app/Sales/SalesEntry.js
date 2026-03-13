@@ -468,11 +468,11 @@ export default function SalesEntryScreen() {
     router.push({
       pathname: "/Sales/SalesDetails",
       params: {
-        area: selectedArea,
+        area: selectedCustomer.place || selectedCustomer.area || selectedArea || "",
         customer: selectedCustomer.name,
         customerCode: selectedCustomer.code,
         payment: selectedPayment,
-        priceCode: selectedPriceCode // Pass selected price code
+        priceCode: selectedPriceCode
       },
     });
   };

@@ -392,17 +392,31 @@ class PrinterService {
             // --- BILL TO SECTION ---
             if (order.customer) {
                 receipt += `\nBILL TO:\n`;
-                receipt += "\x1B\x45\x01" + `${order.customer}\n` + "\x1B\x45\x00"; // Bold customer name
+                let customerText = String(order.customer);
+                let place = order.customerPlace || order.area;
+                
+                // Fallback: fetch from database if not present in order
+                if (!place && order.customerCode) {
+                    try {
+                        const dbService = require('./database').default;
+                        if (dbService && dbService.db) {
+                            const customerParams = await dbService.getCustomerByCode(order.customerCode);
+                            if (customerParams) {
+                                place = customerParams.place || customerParams.area;
+                            }
+                        }
+                    } catch(e) { console.log('[Printer] Error fetching customer place', e); }
+                }
 
+                receipt += "\x1B\x45\x01" + `${customerText}\n` + "\x1B\x45\x00"; // Bold customer name
+
+                if (place) {
+                    receipt += `${place}\n`;
+                }
+                
                 // Customer address if available
                 if (order.customerAddress) {
                     receipt += `${order.customerAddress}\n`;
-                }
-
-                // Place/Area
-                if (order.customerPlace || order.area) {
-                    const place = order.customerPlace || order.area;
-                    receipt += `${place}\n`;
                 }
 
                 // Customer phone  
@@ -464,13 +478,225 @@ class PrinterService {
                 const status = order.printStatus || order.description;
                 receipt += centerText(`Status: ${status}`);
             }
-            receipt += "\n\n\n";
+            receipt += "\n";
 
+            console.log("[Printer] Form1 sending to printer, receipt length:", receipt.length);
             await PrinterInterface.printBill(receipt);
             return true;
 
         } catch (err) {
             console.error("[Printer] Print failed:", err);
+            Alert.alert("Print Error", "Failed to send data to printer. Please check connection.");
+            this.connected = false;
+            return false;
+        }
+    }
+
+    async printOrderForm2(order) {
+        try {
+            if (!this.connected) {
+                if (this.currentPrinter) {
+                    console.log("[Printer] Attempting to reconnect before printing...");
+                    const reconnected = await this.connect(this.currentPrinter);
+                    if (!reconnected) {
+                        Alert.alert("Printer Disconnected", "Please reconnect to your printer.");
+                        return false;
+                    }
+                } else {
+                    Alert.alert("Printer not connected", "Please connect to a printer first.");
+                    return false;
+                }
+            }
+
+            // Ensure company info is loaded (same as printOrder - do NOT call loadSettings here)
+            await this.loadCompanyInfo();
+
+            const PrinterInterface = this.connectionType === 'ble' ? BLEPrinter : USBPrinter;
+            if (!PrinterInterface) {
+                Alert.alert("Error", "Printer module not available");
+                return false;
+            }
+
+            const PRINTER_WIDTH = this.printerCharsPerLine || 32;
+
+            const centerText = (text) => {
+                const safeText = String(text || "");
+                if (safeText.length > PRINTER_WIDTH) {
+                    return safeText.substring(0, PRINTER_WIDTH) + "\n";
+                }
+                const pad = Math.max(0, Math.floor((PRINTER_WIDTH - safeText.length) / 2));
+                return " ".repeat(pad) + safeText + "\n";
+            };
+
+            const line = "-".repeat(PRINTER_WIDTH) + "\n";
+
+            let receipt = "";
+            receipt += "\x1B\x40"; // ESC @ - Initialize/reset printer
+
+            // --- HEADER (text-only, no logo, no ESC/POS bold to avoid parser issues) ---
+            const companyName = this.companyInfo?.firm_name || "TaskSAS";
+            receipt += centerText(companyName);
+
+            if (this.companyInfo) {
+                const addressParts = [
+                    this.companyInfo.address,
+                    this.companyInfo.address1,
+                    this.companyInfo.address2,
+                    this.companyInfo.address3
+                ].filter(Boolean);
+                addressParts.forEach(part => { receipt += centerText(part); });
+
+                const phones = [this.companyInfo.phones, this.companyInfo.mobile].filter(Boolean).join(', ');
+                if (phones) receipt += centerText(`Ph: ${phones}`);
+            }
+
+            receipt += line;
+
+            // --- RECEIPT TITLE ---
+            const receiptTitle = order.receiptTitle || "Order Receipt";
+            receipt += centerText(receiptTitle);
+            receipt += line;
+
+            // --- META INFO ---
+            const dateObj = new Date(order.timestamp);
+            const day = String(dateObj.getDate()).padStart(2, '0');
+            const month = String(dateObj.getMonth() + 1).padStart(2, '0');
+            const year = dateObj.getFullYear();
+            const hours = String(dateObj.getHours()).padStart(2, '0');
+            const minutes = String(dateObj.getMinutes()).padStart(2, '0');
+            const formattedDate = `${day}/${month}/${year} ${hours}:${minutes}`;
+
+            // Two-column meta: left = Inv Date, right = Sale Type
+            const metaLeft1 = `Inv Date: ${formattedDate}`;
+            const orderId = order.formattedOrderId || (order.isApiOrder ? order.id : "NA");
+            const metaLeft2 = `Inv No  : ${orderId}`;
+            const paymentType = order.payment || order.type || "Cash";
+            const metaLeft3 = `Type    : ${paymentType}`;
+
+            // Salesman - use order.salesman, order.salesmanName, or fallback username
+            const salesmanName = order.salesman || order.salesmanName || order.username || "";
+            const metaRight1 = salesmanName ? `Salesman: ${salesmanName}` : "";
+
+            // Print meta lines - fit within width
+            const printMetaLine = (left, right) => {
+                if (!right) return `${left}\n`;
+                const available = PRINTER_WIDTH - left.length - right.length;
+                if (available >= 1) {
+                    return `${left}${" ".repeat(available)}${right}\n`;
+                }
+                return `${left}\n${right}\n`;
+            };
+
+            receipt += printMetaLine(metaLeft1, "");
+            receipt += printMetaLine(metaLeft2, metaRight1);
+            receipt += printMetaLine(metaLeft3, "");
+
+            // Customer
+            let previousBalance = null;
+            if (order.customer) {
+                let customerText = String(order.customer);
+                let place = order.customerPlace || order.area;
+                
+                // Fetch from database for place fallback and previous balance
+                if (order.customerCode) {
+                    try {
+                        const dbService = require('./database').default;
+                        if (dbService && dbService.db) {
+                            const customerParams = await dbService.getCustomerByCode(order.customerCode);
+                            if (customerParams) {
+                                if (!place) place = customerParams.place || customerParams.area;
+                                previousBalance = customerParams.balance;
+                            }
+                        }
+                    } catch(e) { console.log('[Printer] Error fetching customer info', e); }
+                }
+
+                receipt += `Customer: ${customerText.substring(0, PRINTER_WIDTH - 10)}\n`;
+                if (place) {
+                    receipt += `${place.substring(0, PRINTER_WIDTH)}\n`;
+                }
+            }
+
+            receipt += line;
+
+            // --- ITEMS TABLE ---
+            // Columns: NO | ITEM | QTY | PRICE | TOTAL
+            // Column widths adapt to paper size
+            // Fixed widths: NO=2, QTY=5, PRICE=7, TOTAL=7 — ITEM gets the rest
+            const noLen = 2;
+            const qtyLen = 5;
+            const priceLen = 7;
+            const totalLen = 7;
+            const separators = 4; // 4 spaces between columns
+            const itemLen = Math.max(5, PRINTER_WIDTH - noLen - qtyLen - priceLen - totalLen - separators);
+
+            const hdrNo = "NO".padEnd(noLen, " ");
+            const hdrItem = "ITEM".padEnd(itemLen, " ");
+            const hdrQty = "QTY".padStart(qtyLen, " ");
+            const hdrPrice = "PRICE".padStart(priceLen, " ");
+            const hdrTotal = "TOTAL".padStart(totalLen, " ");
+            receipt += `${hdrNo} ${hdrItem} ${hdrQty} ${hdrPrice} ${hdrTotal}\n`;
+            receipt += line;
+
+            let totalAmount = 0;
+            let rowNo = 1;
+
+            if (Array.isArray(order.items)) {
+                order.items.forEach(item => {
+                    const price = Number(item.price) || 0;
+                    const qty = Number(item.qty) || 0;
+                    const itemTotal = price * qty;
+                    totalAmount += itemTotal;
+
+                    const noStr = String(rowNo).padEnd(noLen, " ");
+                    const name = String(item.name || "Item").substring(0, itemLen).padEnd(itemLen, " ");
+                    const qtyStr = qty.toFixed(2).padStart(qtyLen, " ");
+                    const priceStr = price.toFixed(2).padStart(priceLen, " ");
+                    const totalStr = itemTotal.toFixed(2).padStart(totalLen, " ");
+
+                    receipt += `${noStr} ${name} ${qtyStr} ${priceStr} ${totalStr}\n`;
+
+                    // If item name is longer than itemLen, print continuation line
+                    const fullName = String(item.name || "");
+                    if (fullName.length > itemLen) {
+                        const remainder = fullName.substring(itemLen);
+                        receipt += `${"".padEnd(noLen + 1)}${remainder.substring(0, itemLen)}\n`;
+                    }
+
+                    rowNo++;
+                });
+            }
+
+            receipt += line;
+
+            // --- TOTAL ---
+            const totalLabel = "TOTAL:";
+            const totalVal = totalAmount.toFixed(2);
+            const totalPad = PRINTER_WIDTH - totalLabel.length - totalVal.length;
+            receipt += `${totalLabel}${" ".repeat(Math.max(1, totalPad))}${totalVal}\n`;
+
+            if (previousBalance !== null && previousBalance !== undefined && !isNaN(Number(previousBalance))) {
+                const balLabel = "PREV BALANCE:";
+                const balVal = Number(previousBalance).toFixed(2);
+                const balPad = PRINTER_WIDTH - balLabel.length - balVal.length;
+                receipt += `${balLabel}${" ".repeat(Math.max(1, balPad))}${balVal}\n`;
+            }
+
+            receipt += line;
+            receipt += centerText("Thank You!");
+            receipt += "\n";
+
+            console.log("[Printer] Form2 sending to printer, receipt length:", receipt.length);
+            if (PrinterInterface.printText) {
+                await PrinterInterface.printText(receipt);
+            } else {
+                await PrinterInterface.printBill(receipt);
+            }
+            console.log("[Printer] Form2 print done");
+            return true;
+
+        } catch (err) {
+            console.error("[Printer] Form2 Print failed:", err);
             Alert.alert("Print Error", "Failed to send data to printer. Please check connection.");
             this.connected = false;
             return false;
@@ -628,7 +854,7 @@ class PrinterService {
                 receipt += `${" ".repeat(PRINTER_WIDTH - forComp.length)}${forComp}\n`;
             }
 
-            receipt += "\n\n\n";
+            receipt += "\n";
 
             await PrinterInterface.printBill(receipt);
             return true;

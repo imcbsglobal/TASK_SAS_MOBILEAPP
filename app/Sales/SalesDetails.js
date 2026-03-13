@@ -1015,6 +1015,19 @@ export default function SalesDetails() {
     }
   }, [scanned, timestamp, handleScannedBarcode]);
 
+  // Instant Search Debounce logic
+  useEffect(() => {
+    // Only trigger if query has changed and is different from current filter search
+    if (query !== filters.search) {
+      const timer = setTimeout(() => {
+        console.log('[SalesDetails] Instant search triggered for:', query);
+        setFilters(prev => ({ ...prev, search: query }));
+      }, 500); // 500ms debounce
+
+      return () => clearTimeout(timer);
+    }
+  }, [query]);
+
   // Handle search by text
   const handleSearch = () => {
     console.log('[SalesDetails] Handle search called');

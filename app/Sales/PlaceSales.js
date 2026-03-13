@@ -26,6 +26,7 @@ import {
 import { BorderRadius, Colors, Gradients, Shadows, Spacing, Typography } from "../../constants/theme";
 import pdfService from "../../src/services/pdfService";
 import printerService from "../../src/services/printerService";
+import savedOrdersDbService from "../../src/services/savedOrdersDb";
 
 if (Platform.OS === 'android') {
   if (UIManager.setLayoutAnimationEnabledExperimental) {
@@ -48,6 +49,8 @@ export default function PlaceSales() {
 
   const [selectedOrderDetails, setSelectedOrderDetails] = useState(null);
   const [currentUsername, setCurrentUsername] = useState(null);
+  const [savedOrders, setSavedOrders] = useState([]);
+  const [revertClicks, setRevertClicks] = useState({}); // { orderId: count }
 
   // Bulk Selection State
   const [selectionMode, setSelectionMode] = useState(false);
@@ -70,9 +73,15 @@ export default function PlaceSales() {
   useEffect(() => {
     if (currentUsername) {
       loadLocalOrders();
+      loadSavedOrders();
       fetchUploadedOrders();
     }
   }, [currentUsername]);
+
+  async function loadSavedOrders() {
+    const saved = await savedOrdersDbService.getSavedTransactions('Sales');
+    setSavedOrders(saved);
+  }
 
   useEffect(() => {
     if (filterStatus === 'uploaded') {
@@ -227,6 +236,8 @@ export default function PlaceSales() {
     setRefreshing(true);
     if (filterStatus === 'uploaded') {
       await fetchUploadedOrders();
+    } else if (filterStatus === 'saved') {
+      await loadSavedOrders();
     } else {
       await loadLocalOrders();
     }
@@ -379,6 +390,9 @@ export default function PlaceSales() {
 
                 if (result.success) {
                   successCount++;
+                  // Save locally for 2 days
+                  await savedOrdersDbService.saveTransactionLocally(orderId, 'Sales', order);
+
                   // Update local processed array
                   const itemsWithStatus = order.items.map(item => ({ ...item, uploadStatus: 'uploaded to server' }));
                   processedOrders[orderIndex] = {
@@ -409,6 +423,9 @@ export default function PlaceSales() {
             setOrders(processedOrders);
             const storageKey = `placed_sales_${contextUsername}`;
             await AsyncStorage.setItem(storageKey, JSON.stringify(processedOrders));
+
+            // Reload saved orders to show newly uploaded one if needed
+            await loadSavedOrders();
 
             setLoadingUploaded(false);
             setSelectionMode(false);
@@ -639,6 +656,8 @@ export default function PlaceSales() {
               setOrders(updatedOrders);
 
               if (uploadResult.success) {
+                // Save locally for 2 days - non-blocking for speed
+                savedOrdersDbService.saveTransactionLocally(orderId, 'Sales', order).then(() => loadSavedOrders());
                 Alert.alert("Success", "Order uploaded successfully!");
               } else {
                 // Check for Server Error (500) which usually means expired token/session
@@ -700,21 +719,30 @@ export default function PlaceSales() {
       const isUploaded = order.isApiOrder || order.uploadStatus === 'uploaded' || order.uploadStatus === 'uploaded to server';
       const printContext = filterStatus === 'uploaded' || isUploaded ? 'uploaded' : 'pending';
 
-      // Status 'S' for uploaded, 'F' for pending
-      // Order ID: API ID if uploaded, NA if pending
+      const salesmanName = await AsyncStorage.getItem('username') || '';
+      const formType = await AsyncStorage.getItem('settings_print_form_type') || 'form1';
+
       const orderToPrint = {
         ...order,
         description: printContext === 'uploaded' ? 'S' : 'F',
         formattedOrderId: printContext === 'uploaded' ? order.id : 'NA',
         printStatus: printContext === 'uploaded' ? 'S' : 'F',
-        receiptTitle: 'return reciept'
+        receiptTitle: 'Sales Receipt',
+        salesman: salesmanName,
+      };
+
+      const doPrint = async (toPrint) => {
+        if (formType === 'form2') {
+          return printerService.printOrderForm2(toPrint);
+        }
+        return printerService.printOrder(toPrint);
       };
 
       if (printerService.connected) {
         Alert.alert("Printing", "Sending data to printer...");
-        await printerService.printOrder(orderToPrint);
+        await doPrint(orderToPrint);
       } else {
-        setSelectedOrderToPrint(orderToPrint);
+        setSelectedOrderToPrint({ ...orderToPrint, _formType: formType });
         setPrinterModalVisible(true);
         setIsScanningPrinters(true);
         const devices = await printerService.getDeviceList('ble');
@@ -864,7 +892,14 @@ export default function PlaceSales() {
     if (connected) {
       setPrinterModalVisible(false);
       if (selectedOrderToPrint) {
-        setTimeout(() => printerService.printOrder(selectedOrderToPrint), 500);
+        const formType = selectedOrderToPrint._formType || 'form1';
+        setTimeout(() => {
+          if (formType === 'form2') {
+            printerService.printOrderForm2(selectedOrderToPrint);
+          } else {
+            printerService.printOrder(selectedOrderToPrint);
+          }
+        }, 500);
       }
     } else {
       Alert.alert("Error", "Connection failed");
@@ -875,12 +910,13 @@ export default function PlaceSales() {
     if (!timestamp) return '';
     try {
       const date = new Date(timestamp);
-      return date.toLocaleString('en-US', {
-        month: 'short',
-        day: 'numeric',
-        hour: '2-digit',
-        minute: '2-digit'
+      const dateStr = date.toLocaleDateString('en-US', {
+        month: 'short', day: 'numeric', year: 'numeric'
       });
+      const timeStr = date.toLocaleTimeString('en-US', {
+        hour: '2-digit', minute: '2-digit', hour12: true
+      });
+      return `${dateStr}, ${timeStr}`;
     } catch (e) { return timestamp; }
   }
 
@@ -899,6 +935,8 @@ export default function PlaceSales() {
   let displayOrders = [];
   if (filterStatus === 'uploaded') {
     displayOrders = uploadedOrders;
+  } else if (filterStatus === 'saved') {
+    displayOrders = savedOrders;
   } else if (filterStatus === 'pending') {
     displayOrders = orders.filter(o => !o.uploadStatus || o.uploadStatus === 'pending');
   } else if (filterStatus === 'failed') {
@@ -906,6 +944,148 @@ export default function PlaceSales() {
   } else {
     displayOrders = orders;
   }
+
+  const handleRevert = async (order) => {
+    const currentCount = revertClicks[order.id] || 0;
+    const newCount = currentCount + 1;
+
+    if (newCount >= 5) {
+      Alert.alert(
+        "Confirm Revert",
+        "Do you want to revert this sales entry to the pending section?",
+        [
+          { text: "Cancel", onPress: () => setRevertClicks(prev => ({ ...prev, [order.id]: 0 })) },
+          {
+            text: "Revert",
+            onPress: async () => {
+              // 1. Remove from SQLite
+              await savedOrdersDbService.deleteSavedTransaction(order.id);
+
+              // 2. Add back to Pending AsyncStorage
+              const storageKey = `placed_sales_${currentUsername}`;
+              const updatedOrder = { ...order, status: 'pending', uploadStatus: 'pending' };
+              const currentPending = [...orders];
+
+              if (!currentPending.find(o => o.id === order.id)) {
+                currentPending.push(updatedOrder);
+              } else {
+                const idx = currentPending.findIndex(o => o.id === order.id);
+                currentPending[idx] = updatedOrder;
+              }
+
+              await AsyncStorage.setItem(storageKey, JSON.stringify(currentPending));
+              setOrders(currentPending);
+              await loadSavedOrders();
+
+              setRevertClicks(prev => {
+                const next = { ...prev };
+                delete next[order.id];
+                return next;
+              });
+
+              Alert.alert("Success", "Sales entry reverted to pending!");
+            }
+          }
+        ]
+      );
+    } else {
+      setRevertClicks(prev => ({ ...prev, [order.id]: newCount }));
+    }
+  };
+
+  const handleEditOrder = async (order) => {
+    try {
+      const cartKey = `temp_active_cart_${currentUsername}`;
+      const savedCartStr = await AsyncStorage.getItem(cartKey);
+      const existingCart = savedCartStr ? JSON.parse(savedCartStr) : [];
+
+      const proceedWithEdit = async () => {
+        try {
+          // 1. Map items to cart format
+          const cartItems = order.items.map(item => ({
+            product: {
+              id: item.productId,
+              code: item.code,
+              name: item.name,
+              barcode: item.barcode,
+              price: item.price,
+              mrp: item.mrp || item.price,
+              text6: item.hsn || '',
+              taxcode: item.gst || '',
+              unit: 'PCS', // Default
+            },
+            qty: item.qty
+          }));
+
+          // 2. Save to cart storage
+          await AsyncStorage.setItem(cartKey, JSON.stringify(cartItems));
+
+          // 3. Remove from local orders
+          const updatedOrders = orders.filter(o => o.id !== order.id);
+          const storageKey = `placed_sales_${currentUsername}`;
+          await AsyncStorage.setItem(storageKey, JSON.stringify(updatedOrders));
+          setOrders(updatedOrders);
+
+          // 4. Navigate to SalesDetails
+          router.push({
+            pathname: "/Sales/SalesDetails",
+            params: {
+              area: order.area,
+              customer: order.customer,
+              customerCode: order.customerCode,
+              type: order.type,
+              payment: order.payment
+            }
+          });
+        } catch (error) {
+          console.error("Edit Sales Error:", error);
+          Alert.alert("Error", "Failed to move sales entry to cart.");
+        }
+      };
+
+      if (existingCart.length > 0) {
+        Alert.alert(
+          "Cart Not Empty",
+          "There are already items in your cart. What would you like to do?",
+          [
+            { text: "Cancel", style: "cancel" },
+            {
+              text: "Place Existing Cart",
+              onPress: () => {
+                router.push({
+                  pathname: "/Sales/SalesDetails",
+                  params: {
+                    area: order.area,
+                    customer: order.customer,
+                    customerCode: order.customerCode,
+                    type: order.type,
+                    payment: order.payment
+                  }
+                });
+              }
+            },
+            {
+              text: "Continue (Clear Cart)",
+              onPress: proceedWithEdit,
+              style: "destructive"
+            }
+          ]
+        );
+      } else {
+        Alert.alert(
+          "Edit Sales Entry",
+          "Move this entry to cart for editing? It will be removed from the pending list.",
+          [
+            { text: "Cancel", style: "cancel" },
+            { text: "Edit", onPress: proceedWithEdit }
+          ]
+        );
+      }
+    } catch (error) {
+      console.error("Check Cart Error:", error);
+      Alert.alert("Error", "Could not check existing cart status.");
+    }
+  };
 
   function renderOrderCard({ item: order }) {
     const isExpanded = expandedOrder === order.id;
@@ -950,8 +1130,21 @@ export default function PlaceSales() {
           </View>
 
           <View style={styles.orderHeaderRight}>
-            <Text style={styles.orderTotal}>{order.total.toFixed(2)}</Text>
-            <Text style={styles.itemCount}>{order.items.length} items</Text>
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+              {!isApi && filterStatus !== 'saved' && filterStatus !== 'uploaded' && (
+                <TouchableOpacity
+                  onPress={(e) => {
+                    e.stopPropagation();
+                    handleEditOrder(order);
+                  }}
+                  style={{ padding: 4 }}
+                >
+                  <Ionicons name="pencil-outline" size={20} color={Colors.success.main} />
+                </TouchableOpacity>
+              )}
+              <Text style={styles.orderTotal}>{(order.total || 0).toFixed(2)}</Text>
+            </View>
+            <Text style={styles.itemCount}>{(order.items || []).length} items</Text>
             <Ionicons
               name={isExpanded ? "chevron-up" : "chevron-down"}
               size={20}
@@ -964,16 +1157,16 @@ export default function PlaceSales() {
         {isExpanded && (
           <View style={styles.orderBody}>
             <View style={styles.divider} />
-            {order.items.map((item, index) => (
+            {(order.items || []).map((item, index) => (
               <View key={index} style={styles.itemRow}>
                 <View style={{ flex: 1 }}>
                   <Text style={styles.itemName}>{item.name}</Text>
                   <Text style={{ fontSize: 11, color: Colors.text.secondary, marginTop: 2, marginBottom: 2 }}>
                     Code: {item.code}
                   </Text>
-                  <Text style={styles.itemPrice}>{item.price.toFixed(2)} x {parseFloat(item.qty).toFixed(3)}</Text>
+                  <Text style={styles.itemPrice}>{(item.price || 0).toFixed(2)} x {(parseFloat(item.qty) || 0).toFixed(3)}</Text>
                 </View>
-                <Text style={styles.itemTotal}>{item.total.toFixed(2)}</Text>
+                <Text style={styles.itemTotal}>{(item.total || 0).toFixed(2)}</Text>
               </View>
             ))}
 
@@ -1008,8 +1201,31 @@ export default function PlaceSales() {
                 </LinearGradient>
               </TouchableOpacity>
 
+              {/* {!isApi && filterStatus !== 'saved' && filterStatus !== 'uploaded' && (
+                <TouchableOpacity style={styles.actionButton} onPress={() => handleEditOrder(order)}>
+                  <LinearGradient colors={[Colors.success.main, Colors.success[700]]} style={styles.actionButtonGradient}>
+                    <Ionicons name="pencil" size={18} color="#fff" />
+                    <Text style={styles.actionButtonText}>Edit</Text>
+                  </LinearGradient>
+                </TouchableOpacity>
+              )} */}
 
-              {!isApi && (filterStatus === 'pending' || filterStatus === 'failed') && (
+
+              {filterStatus === 'saved' && (
+                <TouchableOpacity
+                  style={[styles.actionButton, { borderColor: Colors.warning.main, borderWidth: 1 }]}
+                  onPress={() => handleRevert(order)}
+                >
+                  <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center', paddingVertical: 10, gap: 6 }}>
+                    <Ionicons name="refresh-circle-outline" size={20} color={Colors.warning.main} />
+                    <Text style={{ color: Colors.warning.main, fontWeight: '700', fontSize: 13 }}>
+                      Revert {revertClicks[order.id] > 0 ? `(${revertClicks[order.id]})` : ''}
+                    </Text>
+                  </View>
+                </TouchableOpacity>
+              )}
+
+              {!isApi && filterStatus !== 'saved' && (filterStatus === 'pending' || filterStatus === 'failed') && (
                 <TouchableOpacity
                   style={[styles.actionButton, uploadingOrder && styles.disabledButton]}
                   onPress={() => confirmOrder(order.id)}
@@ -1083,6 +1299,10 @@ export default function PlaceSales() {
             <TouchableOpacity style={[styles.filterTab, filterStatus === 'failed' && styles.filterTabActive]} onPress={() => setFilterStatus('failed')}>
               <Ionicons name="alert-circle" size={16} color={filterStatus === 'failed' ? '#FFF' : Colors.error.main} />
               <Text style={[styles.filterTabText, filterStatus === 'failed' && styles.filterTabTextActive]}>Failed ({failedCount})</Text>
+            </TouchableOpacity>
+            <TouchableOpacity style={[styles.filterTab, filterStatus === 'saved' && styles.filterTabActive]} onPress={() => setFilterStatus('saved')}>
+              <Ionicons name="save" size={16} color={filterStatus === 'saved' ? '#FFF' : '#3498db'} />
+              <Text style={[styles.filterTabText, filterStatus === 'saved' && styles.filterTabTextActive]}>Saved ({savedOrders.length})</Text>
             </TouchableOpacity>
           </ScrollView>
         </View>

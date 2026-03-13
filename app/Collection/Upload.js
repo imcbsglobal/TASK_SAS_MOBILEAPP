@@ -23,6 +23,7 @@ import { BorderRadius, Colors, Gradients, Shadows, Spacing, Typography } from ".
 import dbService from "../../src/services/database";
 import pdfService from "../../src/services/pdfService";
 import printerService from "../../src/services/printerService";
+import savedOrdersDbService from "../../src/services/savedOrdersDb";
 
 const API_UPLOAD_COLLECTION = "https://tasksas.com/api/collection/create/";
 
@@ -36,6 +37,9 @@ export default function UploadScreen() {
   const [selectedCollections, setSelectedCollections] = useState([]);
   const [isOnline, setIsOnline] = useState(true);
   const [uploadProgress, setUploadProgress] = useState({ current: 0, total: 0 });
+  const [filterStatus, setFilterStatus] = useState('pending'); // 'pending' | 'saved'
+  const [savedCollections, setSavedCollections] = useState([]);
+  const [revertClicks, setRevertClicks] = useState({}); // { id: count }
 
   // Printer State
   const [printerModalVisible, setPrinterModalVisible] = useState(false);
@@ -57,6 +61,7 @@ export default function UploadScreen() {
     console.log("[Upload] Component Mounted");
     checkNetworkStatus();
     loadPendingCollections();
+    loadSavedCollections();
 
     const unsubscribe = NetInfo.addEventListener(state => {
       setIsOnline(state.isConnected);
@@ -70,22 +75,34 @@ export default function UploadScreen() {
     setIsOnline(state.isConnected);
   };
 
-  const loadPendingCollections = async () => {
+  const loadPendingCollections = async (showLoading = true) => {
     try {
-      if (loading) setLoading(true);
+      if (showLoading) setLoading(true);
       await dbService.init();
       const pendingCollections = await dbService.getOfflineCollections(false);
       setCollections(pendingCollections);
     } catch (error) {
       console.error("[Upload] Error loading collections:", error);
     } finally {
-      setLoading(false);
+      if (showLoading) setLoading(false);
+    }
+  };
+
+  const loadSavedCollections = async () => {
+    try {
+      const saved = await savedOrdersDbService.getSavedTransactions('Collection');
+      setSavedCollections(saved);
+    } catch (error) {
+      console.error("[Upload] Error loading saved collections:", error);
     }
   };
 
   const onRefresh = useCallback(async () => {
     setRefreshing(true);
-    await loadPendingCollections();
+    await Promise.all([
+      loadPendingCollections(false),
+      loadSavedCollections()
+    ]);
     setRefreshing(false);
   }, []);
 
@@ -219,6 +236,13 @@ export default function UploadScreen() {
 
           // Mark as synced locally using local_id
           await dbService.markCollectionAsSynced(collection.local_id);
+
+          // Save to persistent 48h history - non-blocking for speed
+          savedOrdersDbService.saveTransactionLocally(collection.local_id, 'Collection', {
+            ...collection,
+            synced_at: new Date().toISOString()
+          }).then(() => loadSavedCollections());
+
           successCount++;
 
         } catch (error) {
@@ -229,6 +253,7 @@ export default function UploadScreen() {
 
       // Reload collections after upload
       await loadPendingCollections();
+      await loadSavedCollections(); // Reload saved too
       setSelectedCollections([]);
 
       if (failedItems.length === 0) {
@@ -439,7 +464,7 @@ export default function UploadScreen() {
             <Text style={styles.customerName} numberOfLines={1}>
               {item.customer_name}
             </Text>
-            <Text style={styles.amount}>{(+item.amount).toLocaleString()}</Text>
+            <Text style={styles.amount}>{(+(item.amount || 0)).toLocaleString()}</Text>
 
             <View style={styles.detailsRow}>
               <View style={[styles.badge, { backgroundColor: Colors.neutral[100] }]}>
@@ -451,38 +476,126 @@ export default function UploadScreen() {
 
           {/* Action Buttons */}
           <View style={styles.actionButtons}>
-            <TouchableOpacity
-              style={styles.actionBtn}
-              onPress={() => handlePrint(item)}
-              activeOpacity={0.7}
-            >
-              <Ionicons name="print-outline" size={20} color={Colors.primary.main} />
-            </TouchableOpacity>
-            <TouchableOpacity
-              style={styles.actionBtn}
-              onPress={() => handleSharePDF(item)}
-              activeOpacity={0.7}
-            >
-              <Ionicons name="share-outline" size={20} color={Colors.secondary.main} />
-            </TouchableOpacity>
-            <TouchableOpacity
-              style={styles.actionBtn}
-              onPress={() => handleEdit(item)}
-              activeOpacity={0.7}
-            >
-              <Ionicons name="pencil-outline" size={20} color={Colors.primary.main} />
-            </TouchableOpacity>
-            <TouchableOpacity
-              style={[styles.actionBtn, { borderColor: Colors.error.light }]}
-              onPress={() => handleDelete(item)}
-              activeOpacity={0.7}
-            >
-              <Ionicons name="trash-outline" size={20} color={Colors.error.main} />
-            </TouchableOpacity>
+            {filterStatus === 'saved' ? (
+              <>
+                <TouchableOpacity style={styles.actionBtn} onPress={() => handleDownloadJSON(item)}>
+                  <Ionicons name="code-working-outline" size={20} color={Colors.neutral[600]} />
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={[styles.actionBtn, { borderColor: Colors.warning.light }]}
+                  onPress={() => handleRevert(item)}
+                >
+                  <Ionicons name="refresh-circle-outline" size={24} color={Colors.warning.main} />
+                  {revertClicks[item.id] > 0 && (
+                    <Text style={{ fontSize: 10, color: Colors.warning.main, fontWeight: '700' }}>{revertClicks[item.id]}</Text>
+                  )}
+                </TouchableOpacity>
+              </>
+            ) : (
+              <>
+                <TouchableOpacity
+                  style={styles.actionBtn}
+                  onPress={() => handlePrint(item)}
+                  activeOpacity={0.7}
+                >
+                  <Ionicons name="print-outline" size={20} color={Colors.primary.main} />
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={styles.actionBtn}
+                  onPress={() => handleSharePDF(item)}
+                  activeOpacity={0.7}
+                >
+                  <Ionicons name="share-outline" size={20} color={Colors.secondary.main} />
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={styles.actionBtn}
+                  onPress={() => handleEdit(item)}
+                  activeOpacity={0.7}
+                >
+                  <Ionicons name="pencil-outline" size={20} color={Colors.primary.main} />
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={[styles.actionBtn, { borderColor: Colors.error.light }]}
+                  onPress={() => handleDelete(item)}
+                  activeOpacity={0.7}
+                >
+                  <Ionicons name="trash-outline" size={20} color={Colors.error.main} />
+                </TouchableOpacity>
+              </>
+            )}
           </View>
         </TouchableOpacity>
       </View>
     );
+  };
+
+  const handleDownloadJSON = async (collection) => {
+    try {
+      // ✅ MOBILE SAFE JSON SHARING
+      const content = JSON.stringify(collection, null, 2);
+      const fileName = `Collection_${collection.customer_name.replace(/\s+/g, '_')}_${Date.now()}.json`;
+      const fileUri = FileSystem.documentDirectory + fileName;
+
+      await FileSystem.writeAsStringAsync(fileUri, content, { encoding: 'utf8' });
+
+      const sharingAvailable = await Sharing.isAvailableAsync();
+      if (sharingAvailable) {
+        await Sharing.shareAsync(fileUri, {
+          mimeType: 'application/json',
+          dialogTitle: 'Export Collection JSON',
+          UTI: 'public.json',
+        });
+      } else {
+        Alert.alert("Error", "Sharing is not available on this device");
+      }
+    } catch (error) {
+      console.error("JSON Export Error:", error);
+      Alert.alert("Export Failed", error.message);
+    }
+  };
+
+  const handleRevert = async (collection) => {
+    const currentCount = revertClicks[collection.id] || 0;
+    const newCount = currentCount + 1;
+
+    if (newCount >= 5) {
+      Alert.alert(
+        "Confirm Revert",
+        "Do you want to revert this synced collection to pending state?",
+        [
+          { text: "Cancel", onPress: () => setRevertClicks(prev => ({ ...prev, [collection.id]: 0 })) },
+          {
+            text: "Revert",
+            onPress: async () => {
+              try {
+                const success = await dbService.revertCollectionToPending(collection.id);
+                if (success) {
+                  // Also remove from SavedOrdersDB if it exists there
+                  if (collection.local_db_id) {
+                    await savedOrdersDbService.deleteSavedTransaction(collection.local_db_id);
+                  }
+
+                  await Promise.all([loadPendingCollections(false), loadSavedCollections()]);
+                  setRevertClicks(prev => {
+                    const next = { ...prev };
+                    delete next[collection.id];
+                    return next;
+                  });
+                  Alert.alert("Success", "Collection reverted to pending.");
+                } else {
+                  Alert.alert("Error", "Failed to revert collection.");
+                }
+              } catch (error) {
+                console.error("Revert Error:", error);
+                Alert.alert("Error", "An unexpected error occurred.");
+              }
+            }
+          }
+        ]
+      );
+    } else {
+      setRevertClicks(prev => ({ ...prev, [collection.id]: newCount }));
+    }
   };
 
   if (loading && !refreshing) {
@@ -509,7 +622,28 @@ export default function UploadScreen() {
           </View>
         </View>
 
-        {collections.length > 0 && (
+        <View style={styles.filterContainer}>
+          <TouchableOpacity
+            style={[styles.filterTab, filterStatus === 'pending' && styles.filterTabActive]}
+            onPress={() => setFilterStatus('pending')}
+          >
+            <Ionicons name="time-outline" size={18} color={filterStatus === 'pending' ? "#FFF" : Colors.warning.main} />
+            <Text style={[styles.filterTabText, filterStatus === 'pending' && styles.filterTabTextActive]}>
+              Pending ({collections.length})
+            </Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={[styles.filterTab, filterStatus === 'saved' && styles.filterTabActive]}
+            onPress={() => setFilterStatus('saved')}
+          >
+            <Ionicons name="cloud-done-outline" size={18} color={filterStatus === 'saved' ? "#FFF" : Colors.success.main} />
+            <Text style={[styles.filterTabText, filterStatus === 'saved' && styles.filterTabTextActive]}>
+              Saved ({savedCollections.length})
+            </Text>
+          </TouchableOpacity>
+        </View>
+
+        {filterStatus === 'pending' && collections.length > 0 && (
           <View style={styles.selectionBar}>
             <TouchableOpacity
               style={styles.selectAllButton}
@@ -531,26 +665,30 @@ export default function UploadScreen() {
           </View>
         )}
 
-        {collections.length === 0 ? (
+        {(filterStatus === 'pending' ? collections : savedCollections).length === 0 ? (
           <View style={styles.emptyContainer}>
-            <Ionicons name="cloud-done-outline" size={64} color={Colors.success.main} />
-            <Text style={styles.emptyTitle}>All Synced!</Text>
+            <Ionicons name={filterStatus === 'pending' ? "cloud-done-outline" : "archive-outline"} size={64} color={filterStatus === 'pending' ? Colors.success.main : Colors.neutral[400]} />
+            <Text style={styles.emptyTitle}>{filterStatus === 'pending' ? "All Synced!" : "No Saved Records"}</Text>
             <Text style={styles.emptySubtitle}>
-              You have no pending collections to upload.
+              {filterStatus === 'pending'
+                ? "You have no pending collections to upload."
+                : "You haven't uploaded any collections recently."}
             </Text>
-            <TouchableOpacity
-              style={styles.addButton}
-              onPress={() => router.push("/Collection/AddCollection")}
-              activeOpacity={0.8}
-            >
-              <Text style={styles.addButtonText}>Add New Payment</Text>
-            </TouchableOpacity>
+            {filterStatus === 'pending' && (
+              <TouchableOpacity
+                style={styles.addButton}
+                onPress={() => router.push("/Collection/AddCollection")}
+                activeOpacity={0.8}
+              >
+                <Text style={styles.addButtonText}>Add New Payment</Text>
+              </TouchableOpacity>
+            )}
           </View>
         ) : (
           <>
             <FlatList
-              data={collections}
-              keyExtractor={(item) => (item.id || Math.random()).toString()}
+              data={filterStatus === 'pending' ? collections : savedCollections}
+              keyExtractor={(item) => (item.id || item.local_id || Math.random()).toString()}
               renderItem={renderCollectionItem}
               contentContainerStyle={styles.listContent}
               showsVerticalScrollIndicator={false}
@@ -559,47 +697,49 @@ export default function UploadScreen() {
               }
             />
 
-            <View style={styles.footer}>
-              <View style={styles.footerButtons}>
-                <TouchableOpacity
-                  style={[
-                    styles.bulkDeleteButton,
-                    (selectedCollections.length === 0 || uploading) && styles.disabledButton
-                  ]}
-                  onPress={handleBulkDelete}
-                  disabled={selectedCollections.length === 0 || uploading}
-                >
-                  <Ionicons name="trash-outline" size={20} color={Colors.error.main} />
-                  <Text style={styles.bulkDeleteText}>Delete</Text>
-                </TouchableOpacity>
+            {filterStatus === 'pending' && (
+              <View style={styles.footer}>
+                <View style={styles.footerButtons}>
+                  <TouchableOpacity
+                    style={[
+                      styles.bulkDeleteButton,
+                      (selectedCollections.length === 0 || uploading) && styles.disabledButton
+                    ]}
+                    onPress={handleBulkDelete}
+                    disabled={selectedCollections.length === 0 || uploading}
+                  >
+                    <Ionicons name="trash-outline" size={20} color={Colors.error.main} />
+                    <Text style={styles.bulkDeleteText}>Delete</Text>
+                  </TouchableOpacity>
 
-                <TouchableOpacity
-                  style={[
-                    styles.uploadButton,
-                    (!isOnline || selectedCollections.length === 0 || uploading) && styles.disabledButton,
-                    { flex: 1 }
-                  ]}
-                  onPress={handleUpload}
-                  disabled={!isOnline || selectedCollections.length === 0 || uploading}
-                >
-                  <View style={[
-                    styles.gradientButton,
-                    (!isOnline || selectedCollections.length === 0 || uploading) && styles.disabledGradient
-                  ]}>
-                    {uploading ? (
-                      <ActivityIndicator color="#FFF" size="small" />
-                    ) : (
-                      <>
-                        <Ionicons name="cloud-upload" size={20} color="#FFF" />
-                        <Text style={styles.uploadButtonText}>
-                          Upload {selectedCollections.length} Items
-                        </Text>
-                      </>
-                    )}
-                  </View>
-                </TouchableOpacity>
+                  <TouchableOpacity
+                    style={[
+                      styles.uploadButton,
+                      (!isOnline || selectedCollections.length === 0 || uploading) && styles.disabledButton,
+                      { flex: 1 }
+                    ]}
+                    onPress={handleUpload}
+                    disabled={!isOnline || selectedCollections.length === 0 || uploading}
+                  >
+                    <View style={[
+                      styles.gradientButton,
+                      (!isOnline || selectedCollections.length === 0 || uploading) && styles.disabledGradient
+                    ]}>
+                      {uploading ? (
+                        <ActivityIndicator color="#FFF" size="small" />
+                      ) : (
+                        <>
+                          <Ionicons name="cloud-upload" size={20} color="#FFF" />
+                          <Text style={styles.uploadButtonText}>
+                            Upload {selectedCollections.length} Items
+                          </Text>
+                        </>
+                      )}
+                    </View>
+                  </TouchableOpacity>
+                </View>
               </View>
-            </View>
+            )}
           </>
         )}
 
@@ -620,7 +760,6 @@ export default function UploadScreen() {
               </View>
 
               <View style={{ padding: 16, alignItems: 'center' }}>
-                {/* Connection Type Toggle */}
                 <View style={{ flexDirection: 'row', backgroundColor: Colors.neutral[200], borderRadius: 8, padding: 4, marginBottom: 16 }}>
                   <TouchableOpacity
                     onPress={() => scanPrinters('ble')}
@@ -629,10 +768,6 @@ export default function UploadScreen() {
                       paddingHorizontal: 20,
                       borderRadius: 6,
                       backgroundColor: connectionType === 'ble' ? '#FFF' : 'transparent',
-                      shadowColor: connectionType === 'ble' ? '#000' : 'transparent',
-                      shadowOpacity: connectionType === 'ble' ? 0.1 : 0,
-                      shadowRadius: 2,
-                      elevation: connectionType === 'ble' ? 2 : 0,
                     }}
                   >
                     <Text style={{ fontWeight: '600', color: connectionType === 'ble' ? Colors.primary.main : Colors.text.secondary }}>Bluetooth</Text>
@@ -644,48 +779,29 @@ export default function UploadScreen() {
                       paddingHorizontal: 20,
                       borderRadius: 6,
                       backgroundColor: connectionType === 'usb' ? '#FFF' : 'transparent',
-                      shadowColor: connectionType === 'usb' ? '#000' : 'transparent',
-                      shadowOpacity: connectionType === 'usb' ? 0.1 : 0,
-                      shadowRadius: 2,
-                      elevation: connectionType === 'usb' ? 2 : 0,
                     }}
                   >
-                    <Text style={{ fontWeight: '600', color: connectionType === 'usb' ? Colors.primary.main : Colors.text.secondary }}>USB / Cable</Text>
+                    <Text style={{ fontWeight: '600', color: connectionType === 'usb' ? Colors.primary.main : Colors.text.secondary }}>USB</Text>
                   </TouchableOpacity>
                 </View>
 
-                {isScanningPrinters && <ActivityIndicator size="large" color={Colors.primary.main} />}
-                {!isScanningPrinters && (
-                  <TouchableOpacity style={{ marginTop: 10 }} onPress={() => scanPrinters(connectionType)}>
-                    <Text style={{ color: Colors.primary.main, fontWeight: '600' }}>Rescan</Text>
-                  </TouchableOpacity>
-                )}
+                {isScanningPrinters && <ActivityIndicator size="small" color={Colors.primary.main} />}
               </View>
 
               <ScrollView style={styles.modalBody}>
                 {printers.map((printer, index) => (
                   <TouchableOpacity
                     key={index}
-                    style={{
-                      padding: 16,
-                      borderBottomWidth: 1,
-                      borderBottomColor: Colors.border.light,
-                      flexDirection: 'row',
-                      justifyContent: 'space-between',
-                      alignItems: 'center'
-                    }}
+                    style={styles.printerItem}
                     onPress={() => connectAndPrintCollection(printer)}
                   >
                     <View>
-                      <Text style={{ fontSize: 16, fontWeight: '600' }}>{printer.device_name || printer.product_id || "Unknown Device"}</Text>
-                      <Text style={{ fontSize: 12, color: Colors.text.secondary }}>{printer.inner_mac_address || printer.vendor_id || "ID: " + index}</Text>
+                      <Text style={styles.printerName}>{printer.device_name || printer.product_id || "Unknown"}</Text>
+                      <Text style={styles.printerAddress}>{printer.inner_mac_address || printer.vendor_id}</Text>
                     </View>
                     <Ionicons name={connectionType === 'ble' ? "bluetooth" : "usb"} size={20} color={Colors.primary.main} />
                   </TouchableOpacity>
                 ))}
-                {printers.length === 0 && !isScanningPrinters && (
-                  <Text style={{ textAlign: 'center', marginTop: 20, color: Colors.text.tertiary }}>No printers found</Text>
-                )}
               </ScrollView>
             </View>
           </View>
@@ -709,68 +825,16 @@ export default function UploadScreen() {
 
               <ScrollView style={styles.modalBody} contentContainerStyle={{ padding: 16 }}>
                 <Text style={styles.editLabel}>Customer: {editingCollection?.customer_name}</Text>
-
-                <Text style={styles.label}>Amount</Text>
-                <View style={styles.inputBox}>
-                  <Ionicons name="cash" size={20} color={Colors.text.tertiary} style={styles.inputIcon} />
-                  <TextInput
-                    style={styles.inputText}
-                    value={editAmount}
-                    onChangeText={setEditAmount}
-                    keyboardType="numeric"
-                    placeholder="Enter amount"
-                  />
-                </View>
-
-                <Text style={[styles.label, { marginTop: 16 }]}>Payment Type</Text>
-                <View style={{ flexDirection: 'row', gap: 10, marginBottom: 16 }}>
-                  <TouchableOpacity
-                    style={[styles.typeButton, editPaymentType === 'Cash' && styles.typeButtonActive]}
-                    onPress={() => setEditPaymentType('Cash')}
-                  >
-                    <Text style={[styles.typeButtonText, editPaymentType === 'Cash' && styles.typeButtonTextActive]}>Cash</Text>
-                  </TouchableOpacity>
-                  <TouchableOpacity
-                    style={[styles.typeButton, editPaymentType === 'Cheque' && styles.typeButtonActive]}
-                    onPress={() => setEditPaymentType('Cheque')}
-                  >
-                    <Text style={[styles.typeButtonText, editPaymentType === 'Cheque' && styles.typeButtonTextActive]}>Cheque</Text>
-                  </TouchableOpacity>
-                </View>
-
-                {editPaymentType === 'Cheque' && (
-                  <>
-                    <Text style={styles.label}>Cheque Number</Text>
-                    <View style={styles.inputBox}>
-                      <Ionicons name="card" size={20} color={Colors.text.tertiary} style={styles.inputIcon} />
-                      <TextInput
-                        style={styles.inputText}
-                        value={editChequeNumber}
-                        onChangeText={setEditChequeNumber}
-                        placeholder="Enter cheque number"
-                      />
-                    </View>
-                  </>
-                )}
-
-                <Text style={[styles.label, { marginTop: 16 }]}>Remarks</Text>
                 <TextInput
-                  style={[styles.inputBox, { height: 80, textAlignVertical: 'top', padding: 10 }]}
-                  value={editRemarks}
-                  onChangeText={setEditRemarks}
-                  multiline
-                  placeholder="Enter remarks"
+                  style={styles.inputText}
+                  value={editAmount}
+                  onChangeText={setEditAmount}
+                  keyboardType="numeric"
+                  placeholder="Amount"
                 />
-
-                <TouchableOpacity
-                  style={styles.updateButton}
-                  onPress={handleUpdate}
-                >
-                  <LinearGradient
-                    colors={Gradients.primary}
-                    style={styles.updateButtonGradient}
-                  >
-                    <Text style={styles.updateButtonText}>Update Collection</Text>
+                <TouchableOpacity style={styles.updateButton} onPress={handleUpdate}>
+                  <LinearGradient colors={Gradients.primary} style={styles.updateButtonGradient}>
+                    <Text style={styles.updateButtonText}>Update</Text>
                   </LinearGradient>
                 </TouchableOpacity>
               </ScrollView>
@@ -778,7 +842,7 @@ export default function UploadScreen() {
           </View>
         </Modal>
       </SafeAreaView>
-    </LinearGradient >
+    </LinearGradient>
   );
 }
 
@@ -846,6 +910,44 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
     padding: Spacing.xl,
+  },
+  emptyTitle: {
+    fontSize: 20,
+    fontWeight: '700',
+    color: Colors.text.primary,
+    marginTop: 16,
+  },
+  filterContainer: {
+    flexDirection: 'row',
+    paddingHorizontal: Spacing.lg,
+    paddingVertical: Spacing.sm,
+    gap: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: Colors.border.light,
+  },
+  filterTab: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 10,
+    borderRadius: 8,
+    backgroundColor: '#F8F9FA',
+    borderWidth: 1,
+    borderColor: Colors.border.light,
+    gap: 8,
+  },
+  filterTabActive: {
+    backgroundColor: Colors.primary.main,
+    borderColor: Colors.primary.main,
+  },
+  filterTabText: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: Colors.text.secondary,
+  },
+  filterTabTextActive: {
+    color: '#FFF',
   },
   emptyTitle: {
     fontSize: Typography.sizes.xl,

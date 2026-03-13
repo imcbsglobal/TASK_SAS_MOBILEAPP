@@ -39,10 +39,12 @@ const Home = ({ navigation }) => {
   const [isPrinterSettingsOpen, setIsPrinterSettingsOpen] = useState(false);
   const [isProductSettingsOpen, setIsProductSettingsOpen] = useState(false);
   const [isPaymentSettingsOpen, setIsPaymentSettingsOpen] = useState(false);
+  const [isPrintFormSettingsOpen, setIsPrintFormSettingsOpen] = useState(false);
   const [paperSize, setPaperSize] = useState(58); // Default 58mm
   const [showStockOnly, setShowStockOnly] = useState(false);
   const [defaultPaymentMethod, setDefaultPaymentMethod] = useState('Cash');
   const [defaultQuantity, setDefaultQuantity] = useState(1); // Default to 1
+  const [printFormType, setPrintFormType] = useState('form1'); // 'form1' | 'form2'
 
   useEffect(() => {
     // Load username from storage
@@ -62,6 +64,7 @@ const Home = ({ navigation }) => {
     loadPrinterSettings();
     loadProductSettings();
     loadPaymentSettings();
+    loadPrintFormSettings();
 
     // Animations
     Animated.parallel([
@@ -187,9 +190,11 @@ const Home = ({ navigation }) => {
       onPress: () => {
         loadPrinterSettings();
         loadPaymentSettings();
+        loadPrintFormSettings();
         setIsPrinterSettingsOpen(false);
         setIsProductSettingsOpen(false);
         setIsPaymentSettingsOpen(false);
+        setIsPrintFormSettingsOpen(false);
         setSettingsModalVisible(true);
       },
       gradient: [Colors.text.secondary, Colors.text.primary],
@@ -295,6 +300,24 @@ const Home = ({ navigation }) => {
       await AsyncStorage.setItem('settings_default_payment_method', method);
     } catch (e) {
       console.log("Error saving payment settings", e);
+    }
+  };
+
+  const loadPrintFormSettings = async () => {
+    try {
+      const val = await AsyncStorage.getItem('settings_print_form_type');
+      if (val) setPrintFormType(val);
+    } catch (e) {
+      console.log("Error loading print form settings", e);
+    }
+  };
+
+  const handlePrintFormSelection = async (formType) => {
+    setPrintFormType(formType);
+    try {
+      await AsyncStorage.setItem('settings_print_form_type', formType);
+    } catch (e) {
+      console.log("Error saving print form settings", e);
     }
   };
 
@@ -414,11 +437,12 @@ const Home = ({ navigation }) => {
 
               {/* Header */}
               <View style={styles.modalHeader}>
-                {isPrinterSettingsOpen || isProductSettingsOpen || isPaymentSettingsOpen ? (
+                {isPrinterSettingsOpen || isProductSettingsOpen || isPaymentSettingsOpen || isPrintFormSettingsOpen ? (
                   <TouchableOpacity onPress={() => {
                     setIsPrinterSettingsOpen(false);
                     setIsProductSettingsOpen(false);
                     setIsPaymentSettingsOpen(false);
+                    setIsPrintFormSettingsOpen(false);
                   }} style={styles.backButton}>
                     <Ionicons name="arrow-back" size={24} color={Colors.text.primary} />
                   </TouchableOpacity>
@@ -427,7 +451,8 @@ const Home = ({ navigation }) => {
                 <Text style={styles.modalTitle}>
                   {isPrinterSettingsOpen ? "Printer Settings" :
                     (isProductSettingsOpen ? "Product Settings" :
-                      (isPaymentSettingsOpen ? "Payment Settings" : "Settings"))}
+                      (isPaymentSettingsOpen ? "Payment Settings" :
+                        (isPrintFormSettingsOpen ? "Print Form" : "Settings")))}
                 </Text>
 
                 <TouchableOpacity onPress={() => setSettingsModalVisible(false)}>
@@ -437,7 +462,7 @@ const Home = ({ navigation }) => {
 
               {/* Content Logic */}
               {/* Content Logic */}
-              {!isPrinterSettingsOpen && !isProductSettingsOpen && !isPaymentSettingsOpen ? (
+              {!isPrinterSettingsOpen && !isProductSettingsOpen && !isPaymentSettingsOpen && !isPrintFormSettingsOpen ? (
                 /* Main Settings Menu */
                 <View>
                   <TouchableOpacity
@@ -451,6 +476,26 @@ const Home = ({ navigation }) => {
                       <View>
                         <Text style={styles.menuItemTitle}>Printer Settings</Text>
                         <Text style={styles.menuItemSubtitle}>Configure paper size & width</Text>
+                      </View>
+                    </View>
+                    <Ionicons name="chevron-forward" size={24} color={Colors.text.tertiary} />
+                  </TouchableOpacity>
+
+                  {/* Print Form Settings */}
+                  <TouchableOpacity
+                    style={styles.menuItem}
+                    onPress={() => setIsPrintFormSettingsOpen(true)}
+                    activeOpacity={0.7}
+                  >
+                    <View style={styles.menuItemLeft}>
+                      <View style={[styles.menuIconContainer, { backgroundColor: 'rgba(99, 102, 241, 0.08)' }]}>
+                        <Ionicons name="document-text-outline" size={24} color={Colors.primary.main} />
+                      </View>
+                      <View>
+                        <Text style={styles.menuItemTitle}>Print Form</Text>
+                        <Text style={styles.menuItemSubtitle}>
+                          {printFormType === 'form2' ? 'Form 2 selected (No HSN/GST)' : 'Form 1 selected (With HSN/GST)'}
+                        </Text>
                       </View>
                     </View>
                     <Ionicons name="chevron-forward" size={24} color={Colors.text.tertiary} />
@@ -577,6 +622,88 @@ const Home = ({ navigation }) => {
                   <Text style={styles.helperText}>
                     This method will be auto-selected when you create a new order.
                   </Text>
+                </View>
+              ) : isPrintFormSettingsOpen ? (
+                /* Inner Print Form Settings View */
+                <View style={styles.settingItem}>
+                  <Text style={[styles.settingLabel, { marginBottom: 12 }]}>Select Print Format</Text>
+                  <Text style={[styles.helperText, { marginBottom: 16 }]}>
+                    Choose which receipt layout to use when printing orders.
+                  </Text>
+
+                  {/* Form 1 Card */}
+                  <TouchableOpacity
+                    style={[
+                      styles.sizeOption,
+                      { flexDirection: 'column', alignItems: 'flex-start', padding: 12, marginBottom: 12 },
+                      printFormType === 'form1' && styles.sizeOptionSelected
+                    ]}
+                    onPress={() => handlePrintFormSelection('form1')}
+                    activeOpacity={0.8}
+                  >
+                    <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 8, gap: 8 }}>
+                      <Ionicons
+                        name={printFormType === 'form1' ? 'radio-button-on' : 'radio-button-off'}
+                        size={22}
+                        color={printFormType === 'form1' ? Colors.primary.main : Colors.text.tertiary}
+                      />
+                      <Text style={[styles.sizeOptionTitle, printFormType === 'form1' && styles.sizeOptionTitleSelected]}>
+                        Form 1  —  With HSN / GST
+                      </Text>
+                    </View>
+                    <View style={styles.printPreviewBox}>
+                      <Text style={styles.printPreviewText}>{`Company Name
+--------------------------------
+Item           Qty      Total
+--------------------------------
+PRODUCT NAME   1.000    50.00
+  HSN:1234 GST:12%
+PRODUCT 2      2.000   100.00
+  HSN:5678 GST:5%
+--------------------------------
+TOTAL:              150.00`}</Text>
+                    </View>
+                  </TouchableOpacity>
+
+                  {/* Form 2 Card */}
+                  <TouchableOpacity
+                    style={[
+                      styles.sizeOption,
+                      { flexDirection: 'column', alignItems: 'flex-start', padding: 12, marginBottom: 4 },
+                      printFormType === 'form2' && styles.sizeOptionSelected
+                    ]}
+                    onPress={() => handlePrintFormSelection('form2')}
+                    activeOpacity={0.8}
+                  >
+                    <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 8, gap: 8 }}>
+                      <Ionicons
+                        name={printFormType === 'form2' ? 'radio-button-on' : 'radio-button-off'}
+                        size={22}
+                        color={printFormType === 'form2' ? Colors.primary.main : Colors.text.tertiary}
+                      />
+                      <Text style={[styles.sizeOptionTitle, printFormType === 'form2' && styles.sizeOptionTitleSelected]}>
+                        Form 2  —  No HSN / GST
+                      </Text>
+                    </View>
+                    <View style={styles.printPreviewBox}>
+                      <Text style={styles.printPreviewText}>{`Company Name
+--------------------------------
+Sales Receipt
+--------------------------------
+Inv Date: 01/01/2025 10:30
+Inv No  : SP991   Salesman: ALI
+Customer: FOOD BASKET
+--------------------------------
+NO ITEM         QTY  PRICE TOTAL
+--------------------------------
+1  PRODUCT NAME 2.00  28.00 56.00
+2  PRODUCT 2    1.00  35.00 35.00
+--------------------------------
+TOTAL:                    91.00
+--------------------------------
+         Thank You!`}</Text>
+                    </View>
+                  </TouchableOpacity>
                 </View>
               ) : (
                 /* Inner Printer Settings View */
@@ -931,6 +1058,20 @@ const styles = StyleSheet.create({
   sizeOptionSubtitle: {
     fontSize: 10,
     color: Colors.text.tertiary
+  },
+  printPreviewBox: {
+    backgroundColor: '#f8f8f8',
+    borderRadius: 6,
+    padding: 8,
+    width: '100%',
+    borderWidth: 1,
+    borderColor: '#e0e0e0',
+  },
+  printPreviewText: {
+    fontFamily: 'monospace',
+    fontSize: 9,
+    color: '#333',
+    lineHeight: 14,
   },
   footerContainer: {
     alignItems: 'center',

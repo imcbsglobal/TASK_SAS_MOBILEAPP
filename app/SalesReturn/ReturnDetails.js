@@ -263,7 +263,7 @@ const PRICE_FIELD_MAP = {
   'CO': 'cost'
 };
 
-const REMARK_OPTIONS = ["NONE", "EXPIRED", "SHORT EXPIRY", "DAMAGE", "EXCHANGE"];
+const REMARK_OPTIONS = ["Expired", "ShortExpiry", "Damage", "Exchange"];
 
 
 export default function ReturnDetails() {
@@ -316,10 +316,13 @@ export default function ReturnDetails() {
 
 
   const [editingQty, setEditingQty] = useState({});
+  const [editingRemarks, setEditingRemarks] = useState({}); // { productId: "manual note" }
   const [selectedImage, setSelectedImage] = useState(null);
   const [imageModalVisible, setImageModalVisible] = useState(false);
   const [currentImageIndex, setCurrentImageIndex] = useState(0);
   const [isOnline, setIsOnline] = useState(true);
+  const [activeRemarkProductId, setActiveRemarkProductId] = useState(null);
+  const [remarkModalVisible, setRemarkModalVisible] = useState(false);
 
   // Pagination state for optimized loading
   const [loadedCount, setLoadedCount] = useState(0);
@@ -433,6 +436,11 @@ export default function ReturnDetails() {
     setShowCustomerModal(false);
     setCustomerSearchQuery("");
     console.log('[ReturnDetails] Changed customer to:', selected.name);
+  };
+
+  const openRemarkModal = (productId) => {
+    setActiveRemarkProductId(productId);
+    setRemarkModalVisible(true);
   };
 
   // Reload products when appSettings changes and barcode_based_list is true
@@ -1024,6 +1032,19 @@ export default function ReturnDetails() {
       }, 500);
     }
   }, [scanned, timestamp, handleScannedBarcode]);
+
+  // Instant Search Debounce logic
+  useEffect(() => {
+    // Only trigger if query has changed and is different from current filter search
+    if (query !== filters.search) {
+      const timer = setTimeout(() => {
+        console.log('[ReturnDetails] Instant search triggered for:', query);
+        setFilters(prev => ({ ...prev, search: query }));
+      }, 500); // 500ms debounce
+
+      return () => clearTimeout(timer);
+    }
+  }, [query]);
 
   // Handle search by text
   const handleSearch = () => {
@@ -1951,7 +1972,7 @@ export default function ReturnDetails() {
                 const cartItem = cart.find(c => c.product.id === item.id);
                 const currentQty = cartItem?.qty || 0;
                 const displayValue = editingQty[item.id] !== undefined ? editingQty[item.id] : String(currentQty);
-                const inStock = true;
+                const inStock = true; // Always true for return pages for now
                 const stockQty = item.stock || 0;
                 const isInCart = currentQty > 0;
                 const isHighlighted = highlightedProductId === item.id;
@@ -1977,14 +1998,24 @@ export default function ReturnDetails() {
                     defaultQuantity={defaultQuantity}
                     editingQty={editingQty}
                     addToCart={(product, qty) => {
+                      const remark = editingRemarks[product.id] || "";
                       if (appSettings?.order_rate_editable) {
                         openQuantityModal(product, qty);
                       } else {
-                        addToCart(product, qty, null, false);
+                        addToCart(product, qty, null, false, remark);
+                        // Clear remark after adding
+                        setEditingRemarks(prev => {
+                          const newState = { ...prev };
+                          delete newState[product.id];
+                          return newState;
+                        });
                       }
                     }}
+                    editingRemarks={editingRemarks}
+                    setEditingRemarks={setEditingRemarks}
                     openImageModal={openImageModal}
                     openDetailsModal={openDetailsModal}
+                    openRemarkModal={openRemarkModal}
                   />
                 );
               }}
@@ -2281,7 +2312,7 @@ export default function ReturnDetails() {
 
         {/* Quantity Selection Modal */}
         <Modal
-          visible={quantityModalVisible}
+          visible={!!quantityModalVisible}
           transparent={true}
           animationType="fade"
           onRequestClose={closeQuantityModal}
@@ -2356,7 +2387,6 @@ export default function ReturnDetails() {
                           style={styles.quantityInput}
                           value={String(tempQuantity)}
                           keyboardType="numeric"
-                          autoFocus={true}
                           onChangeText={(text) => {
                             // Allow decimals
                             const cleaned = text.replace(/[^0-9.]/g, '');
@@ -2365,7 +2395,6 @@ export default function ReturnDetails() {
                             if (parts.length > 2) return;
                             setTempQuantity(cleaned);
                           }}
-                          selectTextOnFocus={true}
                         />
 
                         <TouchableOpacity
@@ -2444,7 +2473,6 @@ export default function ReturnDetails() {
                           placeholderTextColor={Colors.text.tertiary}
                           value={tempRemark}
                           onChangeText={setTempRemark}
-                          multiline={false}
                         />
                       </View>
 
@@ -2471,7 +2499,7 @@ export default function ReturnDetails() {
 
         {/* Image Modal */}
         <Modal
-          visible={imageModalVisible}
+          visible={!!imageModalVisible}
           transparent={true}
           onRequestClose={closeImageModal}
         >
@@ -2491,7 +2519,7 @@ export default function ReturnDetails() {
 
         {/* Customer Selection Modal */}
         <Modal
-          visible={showCustomerModal}
+          visible={!!showCustomerModal}
           animationType="fade"
           transparent={true}
           onRequestClose={() => setShowCustomerModal(false)}
@@ -2513,7 +2541,6 @@ export default function ReturnDetails() {
                   placeholderTextColor={Colors.text.tertiary}
                   value={customerSearchQuery}
                   onChangeText={setCustomerSearchQuery}
-                  autoFocus={false}
                 />
               </View>
 
@@ -2550,7 +2577,7 @@ export default function ReturnDetails() {
 
         {/* Batch Details Modal */}
         <Modal
-          visible={detailsModalVisible}
+          visible={!!detailsModalVisible}
           animationType="slide"
           transparent={true}
           onRequestClose={closeDetailsModal}
@@ -2753,13 +2780,49 @@ export default function ReturnDetails() {
           </View>
         </Modal>
 
+        {/* Remark/Note Selection Modal */}
+        <Modal
+          visible={remarkModalVisible}
+          transparent={true}
+          animationType="fade"
+          onRequestClose={() => setRemarkModalVisible(false)}
+        >
+          <TouchableOpacity
+            style={styles.modalOverlay}
+            activeOpacity={1}
+            onPress={() => setRemarkModalVisible(false)}
+          >
+            <View style={styles.remarkModalContent}>
+              <View style={styles.remarkModalHeader}>
+                <Text style={styles.remarkModalTitle}>Select Remark</Text>
+                <TouchableOpacity onPress={() => setRemarkModalVisible(false)}>
+                  <Ionicons name="close" size={24} color={Colors.text.secondary} />
+                </TouchableOpacity>
+              </View>
+              {REMARK_OPTIONS.map((option) => (
+                <TouchableOpacity
+                  key={option}
+                  style={styles.remarkOptionItem}
+                  onPress={() => {
+                    setEditingRemarks(prev => ({ ...prev, [activeRemarkProductId]: option }));
+                    setRemarkModalVisible(false);
+                  }}
+                >
+                  <Text style={styles.remarkOptionText}>{option}</Text>
+                  <Ionicons name="chevron-forward" size={16} color={Colors.neutral[300]} />
+                </TouchableOpacity>
+              ))}
+            </View>
+          </TouchableOpacity>
+        </Modal>
+
       </SafeAreaView >
     </LinearGradient >
   );
 }
 
 // Separated Component for better performance
-const CodeItem = ({ item, inStock, stockQty, currentQty, displayValue, isInCart, isHighlighted, setEditingQty, changeQty, removeItem, addToCart, openImageModal, openDetailsModal, defaultQuantity, editingQty }) => (
+const CodeItem = ({ item, inStock, stockQty, currentQty, displayValue, isInCart, isHighlighted, setEditingQty, changeQty, removeItem, addToCart, openImageModal, openDetailsModal, defaultQuantity, editingQty, editingRemarks, setEditingRemarks, openRemarkModal }) => (
   <View style={[
     styles.productCard,
     isInCart && styles.productCardInCart,
@@ -2876,72 +2939,101 @@ const CodeItem = ({ item, inStock, stockQty, currentQty, displayValue, isInCart,
             </TouchableOpacity>
           </View>
         ) : (
-          <View style={{ flexDirection: 'row', alignItems: 'stretch', gap: 8, height: 44, width: '100%' }}>
-            {/* Quantity Input for not-in-cart items */}
-            <TextInput
-              style={{
-                flex: 0.35,
-                borderWidth: 1,
-                borderColor: Colors.border.medium,
-                borderRadius: BorderRadius.md,
-                textAlign: 'center',
-                fontSize: 16,
-                fontWeight: '600',
-                color: Colors.text.primary,
-                backgroundColor: '#FFF'
-              }}
-              value={editingQty[item.id] !== undefined ? String(editingQty[item.id]) : String(defaultQuantity || 1)}
-              keyboardType="numeric"
-              selectTextOnFocus={true}
-              onChangeText={(text) => {
-                const cleaned = text.replace(/[^0-9.]/g, '');
-                const parts = cleaned.split('.');
-                if (parts.length > 2) return;
-                setEditingQty(prev => ({ ...prev, [item.id]: cleaned }));
-              }}
-              onFocus={() => {
-                setEditingQty(prev => ({ ...prev, [item.id]: prev[item.id] !== undefined ? String(prev[item.id]) : String(defaultQuantity || 1) }));
-              }}
-              onBlur={() => {
-                setEditingQty(prev => {
-                  const newState = { ...prev };
-                  if (!newState[item.id] || isNaN(parseFloat(newState[item.id])) || parseFloat(newState[item.id]) <= 0) {
-                    newState[item.id] = String(defaultQuantity || 1);
-                  }
-                  return newState;
-                });
-              }}
-            />
-            <TouchableOpacity
-              style={[styles.addButtonLarge, !inStock && styles.disabledAddButton, { flex: 0.65, height: '100%', marginTop: 0 }]}
-              onPress={(e) => {
-                const qtyStr = editingQty[item.id] !== undefined ? String(editingQty[item.id]) : String(defaultQuantity || 1);
-                const qtyVal = parseFloat(qtyStr);
-                const finalQty = (!isNaN(qtyVal) && qtyVal > 0) ? qtyVal : (defaultQuantity || 1);
-                addToCart(item, finalQty);
-                setEditingQty(prev => {
-                  const newState = { ...prev };
-                  delete newState[item.id];
-                  return newState;
-                });
-              }}
-              disabled={!inStock}
-            >
-              <LinearGradient
-                colors={inStock ? Gradients.accent : [Colors.neutral[200], Colors.neutral[200]]}
-                style={[styles.addButtonGradient, { height: '100%', paddingVertical: 0, justifyContent: 'center' }]}
+          <View style={{ width: '100%' }}>
+            {/* Row 1: Quantity and Add Button */}
+            <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 8, height: 44 }}>
+              <TextInput
+                style={{
+                  width: 70, // Fixed width for Qty
+                  height: '100%',
+                  borderWidth: 1,
+                  borderColor: Colors.border.medium,
+                  borderRadius: BorderRadius.md,
+                  textAlign: 'center',
+                  fontSize: 16,
+                  fontWeight: '600',
+                  color: Colors.text.primary,
+                  backgroundColor: '#FFF'
+                }}
+                value={editingQty[item.id] !== undefined ? String(editingQty[item.id]) : String(defaultQuantity || 1)}
+                keyboardType="numeric"
+                onChangeText={(text) => {
+                  const cleaned = text.replace(/[^0-9.]/g, '');
+                  const parts = cleaned.split('.');
+                  if (parts.length > 2) return;
+                  setEditingQty(prev => ({ ...prev, [item.id]: cleaned }));
+                }}
+                onFocus={() => {
+                  setEditingQty(prev => ({ ...prev, [item.id]: prev[item.id] !== undefined ? String(prev[item.id]) : String(defaultQuantity || 1) }));
+                }}
+                onBlur={() => {
+                  setEditingQty(prev => {
+                    const newState = { ...prev };
+                    if (!newState[item.id] || isNaN(parseFloat(newState[item.id])) || parseFloat(newState[item.id]) <= 0) {
+                      newState[item.id] = String(defaultQuantity || 1);
+                    }
+                    return newState;
+                  });
+                }}
+              />
+              <TouchableOpacity
+                style={[styles.addButtonLarge, (inStock === false) && styles.disabledAddButton, { flex: 1, marginLeft: 8, height: '100%', marginTop: 0 }]}
+                onPress={(e) => {
+                  const qtyStr = editingQty[item.id] !== undefined ? String(editingQty[item.id]) : String(defaultQuantity || 1);
+                  const qtyVal = parseFloat(qtyStr);
+                  const finalQty = (!isNaN(qtyVal) && qtyVal > 0) ? qtyVal : (defaultQuantity || 1);
+                  addToCart(item, finalQty);
+                  setEditingQty(prev => {
+                    const newState = { ...prev };
+                    delete newState[item.id];
+                    return newState;
+                  });
+                }}
+                disabled={inStock === false}
               >
-                <Ionicons name="cart-outline" size={18} color={inStock ? '#FFF' : Colors.text.tertiary} />
-                <Text style={[styles.addButtonTextLarge, !inStock && { color: Colors.text.tertiary }, { fontSize: 13, marginLeft: 4 }]}>
-                  {inStock ? 'Add' : 'Stock'}
-                </Text>
-              </LinearGradient>
-            </TouchableOpacity>
+                <LinearGradient
+                  colors={inStock ? Gradients.accent : [Colors.neutral[200], Colors.neutral[200]]}
+                  style={[styles.addButtonGradient, { height: '100%', paddingVertical: 0, justifyContent: 'center' }]}
+                >
+                  <Ionicons name="cart-outline" size={18} color={inStock ? '#FFF' : Colors.text.tertiary} />
+                  <Text style={[styles.addButtonTextLarge, (inStock === false) && { color: Colors.text.tertiary }, { fontSize: 13, marginLeft: 4 }]}>
+                    {inStock ? 'Add to Cart' : 'Out of Stock'}
+                  </Text>
+                </LinearGradient>
+              </TouchableOpacity>
+            </View>
+
+            {/* Row 2: Note with Selector */}
+            <View style={{ flexDirection: 'row', alignItems: 'center', height: 44 }}>
+              <View style={{ flex: 1, flexDirection: 'row', alignItems: 'center', borderWidth: 1, borderColor: Colors.border.medium, borderRadius: BorderRadius.md, backgroundColor: '#FFF', height: '100%' }}>
+                <TextInput
+                  style={{
+                    flex: 1,
+                    paddingHorizontal: 8,
+                    fontSize: 13,
+                    color: Colors.text.primary,
+                    height: '100%'
+                  }}
+                  placeholder="Return Note/Remark..."
+                  placeholderTextColor={Colors.text.tertiary}
+                  value={editingRemarks[item.id] || ""}
+                  onChangeText={(text) => {
+                    setEditingRemarks(prev => ({ ...prev, [item.id]: text }));
+                  }}
+                />
+                <TouchableOpacity
+                  onPress={() => openRemarkModal(item.id)}
+                  style={{ padding: 10, borderLeftWidth: 1, borderLeftColor: Colors.border.light }}
+                >
+                  <Ionicons name="chevron-down-circle" size={20} color={Colors.accent.main} />
+                </TouchableOpacity>
+              </View>
+            </View>
           </View>
         )}
       </View>
     </View>
-  </View>
+  </View >
 );
 
 const styles = StyleSheet.create({
@@ -3191,23 +3283,22 @@ const styles = StyleSheet.create({
   detailsLinkButton: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 2,
     paddingVertical: 2,
   },
   detailsLinkText: {
     fontSize: 10,
     color: Colors.accent.main,
     fontWeight: '600',
+    marginLeft: 2,
   },
   actionsContainer: {
-    gap: 4,
     alignItems: 'center',
+    marginTop: 4,
   },
   stockDisplayContainer: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    gap: 4,
     marginBottom: 2,
   },
   stockLabel: {
@@ -3230,7 +3321,6 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     paddingVertical: 6,
-    gap: 6,
   },
   addButtonTextLarge: {
     color: '#FFF',
@@ -3405,10 +3495,50 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   filterItemCount: {
-    fontSize: Typography.sizes.sm,
-    color: Colors.text.tertiary,
-    backgroundColor: Colors.neutral[50],
     paddingHorizontal: 8,
+    borderRadius: 4,
+  },
+
+  // Remark Modal Styles
+  remarkModalContent: {
+    backgroundColor: '#FFF',
+    borderTopLeftRadius: BorderRadius.xl,
+    borderTopRightRadius: BorderRadius.xl,
+    padding: Spacing.lg,
+    paddingBottom: Spacing['3xl'] || 40, // Increased padding to clear navigation bar
+    width: '100%',
+    ...Shadows.lg,
+  },
+  remarkModalHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: Spacing.lg,
+  },
+  remarkModalTitle: {
+    fontSize: Typography.sizes.lg,
+    fontWeight: '700',
+    color: Colors.text.primary,
+  },
+  remarkOptionItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingVertical: Spacing.md,
+    borderBottomWidth: 1,
+    borderBottomColor: Colors.border.light,
+  },
+  remarkOptionText: {
+    fontSize: Typography.sizes.base,
+    color: Colors.text.primary,
+    fontWeight: '500',
+  },
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.5)',
+    justifyContent: 'flex-end',
+  },
+  filterItemCountText: {
     paddingVertical: 2,
     borderRadius: 12,
     minWidth: 30,
@@ -3603,6 +3733,7 @@ const styles = StyleSheet.create({
     borderRadius: BorderRadius.full,
     overflow: 'hidden',
     ...Shadows.colored.success,
+    
   },
   quantityConfirmGradient: {
     flexDirection: 'row',

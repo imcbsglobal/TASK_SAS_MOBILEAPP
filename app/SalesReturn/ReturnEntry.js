@@ -439,12 +439,12 @@ export default function EntryScreen() {
     router.push({
       pathname: "/SalesReturn/ReturnDetails",
       params: {
-        area: selectedArea,
+        area: selectedCustomer.place || selectedCustomer.area || selectedArea || "",
         customer: selectedCustomer.name,
         customerCode: selectedCustomer.code,
         payment: selectedPayment,
-        priceCode: selectedPriceCode, // Pass selected price code
-        type: 'Return'
+        type: 'Return',
+        priceCode: selectedPriceCode
       },
     });
   };

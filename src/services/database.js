@@ -1228,6 +1228,10 @@ class DatabaseService {
         }
     }
 
+    async getSavedCollections() {
+        return this.getOfflineCollections(true);
+    }
+
     async markCollectionAsSynced(localId) {
         try {
             await this.db.runAsync('UPDATE offline_collections SET synced = 1, synced_at = ? WHERE local_id = ?',
@@ -1235,6 +1239,17 @@ class DatabaseService {
             return true;
         } catch (error) {
             console.error('[DB] Error marking collection synced:', error);
+            return false;
+        }
+    }
+
+    async revertCollectionToPending(localId) {
+        try {
+            await this.db.runAsync('UPDATE offline_collections SET synced = 0, synced_at = NULL WHERE local_id = ?',
+                [localId]);
+            return true;
+        } catch (error) {
+            console.error('[DB] Error reverting collection:', error);
             return false;
         }
     }
@@ -1267,15 +1282,23 @@ class DatabaseService {
     async cleanupCollections() {
         try {
             if (!this.db) return;
-            // Delete all collections older than 3 days
-            // We use 'now', '-3 days' to catch everything older than 3 days
-            // The date field is stored in ISO format (YYYY-MM-DDTHH:MM:SS)
-            console.log('[DB] Running collections cleanup (3 day policy)...');
-            const result = await this.db.runAsync(
-                "DELETE FROM offline_collections WHERE date < datetime('now', '-3 days')"
+
+            // 1. Keep synced collections for 48 hours for the "Saved" section
+            const FORTY_EIGHT_HOURS_MS = 48 * 60 * 60 * 1000;
+            const cutoffTime = new Date(Date.now() - FORTY_EIGHT_HOURS_MS).toISOString();
+
+            const resultSynced = await this.db.runAsync(
+                'DELETE FROM offline_collections WHERE synced = 1 AND synced_at < ?',
+                [cutoffTime]
             );
-            if (result.changes > 0) {
-                console.log(`[DB] Cleaned up ${result.changes} old collections`);
+
+            // 2. Keep un-synced collections for at least 7 days for safety
+            const resultPending = await this.db.runAsync(
+                "DELETE FROM offline_collections WHERE synced = 0 AND date < datetime('now', '-7 days')"
+            );
+
+            if ((resultSynced?.changes || 0) > 0 || (resultPending?.changes || 0) > 0) {
+                console.log(`[DB] Cleanup complete. Synced removed: ${resultSynced?.changes || 0}, Pending removed: ${resultPending?.changes || 0}`);
             }
         } catch (error) {
             console.error('[DB] Error cleaning up collections:', error);
