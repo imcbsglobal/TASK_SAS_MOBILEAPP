@@ -1003,11 +1003,11 @@ export default function OrderDetails() {
       // Clear the scanned param after processing
       setTimeout(() => {
         router.setParams({
-          area,
-          customer,
-          customerCode,
+          area: currentArea,
+          customer: currentCustomer,
+          customerCode: currentCustomerCode,
           type,
-          payment,
+          payment: currentPayment,
           scanned: undefined,
           timestamp: undefined
         });
@@ -1565,14 +1565,15 @@ export default function OrderDetails() {
         "Order Placed Successfully",
         `Order placed for ${currentCustomer}\nTotal:  ${order.total.toFixed(2)}`,
         [
+          
+          {
+            text: "Continue Shopping",
+            style: "cancel"
+          },
           {
             text: "View Orders",
             onPress: () => router.push("/Order/PlaceOrder")
           },
-          {
-            text: "Continue Shopping",
-            style: "cancel"
-          }
         ]
       );
     } catch (error) {
@@ -1602,7 +1603,7 @@ export default function OrderDetails() {
           style={styles.scanActionBtn}
           onPress={() => router.push({
             pathname: "/Order/Scanner",
-            params: { area, customer, customerCode, type, payment }
+            params: { area: currentArea, customer: currentCustomer, customerCode: currentCustomerCode, type, payment: currentPayment }
           })}
         >
           <LinearGradient

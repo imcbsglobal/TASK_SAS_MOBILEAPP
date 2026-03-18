@@ -162,7 +162,7 @@ export default function PlaceOrder() {
         'Authorization': `Bearer ${authToken}`
       };
 
-      const response = await fetch(`https://tasksas.com/api/item-orders/list?client_id=${clientId}`, {
+      const response = await fetch(`https://tasksas.com/api/item-orders/list-all?client_id=${clientId}`, {
         method: 'GET',
         headers: headers
       });
@@ -172,41 +172,42 @@ export default function PlaceOrder() {
       }
 
       const json = await response.json();
-      const apiData = Array.isArray(json) ? json : (json.orders || json.data || []);
+      const apiData = json.orders || [];
 
       console.log('Current User:', username);
 
       // Map API data to App's Order Structure
       const mappedOrders = apiData
         .filter(apiOrder => {
-          if (!username) return false; // If no user is logged in, show nothing
+          if (!username) return false;
           const apiUser = apiOrder.username ? String(apiOrder.username).trim() : '';
           const currentUser = String(username).trim();
 
-          // Separate Orders from Returns based on payment_type
           const isReturn = apiOrder.payment_type === 'Return';
           if (isReturn) return false;
 
-          // Case insensitive comparison for user
           return apiUser.toLowerCase() === currentUser.toLowerCase();
         })
         .map(apiOrder => {
           const items = apiOrder.items || [];
           const calcTotal = items.reduce((sum, item) => sum + (parseFloat(item.amount) || 0), 0);
+          const apiDateStr = apiOrder.created_date || "";
+          const apiTimeStr = apiOrder.created_time || "";
+          const fullTimestamp = (apiDateStr && apiTimeStr) ? `${apiDateStr}T${apiTimeStr}` : new Date().toISOString();
 
           return {
-            id: apiOrder.order_id, // Use API Order ID
-            isApiOrder: true,      // Flag to identify source
+            id: apiOrder.order_id,
+            isApiOrder: true,
             customer: apiOrder.customer_name,
             customerCode: apiOrder.customer_code,
             area: apiOrder.area,
             type: 'Order',
             payment: apiOrder.payment_type,
             remark: apiOrder.remark,
-            status: 'uploaded',
+            status: apiOrder.status || 'uploaded',
             uploadStatus: 'uploaded',
-            timestamp: `${apiOrder.created_date}T${apiOrder.created_time}`,
-            uploadedAt: `${apiOrder.created_date}T${apiOrder.created_time}`,
+            timestamp: fullTimestamp,
+            uploadedAt: fullTimestamp,
             total: calcTotal,
             items: items.map(item => ({
               name: item.product_name,
@@ -664,7 +665,20 @@ export default function PlaceOrder() {
               if (uploadResult.success) {
                 // Save locally for 2 days - non-blocking for speed
                 savedOrdersDbService.saveTransactionLocally(orderId, 'Order', order).then(() => loadSavedOrders());
-                Alert.alert("Success", "Order uploaded successfully!");
+                Alert.alert(
+                  "Upload Successful",
+                  "Order uploaded successfully!",
+                  [
+                    {
+                      text: "View Uploaded",
+                      onPress: () => setFilterStatus('uploaded')
+                    },
+                    {
+                      text: "Go Home",
+                      onPress: () => router.replace('/(tabs)/Home')
+                    }
+                  ]
+                );
               } else {
                 // Check for Server Error (500) which usually means expired token/session
                 if (uploadResult.error && uploadResult.error.includes('500')) {
@@ -738,6 +752,9 @@ export default function PlaceOrder() {
       };
 
       const doPrint = async (toPrint) => {
+        if (formType === 'form3') {
+          return printerService.printOrderForm3(toPrint);
+        }
         if (formType === 'form2') {
           return printerService.printOrderForm2(toPrint);
         }
@@ -918,7 +935,9 @@ export default function PlaceOrder() {
       if (selectedOrderToPrint) {
         const formType = selectedOrderToPrint._formType || 'form1';
         setTimeout(() => {
-          if (formType === 'form2') {
+          if (formType === 'form3') {
+            printerService.printOrderForm3(selectedOrderToPrint);
+          } else if (formType === 'form2') {
             printerService.printOrderForm2(selectedOrderToPrint);
           } else {
             printerService.printOrder(selectedOrderToPrint);
@@ -949,8 +968,8 @@ export default function PlaceOrder() {
   }
 
   function getStatusBadgeConfig(status) {
-    if (status === 'uploaded' || status === 'uploaded to server') {
-      return { gradient: Gradients.success, icon: 'cloud-done', text: 'Uploaded' };
+    if (status === 'uploaded' || status === 'uploaded to server' || status === 'completed') {
+      return { gradient: Gradients.success, icon: 'cloud-done', text: status === 'completed' ? 'Completed' : 'Uploaded' };
     } else if (status === 'partial') {
       return { gradient: [Colors.warning.main, Colors.warning.main], icon: 'cloud-upload', text: 'Partial' };
     } else if (status === 'failed') {
@@ -1313,6 +1332,9 @@ export default function PlaceOrder() {
             <TouchableOpacity style={styles.iconButton} onPress={handleRefresh}>
               <Ionicons name="refresh" size={22} color={Colors.primary.main} />
             </TouchableOpacity>
+            <TouchableOpacity style={styles.iconButton} onPress={() => router.replace('/(tabs)/Home')}>
+              <Ionicons name="home" size={22} color={Colors.primary.main} />
+            </TouchableOpacity>
           </View>
         </View>
 
@@ -1419,6 +1441,7 @@ export default function PlaceOrder() {
                 <FlatList
                   data={printers}
                   keyExtractor={item => item.inner_mac_address || item.vendor_id || Math.random().toString()}
+                  contentContainerStyle={{ paddingBottom: 40 }}
                   renderItem={({ item }) => (
                     <TouchableOpacity style={{ padding: 15, borderBottomWidth: 1, borderColor: '#eee' }} onPress={() => connectAndPrint(item)}>
                       <Text style={{ fontWeight: 'bold' }}>{item.device_name || item.product_name || "Unknown"}</Text>

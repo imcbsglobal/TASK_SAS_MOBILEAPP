@@ -1003,11 +1003,11 @@ export default function SalesDetails() {
       // Clear the scanned param after processing
       setTimeout(() => {
         router.setParams({
-          area,
-          customer,
-          customerCode,
+          area: currentArea,
+          customer: currentCustomer,
+          customerCode: currentCustomerCode,
           type,
-          payment,
+          payment: currentPayment,
           scanned: undefined,
           timestamp: undefined
         });
@@ -1583,13 +1583,14 @@ export default function SalesDetails() {
         `Order placed for ${currentCustomer}\nTotal:  ${order.total.toFixed(2)}`,
         [
           {
+            text: "Continue Shopping",
+            style: "cancel"
+          },
+          {
             text: "View Orders",
             onPress: () => router.push("/Sales/PlaceSales")
           },
-          {
-            text: "Continue Shopping",
-            style: "cancel"
-          }
+          
         ]
       );
     } catch (error) {

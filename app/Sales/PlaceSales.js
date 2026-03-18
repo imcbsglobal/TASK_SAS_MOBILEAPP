@@ -161,7 +161,7 @@ export default function PlaceSales() {
         'Authorization': `Bearer ${authToken}`
       };
 
-      const response = await fetch('https://tasksas.com/api/sales/list', {
+      const response = await fetch('https://tasksas.com/api/sales/list-all', {
         method: 'GET',
         headers: headers
       });
@@ -171,38 +171,39 @@ export default function PlaceSales() {
       }
 
       const json = await response.json();
-      const apiData = json.sales || []; // Use 'sales' array from response
+      const apiData = json.sales || [];
 
       console.log('Current User:', username);
 
       // Map API data to App's Sales Structure
       const mappedOrders = apiData
         .filter(apiOrder => {
-          if (!username) return false; // If no user is logged in, show nothing
+          if (!username) return false;
           const apiUser = apiOrder.username ? String(apiOrder.username).trim() : '';
           const currentUser = String(username).trim();
 
-          // Case insensitive comparison for user
           return apiUser.toLowerCase() === currentUser.toLowerCase();
         })
         .map(apiOrder => {
           const items = apiOrder.items || [];
-          // Calculate total if not provided (though items have amount, order total isn't explicit in sample)
           const calcTotal = items.reduce((sum, item) => sum + (parseFloat(item.amount) || 0), 0);
+          const apiDateStr = apiOrder.created_date || "";
+          const apiTimeStr = apiOrder.created_time || "";
+          const fullTimestamp = (apiDateStr && apiTimeStr) ? `${apiDateStr}T${apiTimeStr}` : new Date().toISOString();
 
           return {
-            id: apiOrder.sales_id, // Use API Sales ID
-            isApiOrder: true,      // Flag to identify source
+            id: apiOrder.sales_id,
+            isApiOrder: true,
             customer: apiOrder.customer_name,
             customerCode: apiOrder.customer_code,
             area: apiOrder.area,
             type: 'Sales',
             payment: apiOrder.payment_type,
             remark: apiOrder.remark,
-            status: 'uploaded',
+            status: apiOrder.status || 'uploaded',
             uploadStatus: 'uploaded',
-            timestamp: `${apiOrder.created_date}T${apiOrder.created_time}`, // Construct ISO-like string
-            uploadedAt: `${apiOrder.created_date}T${apiOrder.created_time}`,
+            timestamp: fullTimestamp,
+            uploadedAt: fullTimestamp,
             total: calcTotal,
             items: items.map(item => ({
               name: item.product_name,
@@ -658,7 +659,20 @@ export default function PlaceSales() {
               if (uploadResult.success) {
                 // Save locally for 2 days - non-blocking for speed
                 savedOrdersDbService.saveTransactionLocally(orderId, 'Sales', order).then(() => loadSavedOrders());
-                Alert.alert("Success", "Order uploaded successfully!");
+                Alert.alert(
+                  "Upload Successful",
+                  "Order uploaded successfully!",
+                  [
+                    {
+                      text: "View Uploaded",
+                      onPress: () => setFilterStatus('uploaded')
+                    },
+                    {
+                      text: "Go Home",
+                      onPress: () => router.replace('/(tabs)/Home')
+                    }
+                  ]
+                );
               } else {
                 // Check for Server Error (500) which usually means expired token/session
                 if (uploadResult.error && uploadResult.error.includes('500')) {
@@ -732,6 +746,9 @@ export default function PlaceSales() {
       };
 
       const doPrint = async (toPrint) => {
+        if (formType === 'form3') {
+          return printerService.printOrderForm3(toPrint);
+        }
         if (formType === 'form2') {
           return printerService.printOrderForm2(toPrint);
         }
@@ -894,7 +911,9 @@ export default function PlaceSales() {
       if (selectedOrderToPrint) {
         const formType = selectedOrderToPrint._formType || 'form1';
         setTimeout(() => {
-          if (formType === 'form2') {
+          if (formType === 'form3') {
+            printerService.printOrderForm3(selectedOrderToPrint);
+          } else if (formType === 'form2') {
             printerService.printOrderForm2(selectedOrderToPrint);
           } else {
             printerService.printOrder(selectedOrderToPrint);
@@ -921,8 +940,8 @@ export default function PlaceSales() {
   }
 
   function getStatusBadgeConfig(status) {
-    if (status === 'uploaded' || status === 'uploaded to server') {
-      return { gradient: Gradients.success, icon: 'cloud-done', text: 'Uploaded' };
+    if (status === 'uploaded' || status === 'uploaded to server' || status === 'completed') {
+      return { gradient: Gradients.success, icon: 'cloud-done', text: status === 'completed' ? 'Completed' : 'Uploaded' };
     } else if (status === 'partial') {
       return { gradient: [Colors.warning.main, Colors.warning.main], icon: 'cloud-upload', text: 'Partial' };
     } else if (status === 'failed') {
@@ -1283,6 +1302,9 @@ export default function PlaceSales() {
             <TouchableOpacity style={styles.iconButton} onPress={handleRefresh}>
               <Ionicons name="refresh" size={22} color={Colors.success.main} />
             </TouchableOpacity>
+            <TouchableOpacity style={styles.iconButton} onPress={() => router.replace('/(tabs)/Home')}>
+              <Ionicons name="home" size={22} color={Colors.success.main} />
+            </TouchableOpacity>
           </View>
         </View>
 
@@ -1389,6 +1411,7 @@ export default function PlaceSales() {
                 <FlatList
                   data={printers}
                   keyExtractor={item => item.inner_mac_address || item.vendor_id || Math.random().toString()}
+                  contentContainerStyle={{ paddingBottom: 40 }}
                   renderItem={({ item }) => (
                     <TouchableOpacity style={{ padding: 15, borderBottomWidth: 1, borderColor: '#eee' }} onPress={() => connectAndPrint(item)}>
                       <Text style={{ fontWeight: 'bold' }}>{item.device_name || item.product_name || "Unknown"}</Text>

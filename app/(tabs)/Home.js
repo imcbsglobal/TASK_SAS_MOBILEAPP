@@ -40,12 +40,13 @@ const Home = ({ navigation }) => {
   const [isProductSettingsOpen, setIsProductSettingsOpen] = useState(false);
   const [isPaymentSettingsOpen, setIsPaymentSettingsOpen] = useState(false);
   const [isPrintFormSettingsOpen, setIsPrintFormSettingsOpen] = useState(false);
+  const [isTaxSettingsOpen, setIsTaxSettingsOpen] = useState(false);
   const [paperSize, setPaperSize] = useState(58); // Default 58mm
   const [showStockOnly, setShowStockOnly] = useState(false);
   const [defaultPaymentMethod, setDefaultPaymentMethod] = useState('Cash');
   const [defaultQuantity, setDefaultQuantity] = useState(1); // Default to 1
-  const [printFormType, setPrintFormType] = useState('form1'); // 'form1' | 'form2'
-
+  const [printFormType, setPrintFormType] = useState('form1'); // 'form1' | 'form2' | 'form3'
+  const [taxCodeSetting, setTaxCodeSetting] = useState('no_tax'); // 'no_tax' | 'plus_tax' | 'reverse_tax'
   useEffect(() => {
     // Load username from storage
     const loadUsername = async () => {
@@ -60,11 +61,11 @@ const Home = ({ navigation }) => {
     };
 
     loadUsername();
-    loadUsername();
     loadPrinterSettings();
     loadProductSettings();
     loadPaymentSettings();
     loadPrintFormSettings();
+    loadTaxSettings();
 
     // Animations
     Animated.parallel([
@@ -191,10 +192,12 @@ const Home = ({ navigation }) => {
         loadPrinterSettings();
         loadPaymentSettings();
         loadPrintFormSettings();
+        loadTaxSettings();
         setIsPrinterSettingsOpen(false);
         setIsProductSettingsOpen(false);
         setIsPaymentSettingsOpen(false);
         setIsPrintFormSettingsOpen(false);
+        setIsTaxSettingsOpen(false);
         setSettingsModalVisible(true);
       },
       gradient: [Colors.text.secondary, Colors.text.primary],
@@ -321,6 +324,24 @@ const Home = ({ navigation }) => {
     }
   };
 
+  const loadTaxSettings = async () => {
+    try {
+      const val = await AsyncStorage.getItem('settings_tax_code');
+      if (val) setTaxCodeSetting(val);
+    } catch (e) {
+      console.log("Error loading tax settings", e);
+    }
+  };
+
+  const handleTaxSettingSelection = async (setting) => {
+    setTaxCodeSetting(setting);
+    try {
+      await AsyncStorage.setItem('settings_tax_code', setting);
+    } catch (e) {
+      console.log("Error saving tax settings", e);
+    }
+  };
+
   const getCurrentDate = () => {
     const options = { weekday: 'long', month: 'long', day: 'numeric' };
     return new Date().toLocaleDateString('en-US', options);
@@ -437,12 +458,13 @@ const Home = ({ navigation }) => {
 
               {/* Header */}
               <View style={styles.modalHeader}>
-                {isPrinterSettingsOpen || isProductSettingsOpen || isPaymentSettingsOpen || isPrintFormSettingsOpen ? (
+                {isPrinterSettingsOpen || isProductSettingsOpen || isPaymentSettingsOpen || isPrintFormSettingsOpen || isTaxSettingsOpen ? (
                   <TouchableOpacity onPress={() => {
                     setIsPrinterSettingsOpen(false);
                     setIsProductSettingsOpen(false);
                     setIsPaymentSettingsOpen(false);
                     setIsPrintFormSettingsOpen(false);
+                    setIsTaxSettingsOpen(false);
                   }} style={styles.backButton}>
                     <Ionicons name="arrow-back" size={24} color={Colors.text.primary} />
                   </TouchableOpacity>
@@ -452,7 +474,8 @@ const Home = ({ navigation }) => {
                   {isPrinterSettingsOpen ? "Printer Settings" :
                     (isProductSettingsOpen ? "Product Settings" :
                       (isPaymentSettingsOpen ? "Payment Settings" :
-                        (isPrintFormSettingsOpen ? "Print Form" : "Settings")))}
+                        (isPrintFormSettingsOpen ? "Print Form" :
+                          (isTaxSettingsOpen ? "Tax Settings" : "Settings"))))}
                 </Text>
 
                 <TouchableOpacity onPress={() => setSettingsModalVisible(false)}>
@@ -461,8 +484,7 @@ const Home = ({ navigation }) => {
               </View>
 
               {/* Content Logic */}
-              {/* Content Logic */}
-              {!isPrinterSettingsOpen && !isProductSettingsOpen && !isPaymentSettingsOpen && !isPrintFormSettingsOpen ? (
+              {!isPrinterSettingsOpen && !isProductSettingsOpen && !isPaymentSettingsOpen && !isPrintFormSettingsOpen && !isTaxSettingsOpen ? (
                 /* Main Settings Menu */
                 <View>
                   <TouchableOpacity
@@ -494,8 +516,26 @@ const Home = ({ navigation }) => {
                       <View>
                         <Text style={styles.menuItemTitle}>Print Form</Text>
                         <Text style={styles.menuItemSubtitle}>
-                          {printFormType === 'form2' ? 'Form 2 selected (No HSN/GST)' : 'Form 1 selected (With HSN/GST)'}
+                          {printFormType === 'form3' ? 'Form 3 selected' : printFormType === 'form2' ? 'Form 2 selected (No HSN/GST)' : 'Form 1 selected (With HSN/GST)'}
                         </Text>
+                      </View>
+                    </View>
+                    <Ionicons name="chevron-forward" size={24} color={Colors.text.tertiary} />
+                  </TouchableOpacity>
+
+                  {/* Tax Code Settings */}
+                  <TouchableOpacity
+                    style={styles.menuItem}
+                    onPress={() => setIsTaxSettingsOpen(true)}
+                    activeOpacity={0.7}
+                  >
+                    <View style={styles.menuItemLeft}>
+                      <View style={[styles.menuIconContainer, { backgroundColor: 'rgba(233, 30, 99, 0.1)' }]}>
+                        <Ionicons name="calculator-outline" size={24} color="#E91E63" />
+                      </View>
+                      <View>
+                        <Text style={styles.menuItemTitle}>Tax Code Settings</Text>
+                        <Text style={styles.menuItemSubtitle}>Configure tax logic for Form 3</Text>
                       </View>
                     </View>
                     <Ionicons name="chevron-forward" size={24} color={Colors.text.tertiary} />
@@ -631,79 +671,86 @@ const Home = ({ navigation }) => {
                     Choose which receipt layout to use when printing orders.
                   </Text>
 
-                  {/* Form 1 Card */}
-                  <TouchableOpacity
-                    style={[
-                      styles.sizeOption,
-                      { flexDirection: 'column', alignItems: 'flex-start', padding: 12, marginBottom: 12 },
-                      printFormType === 'form1' && styles.sizeOptionSelected
-                    ]}
-                    onPress={() => handlePrintFormSelection('form1')}
-                    activeOpacity={0.8}
-                  >
-                    <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 8, gap: 8 }}>
-                      <Ionicons
-                        name={printFormType === 'form1' ? 'radio-button-on' : 'radio-button-off'}
-                        size={22}
-                        color={printFormType === 'form1' ? Colors.primary.main : Colors.text.tertiary}
-                      />
-                      <Text style={[styles.sizeOptionTitle, printFormType === 'form1' && styles.sizeOptionTitleSelected]}>
-                        Form 1  —  With HSN / GST
-                      </Text>
-                    </View>
-                    <View style={styles.printPreviewBox}>
-                      <Text style={styles.printPreviewText}>{`Company Name
---------------------------------
-Item           Qty      Total
---------------------------------
-PRODUCT NAME   1.000    50.00
-  HSN:1234 GST:12%
-PRODUCT 2      2.000   100.00
-  HSN:5678 GST:5%
---------------------------------
-TOTAL:              150.00`}</Text>
-                    </View>
-                  </TouchableOpacity>
+                  <View style={[styles.sizeSelectionContainer, { flexDirection: 'column', alignItems: 'stretch' }]}>
+                    <TouchableOpacity
+                      style={[styles.sizeOption, { marginBottom: 12, justifyContent: 'flex-start' }, printFormType === 'form1' && styles.sizeOptionSelected]}
+                      onPress={() => handlePrintFormSelection('form1')}
+                    >
+                      <Ionicons name={printFormType === 'form1' ? "radio-button-on" : "radio-button-off"} size={24} color={printFormType === 'form1' ? Colors.primary.main : Colors.text.tertiary} style={{ marginRight: 12 }} />
+                      <View>
+                        <Text style={[styles.sizeOptionTitle, printFormType === 'form1' && styles.sizeOptionTitleSelected]}>Form 1</Text>
+                        <Text style={styles.sizeOptionSubtitle}>Standard with HSN / GST</Text>
+                      </View>
+                    </TouchableOpacity>
 
-                  {/* Form 2 Card */}
-                  <TouchableOpacity
-                    style={[
-                      styles.sizeOption,
-                      { flexDirection: 'column', alignItems: 'flex-start', padding: 12, marginBottom: 4 },
-                      printFormType === 'form2' && styles.sizeOptionSelected
-                    ]}
-                    onPress={() => handlePrintFormSelection('form2')}
-                    activeOpacity={0.8}
-                  >
-                    <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 8, gap: 8 }}>
-                      <Ionicons
-                        name={printFormType === 'form2' ? 'radio-button-on' : 'radio-button-off'}
-                        size={22}
-                        color={printFormType === 'form2' ? Colors.primary.main : Colors.text.tertiary}
-                      />
-                      <Text style={[styles.sizeOptionTitle, printFormType === 'form2' && styles.sizeOptionTitleSelected]}>
-                        Form 2  —  No HSN / GST
-                      </Text>
-                    </View>
-                    <View style={styles.printPreviewBox}>
-                      <Text style={styles.printPreviewText}>{`Company Name
---------------------------------
-Sales Receipt
---------------------------------
-Inv Date: 01/01/2025 10:30
-Inv No  : SP991   Salesman: ALI
-Customer: FOOD BASKET
---------------------------------
-NO ITEM         QTY  PRICE TOTAL
---------------------------------
-1  PRODUCT NAME 2.00  28.00 56.00
-2  PRODUCT 2    1.00  35.00 35.00
---------------------------------
-TOTAL:                    91.00
---------------------------------
-         Thank You!`}</Text>
-                    </View>
-                  </TouchableOpacity>
+                    <TouchableOpacity
+                      style={[styles.sizeOption, { marginBottom: 12, justifyContent: 'flex-start' }, printFormType === 'form2' && styles.sizeOptionSelected]}
+                      onPress={() => handlePrintFormSelection('form2')}
+                    >
+                      <Ionicons name={printFormType === 'form2' ? "radio-button-on" : "radio-button-off"} size={24} color={printFormType === 'form2' ? Colors.primary.main : Colors.text.tertiary} style={{ marginRight: 12 }} />
+                      <View>
+                        <Text style={[styles.sizeOptionTitle, printFormType === 'form2' && styles.sizeOptionTitleSelected]}>Form 2</Text>
+                        <Text style={styles.sizeOptionSubtitle}>No HSN / GST (Compact)</Text>
+                      </View>
+                    </TouchableOpacity>
+
+                    <TouchableOpacity
+                      style={[styles.sizeOption, { marginBottom: 40, justifyContent: 'flex-start' }, printFormType === 'form3' && styles.sizeOptionSelected]}
+                      onPress={() => handlePrintFormSelection('form3')}
+                    >
+                      <Ionicons name={printFormType === 'form3' ? "radio-button-on" : "radio-button-off"} size={24} color={printFormType === 'form3' ? Colors.primary.main : Colors.text.tertiary} style={{ marginRight: 12 }} />
+                      <View>
+                        <Text style={[styles.sizeOptionTitle, printFormType === 'form3' && styles.sizeOptionTitleSelected]}>Form 3</Text>
+                        <Text style={styles.sizeOptionSubtitle}>Dynamic Tax support</Text>
+                      </View>
+                    </TouchableOpacity>
+                  </View>
+                </View>
+              ) : isTaxSettingsOpen ? (
+                /* Inner Tax Settings View */
+                <View style={styles.settingItem}>
+                  <View style={styles.settingLabelContainer}>
+                    <Text style={styles.settingLabel}>Tax Code Settings</Text>
+                  </View>
+                  
+                  <Text style={[styles.helperText, { marginBottom: 16 }]}>
+                    Choose how tax is calculated for products on Form 3.
+                  </Text>
+
+                  <View style={[styles.sizeSelectionContainer, { flexDirection: 'column', alignItems: 'stretch' }]}>
+                    <TouchableOpacity
+                      style={[styles.sizeOption, { marginBottom: 12, justifyContent: 'flex-start' }, taxCodeSetting === 'no_tax' && styles.sizeOptionSelected]}
+                      onPress={() => handleTaxSettingSelection('no_tax')}
+                    >
+                      <Ionicons name={taxCodeSetting === 'no_tax' ? "radio-button-on" : "radio-button-off"} size={24} color={taxCodeSetting === 'no_tax' ? Colors.primary.main : Colors.text.tertiary} style={{ marginRight: 12 }} />
+                      <View>
+                        <Text style={[styles.sizeOptionTitle, taxCodeSetting === 'no_tax' && styles.sizeOptionTitleSelected]}>No Tax</Text>
+                        <Text style={styles.sizeOptionSubtitle}>Standard calculation (Tax ignored)</Text>
+                      </View>
+                    </TouchableOpacity>
+
+                    <TouchableOpacity
+                      style={[styles.sizeOption, { marginBottom: 12, justifyContent: 'flex-start' }, taxCodeSetting === 'plus_tax' && styles.sizeOptionSelected]}
+                      onPress={() => handleTaxSettingSelection('plus_tax')}
+                    >
+                      <Ionicons name={taxCodeSetting === 'plus_tax' ? "radio-button-on" : "radio-button-off"} size={24} color={taxCodeSetting === 'plus_tax' ? Colors.primary.main : Colors.text.tertiary} style={{ marginRight: 12 }} />
+                      <View>
+                        <Text style={[styles.sizeOptionTitle, taxCodeSetting === 'plus_tax' && styles.sizeOptionTitleSelected]}>Plus Tax</Text>
+                        <Text style={styles.sizeOptionSubtitle}>Tax added to rate</Text>
+                      </View>
+                    </TouchableOpacity>
+
+                    <TouchableOpacity
+                      style={[styles.sizeOption, { marginBottom: 40, justifyContent: 'flex-start' }, taxCodeSetting === 'reverse_tax' && styles.sizeOptionSelected]}
+                      onPress={() => handleTaxSettingSelection('reverse_tax')}
+                    >
+                      <Ionicons name={taxCodeSetting === 'reverse_tax' ? "radio-button-on" : "radio-button-off"} size={24} color={taxCodeSetting === 'reverse_tax' ? Colors.primary.main : Colors.text.tertiary} style={{ marginRight: 12 }} />
+                      <View>
+                        <Text style={[styles.sizeOptionTitle, taxCodeSetting === 'reverse_tax' && styles.sizeOptionTitleSelected]}>Reverse Tax</Text>
+                        <Text style={styles.sizeOptionSubtitle}>Rate includes tax</Text>
+                      </View>
+                    </TouchableOpacity>
+                  </View>
                 </View>
               ) : (
                 /* Inner Printer Settings View */
