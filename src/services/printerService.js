@@ -513,7 +513,9 @@ class PrinterService {
                 return false;
             }
 
-            const PRINTER_WIDTH = this.printerCharsPerLine || 32;
+            // Optimized for 4-inch printers (default to 64 chars if not specified)
+            const PRINTER_WIDTH = this.printerCharsPerLine || 64; 
+            const LEFT_PAD = "  "; // Left margin
             const ESC_BOLD_ON = "\x1B\x45\x01";
             const ESC_BOLD_OFF = "\x1B\x45\x00";
             const ESC_SIZE_LARGE = "\x1B\x21\x18"; // Bold + Double height
@@ -521,15 +523,15 @@ class PrinterService {
 
             const centerText = (text, isBold = false) => {
                 const safeText = String(text || "");
-                const pad = Math.max(0, Math.floor((PRINTER_WIDTH - safeText.length) / 2));
-                let lineText = " ".repeat(pad) + safeText;
+                const pad = Math.max(0, Math.floor((PRINTER_WIDTH - LEFT_PAD.length - safeText.length) / 2));
+                let lineText = LEFT_PAD + " ".repeat(pad) + safeText;
                 if (isBold) {
                     return ESC_BOLD_ON + lineText + ESC_BOLD_OFF + "\n";
                 }
                 return lineText + "\n";
             };
 
-            const line = "-".repeat(PRINTER_WIDTH) + "\n";
+            const line = LEFT_PAD + "-".repeat(PRINTER_WIDTH - LEFT_PAD.length) + "\n";
 
             let receipt = "";
             receipt += "\x1B\x40"; // ESC @ - Initialize printer
@@ -550,14 +552,16 @@ class PrinterService {
 
                 const phones = [this.companyInfo.phones, this.companyInfo.mobile].filter(Boolean).join(', ');
                 if (phones) receipt += centerText(`Ph: ${phones}`);
+
+                // GST/TIN from misel API
+                if (this.companyInfo.tinno) {
+                    receipt += centerText(`GST/TIN: ${this.companyInfo.tinno}`);
+                }
             }
 
             receipt += line;
 
             // --- RECEIPT TITLE ---
-            // Sales -> SALES INVOICE
-            // Order -> ORDER INVOICE
-            // Return -> RETURN INVOICE
             let receiptTitle = String(order.receiptTitle || order.type || "Receipt").toUpperCase();
             if (receiptTitle.includes("SALES")) receiptTitle = " INVOICE";
             else if (receiptTitle.includes("ORDER")) receiptTitle = "ORDER ";
@@ -577,20 +581,21 @@ class PrinterService {
 
             const metaLeft1 = `Inv Date: ${formattedDate}`;
             const orderId = order.formattedOrderId || (order.isApiOrder ? order.id : "NA");
-            const metaLeft2 = `Inv No  : ${orderId}`;
+            const metaLeft2 = `Inv No: ${orderId}`;
             const paymentType = order.payment || order.type || "Cash";
-            const metaLeft3 = `Type    : ${paymentType}`;
+            const metaLeft3 = `Type: ${paymentType}`;
 
             const salesmanName = order.salesman || order.salesmanName || order.username || "";
             const metaRight1 = salesmanName ? `Salesman: ${salesmanName}` : "";
 
             const printMetaLine = (left, right) => {
-                if (!right) return `${left}\n`;
-                const available = PRINTER_WIDTH - left.length - right.length;
+                const contentWidth = PRINTER_WIDTH - LEFT_PAD.length;
+                if (!right) return `${LEFT_PAD}${left}\n`;
+                const available = contentWidth - left.length - right.length;
                 if (available >= 1) {
-                    return `${left}${" ".repeat(available)}${right}\n`;
+                    return `${LEFT_PAD}${left}${" ".repeat(available)}${right}\n`;
                 }
-                return `${left}\n${right}\n`;
+                return `${LEFT_PAD}${left}\n${LEFT_PAD}${right}\n`;
             };
 
             receipt += printMetaLine(metaLeft1, "");
@@ -616,9 +621,9 @@ class PrinterService {
                     } catch (e) { console.log('[Printer] Error fetching customer info', e); }
                 }
 
-                receipt += "Customer: " + ESC_BOLD_ON + customerText + ESC_BOLD_OFF + "\n";
+                receipt += LEFT_PAD + "Customer: " + ESC_BOLD_ON + customerText + ESC_BOLD_OFF + "\n";
                 if (place) {
-                    receipt += `${place}\n`;
+                    receipt += `${LEFT_PAD}Place: ${place}\n`;
                 }
             }
 
@@ -626,12 +631,12 @@ class PrinterService {
 
             // --- ITEMS TABLE ---
             // NO | ITEM NAME | QTY | PRICE | TOTAL
-            const noLen = 2;
-            const qtyLen = 6;
-            const priceLen = 8;
-            const totalLen = 8;
+            const noLen = 4;
+            const qtyLen = 10;
+            const priceLen = 12;
+            const totalLen = 12;
             const separators = 4;
-            const itemLen = Math.max(8, PRINTER_WIDTH - noLen - qtyLen - priceLen - totalLen - separators);
+            const itemLen = Math.max(8, PRINTER_WIDTH - LEFT_PAD.length - noLen - qtyLen - priceLen - totalLen - separators);
 
             const hdrNo = "NO".padEnd(noLen, " ");
             const hdrItem = "ITEM NAME".padEnd(itemLen, " ");
@@ -639,7 +644,7 @@ class PrinterService {
             const hdrPrice = "PRICE".padStart(priceLen, " ");
             const hdrTotal = "TOTAL".padStart(totalLen, " ");
 
-            receipt += ESC_BOLD_ON + `${hdrNo} ${hdrItem} ${hdrQty} ${hdrPrice} ${hdrTotal}` + ESC_BOLD_OFF + "\n";
+            receipt += LEFT_PAD + ESC_BOLD_ON + `${hdrNo} ${hdrItem} ${hdrQty} ${hdrPrice} ${hdrTotal}` + ESC_BOLD_OFF + "\n";
             receipt += line;
 
             let totalAmount = 0;
@@ -658,20 +663,20 @@ class PrinterService {
                     const priceStr = price.toFixed(2).padStart(priceLen, " ");
                     const totalStr = itemTotal.toFixed(2).padStart(totalLen, " ");
 
-                    receipt += `${noStr} ${name} ` + ESC_BOLD_ON + `${qtyStr} ${priceStr} ${totalStr}` + ESC_BOLD_OFF + "\n";
+                    receipt += LEFT_PAD + `${noStr} ${name} ` + ESC_BOLD_ON + `${qtyStr} ${priceStr} ${totalStr}` + ESC_BOLD_OFF + "\n";
 
                     // Continuation line for long names
                     const fullName = String(item.name || "");
                     if (fullName.length > itemLen) {
                         const remainder = fullName.substring(itemLen);
-                        receipt += `${"".padEnd(noLen + 1)}${remainder.substring(0, itemLen)}\n`;
+                        receipt += `${LEFT_PAD}${"".padEnd(noLen + 1)}${remainder.substring(0, itemLen)}\n`;
                     }
 
                     // Barcode and Item Code Details
                     const itemCode = item.code || item.item_code || "";
                     const barcode = item.barcode || "";
                     if (itemCode || barcode) {
-                        receipt += `${"".padEnd(noLen + 1)}Code: ${itemCode} Bar: ${barcode}\n`;
+                        receipt += `${LEFT_PAD}${"".padEnd(noLen + 1)}Code: ${itemCode} Bar: ${barcode}\n`;
                     }
 
                     receipt += "\n"; // Space between products
@@ -693,9 +698,9 @@ class PrinterService {
             // Previous Balance at the bottom, ONLY if not Return
             const isReturn = (order.type === 'Return') || (receiptTitle.includes("RETURN"));
             if (!isReturn && previousBalance !== null && previousBalance !== undefined && !isNaN(Number(previousBalance))) {
-                const balLabel = "PREV BALANCE:";
+                const balLabel = "PREVIOUS BALANCE:";
                 const balVal = Number(previousBalance).toFixed(2);
-                receipt += `${balLabel} ${balVal}\n`;
+                receipt += `${LEFT_PAD}${balLabel} ${balVal}\n`;
             }
 
             console.log("[Printer] Form2 sending to printer, receipt length:", receipt.length);
@@ -877,8 +882,10 @@ class PrinterService {
 
             receipt += line;
 
-            let totalAmount = 0;
-            let totalTaxable = 0; // Only used for reverse_tax summary
+            let totalAmount = 0; // Net Total
+            let totalTaxable = 0;
+            let totalTaxAmount = 0;
+            let totalQty = 0;
             let rowNo = 1;
 
             if (Array.isArray(order.items)) {
@@ -890,18 +897,30 @@ class PrinterService {
                     const taxStr = taxPercent > 0 ? `${taxPercent}%` : '-';
 
                     let displayPrice = rate;
-                    let displayTotal = rate * qty;
+                    let displayTotal = 0;
+                    let itemTaxable = 0;
+                    let itemTax = 0;
 
                     if (taxSetting === 'plus_tax') {
-                        displayPrice = rate;
-                        displayTotal = rate * (1 + (taxPercent / 100)) * qty;
-                    } else if (taxSetting === 'reverse_tax') {
-                        displayPrice = rate;
+                        // User wants total column to be taxable only (no tax added yet)
                         displayTotal = rate * qty;
-                        totalTaxable += displayTotal / (1 + (taxPercent / 100));
+                        itemTaxable = displayTotal;
+                        itemTax = displayTotal * (taxPercent / 100);
+                    } else if (taxSetting === 'reverse_tax') {
+                        displayTotal = rate * qty; // Total inclusive of tax
+                        itemTaxable = displayTotal / (1 + (taxPercent / 100));
+                        itemTax = displayTotal - itemTaxable;
+                    } else {
+                        displayTotal = rate * qty;
+                        itemTaxable = displayTotal;
+                        itemTax = 0;
                     }
 
-                    totalAmount += displayTotal;
+                    totalTaxable += itemTaxable;
+                    if (typeof totalTaxAmount === 'undefined') totalTaxAmount = 0;
+                    totalTaxAmount += itemTax;
+                    totalAmount += (itemTaxable + itemTax); // Net Total
+                    totalQty += qty;
 
                     const noStr = String(rowNo).padEnd(noLen, " ");
                     const name = String(item.name || "Item");
@@ -916,7 +935,7 @@ class PrinterService {
 
                     // HSN+Tax prefix occupies fixed space, with remaining spacer
                     const hsnPart = `HSN:${hsnVal}`.padEnd(10);
-                    const taxPart = `T:${taxStr}`.padStart(4);
+                    const taxPart = `${taxStr}`.padStart(4);
                     const hsnTaxPrefix = `${hsnPart}${taxPart}`;
                     const valueSpacer = " ".repeat(Math.max(0, PRINTER_WIDTH - hsnTaxPrefix.length - qtyLen - priceLen - totalLen - 3));
 
@@ -929,23 +948,24 @@ class PrinterService {
             receipt += line;
 
             // --- SUMMARY SECTION ---
-            if (taxSetting === 'reverse_tax') {
-                // Taxable = sum of (qty * rate / (1 + tax%))
+            const totalQtyVal = totalQty.toFixed(2);
+            const qtyLabel = "TOTAL QTY:";
+            receipt += `${qtyLabel}` + " ".repeat(Math.max(1, PRINTER_WIDTH - qtyLabel.length - totalQtyVal.length)) + totalQtyVal + "\n";
+
+            if (taxSetting === 'reverse_tax' || taxSetting === 'plus_tax') {
                 const taxableVal = totalTaxable.toFixed(2);
-                // Tax = Total - Taxable
-                const taxVal = (totalAmount - totalTaxable).toFixed(2);
-                // Total = sum of (qty * rate)
-                const grandTotalVal = totalAmount.toFixed(2);
+                const taxVal = totalTaxAmount.toFixed(2);
+                const netTotalVal = totalAmount.toFixed(2);
 
                 const taxableLabel = "TAXABLE:";
                 const taxLabel = "TAX:";
-                const grandTotalLabel = "TOTAL:";
+                const netTotalLabel = taxSetting === 'plus_tax' ? "NET TOTAL:" : "TOTAL:";
 
                 receipt += `${taxableLabel}` + " ".repeat(Math.max(1, PRINTER_WIDTH - taxableLabel.length - taxableVal.length)) + taxableVal + "\n";
                 receipt += `${taxLabel}` + " ".repeat(Math.max(1, PRINTER_WIDTH - taxLabel.length - taxVal.length)) + taxVal + "\n";
-                receipt += ESC_SIZE_LARGE + grandTotalLabel + " ".repeat(Math.max(1, PRINTER_WIDTH - grandTotalLabel.length - grandTotalVal.length)) + grandTotalVal + ESC_SIZE_NORMAL + "\n";
+                receipt += ESC_SIZE_LARGE + netTotalLabel + " ".repeat(Math.max(1, PRINTER_WIDTH - netTotalLabel.length - netTotalVal.length)) + netTotalVal + ESC_SIZE_NORMAL + "\n";
             } else {
-                // --- TOTAL only (for plus_tax or no_tax) ---
+                // --- TOTAL only (no_tax or other) ---
                 const totalLabel = "TOTAL:";
                 const totalVal = totalAmount.toFixed(2);
                 receipt += ESC_SIZE_LARGE + totalLabel + " ".repeat(Math.max(1, PRINTER_WIDTH - totalLabel.length - totalVal.length)) + totalVal + ESC_SIZE_NORMAL + "\n";

@@ -177,6 +177,11 @@ export default function PlaceOrder() {
       console.log('Current User:', username);
 
       // Map API data to App's Order Structure
+      // FILTER: Only show orders from the last 2 days
+      const twoDaysAgo = new Date();
+      twoDaysAgo.setDate(twoDaysAgo.getDate() - 2);
+      twoDaysAgo.setHours(0, 0, 0, 0);
+
       const mappedOrders = apiData
         .filter(apiOrder => {
           if (!username) return false;
@@ -186,7 +191,13 @@ export default function PlaceOrder() {
           const isReturn = apiOrder.payment_type === 'Return';
           if (isReturn) return false;
 
-          return apiUser.toLowerCase() === currentUser.toLowerCase();
+          // User Filter
+          if (apiUser.toLowerCase() !== currentUser.toLowerCase()) return false;
+
+          // Date Filter: Last 2 Days
+          const apiDate = new Date(apiOrder.created_date);
+          apiDate.setHours(0, 0, 0, 0);
+          return apiDate >= twoDaysAgo;
         })
         .map(apiOrder => {
           const items = apiOrder.items || [];
@@ -382,13 +393,17 @@ export default function PlaceOrder() {
             let processedOrders = [...orders];
 
             for (const orderId of selectedOrders) {
+              // ✅ Re-check orders every step to catch dynamic status updates during loop
               const orderIndex = processedOrders.findIndex(o => o.id === orderId);
               if (orderIndex === -1) continue;
 
               const order = processedOrders[orderIndex];
 
               // Skip if already uploaded
-              if (order.uploadStatus === 'uploaded' || order.uploadStatus === 'uploaded to server') continue;
+              if (order.uploadStatus === 'uploaded' || order.uploadStatus === 'uploaded to server') {
+                console.log(`[Sync] Skipping already uploaded order: ${orderId}`);
+                continue;
+              }
 
               try {
                 const result = await uploadOrderToAPI(order);
@@ -509,8 +524,9 @@ export default function PlaceOrder() {
         'Authorization': `Bearer ${authToken}`
       };
 
-      // ✅ RETRY LOGIC: Attempt upload with exponential backoff
-      const MAX_RETRIES = 3;
+      // ✅ NO RETRIES for CREATE calls. 
+      // Retrying a creation request after a timeout can lead to duplicates if the server already processed the original.
+      const MAX_RETRIES = 0; 
       const RETRY_DELAYS = [1000, 2000, 4000]; // ms
       let lastError = null;
 
@@ -624,7 +640,11 @@ export default function PlaceOrder() {
   }
 
   async function confirmOrder(orderId) {
-    if (uploadingOrder) return; // Prevent multiple simultaneous uploads
+    // ✅ Check BOTH single and bulk upload states
+    if (uploadingOrder || loadingUploaded) {
+      console.log('[Sync] Already syncing - blocking individual sync');
+      return;
+    }
 
     Alert.alert(
       'Confirm & Upload Order',
@@ -634,10 +654,20 @@ export default function PlaceOrder() {
         {
           text: 'Confirm & Upload',
           onPress: async () => {
+            const order = orders.find(o => o.id === orderId);
+            if (!order) {
+              Alert.alert('Error', 'Order not found');
+              return;
+            }
+
+            // ✅ PREVENT DUPLICATES: Check if already uploaded
+            if (order.uploadStatus === 'uploaded' || order.uploadStatus === 'uploaded to server') {
+              Alert.alert('Already Sync', 'This order is already uploaded to the server.');
+              return;
+            }
+
             setUploadingOrder(orderId);
             try {
-              const order = orders.find(o => o.id === orderId);
-              if (!order) throw new Error('Order not found');
 
               const uploadResult = await uploadOrderToAPI(order);
 

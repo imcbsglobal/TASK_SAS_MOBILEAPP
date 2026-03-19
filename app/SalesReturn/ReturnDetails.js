@@ -2942,11 +2942,24 @@ const CodeItem = ({ item, inStock, stockQty, currentQty, displayValue, isInCart,
         ) : (
           <View style={{ width: '100%' }}>
             {/* Row 1: Quantity and Add Button */}
-            <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 8, height: 44 }}>
+            <View style={{ flexDirection: 'row', alignItems: 'stretch', gap: 4, height: 44, width: '100%', marginBottom: 8 }}>
+              {/* Minus Button */}
+              <TouchableOpacity
+                style={[styles.qtyBtnLarge, { width: 36, height: 44, borderRadius: BorderRadius.md, backgroundColor: Colors.neutral[50] }]}
+                onPress={() => {
+                  const currentStr = editingQty[item.id] !== undefined ? String(editingQty[item.id]) : String(defaultQuantity !== undefined ? defaultQuantity : 1);
+                  const currentVal = parseFloat(currentStr);
+                  const newVal = Math.max(0, (isNaN(currentVal) ? 0 : currentVal) - 1);
+                  setEditingQty(prev => ({ ...prev, [item.id]: String(newVal) }));
+                }}
+              >
+                <Ionicons name="remove" size={20} color={Colors.text.primary} />
+              </TouchableOpacity>
+
+              {/* Quantity Input for not-in-cart items */}
               <TextInput
                 style={{
-                  width: 70, // Fixed width for Qty
-                  height: '100%',
+                  flex: 0.25,
                   borderWidth: 1,
                   borderColor: Colors.border.medium,
                   borderRadius: BorderRadius.md,
@@ -2956,7 +2969,7 @@ const CodeItem = ({ item, inStock, stockQty, currentQty, displayValue, isInCart,
                   color: Colors.text.primary,
                   backgroundColor: '#FFF'
                 }}
-                value={editingQty[item.id] !== undefined ? String(editingQty[item.id]) : String(defaultQuantity || 1)}
+                value={editingQty[item.id] !== undefined ? String(editingQty[item.id]) : String(defaultQuantity !== undefined ? defaultQuantity : 1)}
                 keyboardType="numeric"
                 onChangeText={(text) => {
                   const cleaned = text.replace(/[^0-9.]/g, '');
@@ -2965,24 +2978,38 @@ const CodeItem = ({ item, inStock, stockQty, currentQty, displayValue, isInCart,
                   setEditingQty(prev => ({ ...prev, [item.id]: cleaned }));
                 }}
                 onFocus={() => {
-                  setEditingQty(prev => ({ ...prev, [item.id]: prev[item.id] !== undefined ? String(prev[item.id]) : String(defaultQuantity || 1) }));
+                  setEditingQty(prev => ({ ...prev, [item.id]: prev[item.id] !== undefined ? String(prev[item.id]) : String(defaultQuantity !== undefined ? defaultQuantity : 1) }));
                 }}
                 onBlur={() => {
                   setEditingQty(prev => {
                     const newState = { ...prev };
-                    if (!newState[item.id] || isNaN(parseFloat(newState[item.id])) || parseFloat(newState[item.id]) <= 0) {
-                      newState[item.id] = String(defaultQuantity || 1);
+                    if (!newState[item.id] || isNaN(parseFloat(newState[item.id])) || (parseFloat(newState[item.id]) < 0)) {
+                      newState[item.id] = String(defaultQuantity !== undefined ? defaultQuantity : 1);
                     }
                     return newState;
                   });
                 }}
               />
+
+              {/* Plus Button */}
               <TouchableOpacity
-                style={[styles.addButtonLarge, (inStock === false) && styles.disabledAddButton, { flex: 1, marginLeft: 8, height: '100%', marginTop: 0 }]}
+                style={[styles.qtyBtnLarge, { width: 36, height: 44, borderRadius: BorderRadius.md, backgroundColor: Colors.neutral[50] }]}
+                onPress={() => {
+                  const currentStr = editingQty[item.id] !== undefined ? String(editingQty[item.id]) : String(defaultQuantity !== undefined ? defaultQuantity : 1);
+                  const currentVal = parseFloat(currentStr);
+                  const newVal = (isNaN(currentVal) ? 0 : currentVal) + 1;
+                  setEditingQty(prev => ({ ...prev, [item.id]: String(newVal) }));
+                }}
+              >
+                <Ionicons name="add" size={20} color={Colors.text.primary} />
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={[styles.addButtonLarge, (inStock === false) && styles.disabledAddButton, { flex: 0.5, marginLeft: 4, height: '100%', marginTop: 0 }]}
                 onPress={(e) => {
-                  const qtyStr = editingQty[item.id] !== undefined ? String(editingQty[item.id]) : String(defaultQuantity || 1);
+                  const qtyStr = editingQty[item.id] !== undefined ? String(editingQty[item.id]) : String(defaultQuantity !== undefined ? defaultQuantity : 1);
                   const qtyVal = parseFloat(qtyStr);
-                  const finalQty = (!isNaN(qtyVal) && qtyVal > 0) ? qtyVal : (defaultQuantity || 1);
+                  const finalQty = (!isNaN(qtyVal) && qtyVal >= 0) ? qtyVal : (defaultQuantity !== undefined ? defaultQuantity : 1);
                   addToCart(item, finalQty);
                   setEditingQty(prev => {
                     const newState = { ...prev };
