@@ -411,7 +411,7 @@ class PrinterService {
                 receipt += "\x1B\x45\x01" + `${customerText}\n` + "\x1B\x45\x00"; // Bold customer name
 
                 if (place) {
-                    receipt += `${place}\n`;
+                    receipt += `Place: ${place}\n`;
                 }
 
                 // Customer address if available
@@ -631,11 +631,27 @@ class PrinterService {
 
             // --- ITEMS TABLE ---
             // NO | ITEM NAME | QTY | PRICE | TOTAL
-            const noLen = 4;
-            const qtyLen = 10;
-            const priceLen = 12;
-            const totalLen = 12;
+            // Dynamic column widths based on printer width
+            let noLen = 2;
+            let qtyLen = 6;
+            let priceLen = 8;
+            let totalLen = 9;
             const separators = 4;
+
+            if (PRINTER_WIDTH >= 60) {
+                // Wide printer (4 inch) - give them more space
+                noLen = 4;
+                qtyLen = 10;
+                priceLen = 12;
+                totalLen = 12;
+            } else if (PRINTER_WIDTH >= 44) {
+                // Medium printer (3 inch)
+                noLen = 3;
+                qtyLen = 8;
+                priceLen = 9;
+                totalLen = 10;
+            }
+
             const itemLen = Math.max(8, PRINTER_WIDTH - LEFT_PAD.length - noLen - qtyLen - priceLen - totalLen - separators);
 
             const hdrNo = "NO".padEnd(noLen, " ");
@@ -676,7 +692,13 @@ class PrinterService {
                     const itemCode = item.code || item.item_code || "";
                     const barcode = item.barcode || "";
                     if (itemCode || barcode) {
-                        receipt += `${LEFT_PAD}${"".padEnd(noLen + 1)}Code: ${itemCode} Bar: ${barcode}\n`;
+                        const codeLine = `Code: ${itemCode} Bar: ${barcode}`;
+                        if (LEFT_PAD.length + noLen + 1 + codeLine.length <= PRINTER_WIDTH) {
+                            receipt += `${LEFT_PAD}${"".padEnd(noLen + 1)}${codeLine}\n`;
+                        } else {
+                            receipt += `${LEFT_PAD}${"".padEnd(noLen + 1)}Code: ${itemCode}\n`;
+                            if (barcode) receipt += `${LEFT_PAD}${"".padEnd(noLen + 1)}Bar: ${barcode}\n`;
+                        }
                     }
 
                     receipt += "\n"; // Space between products
@@ -700,7 +722,12 @@ class PrinterService {
             if (!isReturn && previousBalance !== null && previousBalance !== undefined && !isNaN(Number(previousBalance))) {
                 const balLabel = "PREVIOUS BALANCE:";
                 const balVal = Number(previousBalance).toFixed(2);
-                receipt += `${LEFT_PAD}${balLabel} ${balVal}\n`;
+                const availableForBal = PRINTER_WIDTH - LEFT_PAD.length - balLabel.length;
+                if (availableForBal >= balVal.length + 1) {
+                    receipt += `${LEFT_PAD}${balLabel}${" ".repeat(availableForBal - balVal.length)}${balVal}\n`;
+                } else {
+                    receipt += `${LEFT_PAD}${balLabel}\n${LEFT_PAD}${" ".repeat(Math.max(0, PRINTER_WIDTH - LEFT_PAD.length - balVal.length))}${balVal}\n`;
+                }
             }
 
             console.log("[Printer] Form2 sending to printer, receipt length:", receipt.length);
@@ -853,7 +880,7 @@ class PrinterService {
 
                 receipt += "Customer: " + ESC_BOLD_ON + customerText + ESC_BOLD_OFF + "\n";
                 if (place) {
-                    receipt += `${place}\n`;
+                    receipt += `Place: ${place}\n`;
                 }
             }
 
@@ -949,8 +976,19 @@ class PrinterService {
 
             // --- SUMMARY SECTION ---
             const totalQtyVal = totalQty.toFixed(2);
+            const hsnTaxPrefixLen = 14; 
+            const qtyLen_F3 = 6;
+            const priceLen_F3 = 8;
+            const totalLen_F3 = 8;
+            const prefixOffset = Math.max(0, PRINTER_WIDTH - hsnTaxPrefixLen - qtyLen_F3 - priceLen_F3 - totalLen_F3 - 3) + hsnTaxPrefixLen + 1;
+            
             const qtyLabel = "TOTAL QTY:";
-            receipt += `${qtyLabel}` + " ".repeat(Math.max(1, PRINTER_WIDTH - qtyLabel.length - totalQtyVal.length)) + totalQtyVal + "\n";
+            const paddedQty = totalQtyVal.padStart(qtyLen_F3, " ");
+            if (qtyLabel.length <= prefixOffset) {
+                receipt += qtyLabel.padEnd(prefixOffset, " ") + paddedQty + "\n";
+            } else {
+                receipt += qtyLabel + "\n" + " ".repeat(prefixOffset) + paddedQty + "\n";
+            }
 
             if (taxSetting === 'reverse_tax' || taxSetting === 'plus_tax') {
                 const taxableVal = totalTaxable.toFixed(2);
@@ -1089,6 +1127,8 @@ class PrinterService {
 
             // --- TABLE ROW ---
             const customerName = collection.customer_name || "Customer";
+            const place = collection.place || collection.area || "";
+
             const amount = parseFloat(collection.amount || 0).toFixed(2);
             const chequeRef = collection.cheque_number || collection.ref_no || "";
             const paymentType = collection.payment_type || "CASH";
@@ -1097,6 +1137,10 @@ class PrinterService {
             // Line 1: Sl and Name
             // "1   Customer Name..."
             receipt += `1   ${customerName.substring(0, PRINTER_WIDTH - 6)}\n`;
+
+            if (place) {
+                receipt += `          Place: ${place.substring(0, PRINTER_WIDTH - 11)}\n`;
+            }
 
             // Line 2: Ref/Cheque and Amount
             // "    (Ref...)           25000.00"
