@@ -475,6 +475,27 @@ class SyncService {
             const data = await response.json();
             // Store entire JSON object
             await AsyncStorage.setItem('app_settings', JSON.stringify(data));
+            
+            // Map API options to local settings format
+            if (data.default_print_form) {
+                let formType = 'form1';
+                const apiForm = String(data.default_print_form).toLowerCase().replace(/\s+/g, '');
+                if (['form1', 'form2', 'form3'].includes(apiForm)) {
+                    formType = apiForm;
+                }
+                await AsyncStorage.setItem('settings_print_form_type', formType);
+            }
+            
+            if (data.tax_type) {
+                let taxCode = 'no_tax';
+                const apiTax = String(data.tax_type).toLowerCase().replace(/\s+/g, '');
+                if (apiTax === 'plustax') taxCode = 'plus_tax';
+                else if (apiTax === 'reversetax') taxCode = 'reverse_tax';
+                else if (apiTax === 'notax') taxCode = 'no_tax';
+                
+                await AsyncStorage.setItem('settings_tax_code', taxCode);
+            }
+
             console.log('[Sync] Settings downloaded and saved');
             console.log('[Sync] barcode_based_list:', data.barcode_based_list);
             return true;

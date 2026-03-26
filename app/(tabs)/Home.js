@@ -672,6 +672,7 @@ const Home = ({ navigation }) => {
                   </Text>
 
                   <View style={[styles.sizeSelectionContainer, { flexDirection: 'column', alignItems: 'stretch' }]}>
+                    {printFormType === 'form1' && (
                     <TouchableOpacity
                       style={[styles.sizeOption, { marginBottom: 12, justifyContent: 'flex-start' }, printFormType === 'form1' && styles.sizeOptionSelected]}
                       onPress={() => handlePrintFormSelection('form1')}
@@ -682,7 +683,9 @@ const Home = ({ navigation }) => {
                         <Text style={styles.sizeOptionSubtitle}>Standard with HSN / GST</Text>
                       </View>
                     </TouchableOpacity>
+                    )}
 
+                    {printFormType === 'form2' && (
                     <TouchableOpacity
                       style={[styles.sizeOption, { marginBottom: 12, justifyContent: 'flex-start' }, printFormType === 'form2' && styles.sizeOptionSelected]}
                       onPress={() => handlePrintFormSelection('form2')}
@@ -693,7 +696,9 @@ const Home = ({ navigation }) => {
                         <Text style={styles.sizeOptionSubtitle}>No HSN / GST (Compact)</Text>
                       </View>
                     </TouchableOpacity>
+                    )}
 
+                    {printFormType === 'form3' && (
                     <TouchableOpacity
                       style={[styles.sizeOption, { marginBottom: 40, justifyContent: 'flex-start' }, printFormType === 'form3' && styles.sizeOptionSelected]}
                       onPress={() => handlePrintFormSelection('form3')}
@@ -704,6 +709,7 @@ const Home = ({ navigation }) => {
                         <Text style={styles.sizeOptionSubtitle}>Dynamic Tax support</Text>
                       </View>
                     </TouchableOpacity>
+                    )}
                   </View>
                 </View>
               ) : isTaxSettingsOpen ? (
@@ -718,6 +724,7 @@ const Home = ({ navigation }) => {
                   </Text>
 
                   <View style={[styles.sizeSelectionContainer, { flexDirection: 'column', alignItems: 'stretch' }]}>
+                    {taxCodeSetting === 'no_tax' && (
                     <TouchableOpacity
                       style={[styles.sizeOption, { marginBottom: 12, justifyContent: 'flex-start' }, taxCodeSetting === 'no_tax' && styles.sizeOptionSelected]}
                       onPress={() => handleTaxSettingSelection('no_tax')}
@@ -728,7 +735,9 @@ const Home = ({ navigation }) => {
                         <Text style={styles.sizeOptionSubtitle}>Standard calculation (Tax ignored)</Text>
                       </View>
                     </TouchableOpacity>
+                    )}
 
+                    {taxCodeSetting === 'plus_tax' && (
                     <TouchableOpacity
                       style={[styles.sizeOption, { marginBottom: 12, justifyContent: 'flex-start' }, taxCodeSetting === 'plus_tax' && styles.sizeOptionSelected]}
                       onPress={() => handleTaxSettingSelection('plus_tax')}
@@ -739,7 +748,9 @@ const Home = ({ navigation }) => {
                         <Text style={styles.sizeOptionSubtitle}>Tax added to rate</Text>
                       </View>
                     </TouchableOpacity>
+                    )}
 
+                    {taxCodeSetting === 'reverse_tax' && (
                     <TouchableOpacity
                       style={[styles.sizeOption, { marginBottom: 40, justifyContent: 'flex-start' }, taxCodeSetting === 'reverse_tax' && styles.sizeOptionSelected]}
                       onPress={() => handleTaxSettingSelection('reverse_tax')}
@@ -750,6 +761,7 @@ const Home = ({ navigation }) => {
                         <Text style={styles.sizeOptionSubtitle}>Rate includes tax</Text>
                       </View>
                     </TouchableOpacity>
+                    )}
                   </View>
                 </View>
               ) : (
@@ -793,10 +805,21 @@ const Home = ({ navigation }) => {
                         <Text style={styles.sizeOptionSubtitle}>Extra Wide Receipt</Text>
                       </View>
                     </TouchableOpacity>
+
+                    <TouchableOpacity
+                      style={[styles.sizeOption, paperSize === 127 && styles.sizeOptionSelected]}
+                      onPress={() => handlePaperSizeSelection(127)}
+                    >
+                      <Ionicons name={paperSize === 127 ? "radio-button-on" : "radio-button-off"} size={24} color={paperSize === 127 ? Colors.primary.main : Colors.text.tertiary} />
+                      <View>
+                        <Text style={[styles.sizeOptionTitle, paperSize === 127 && styles.sizeOptionTitleSelected]}>5 Inch</Text>
+                        <Text style={styles.sizeOptionSubtitle}>Ultra Wide Receipt</Text>
+                      </View>
+                    </TouchableOpacity>
                   </View>
 
                   <Text style={styles.helperText}>
-                    Select 2 Inch for portable printers, 3 Inch for desktop, 4 Inch for extra wide.
+                    Select 2 Inch for portable printers, 3 Inch for desktop, 4 Inch for extra wide, 5 Inch for ultra wide.
                   </Text>
 
                   <View style={styles.visualizerContainer}>
