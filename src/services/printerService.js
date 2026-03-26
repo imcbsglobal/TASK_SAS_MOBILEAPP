@@ -117,6 +117,17 @@ class PrinterService {
         }
     }
 
+    // Load Terms & Conditions text for print footer
+    async loadTermsAndConditions() {
+        try {
+            const tc = await AsyncStorage.getItem('printer_terms_conditions');
+            return (tc && tc.trim()) ? tc.trim() : null;
+        } catch (e) {
+            console.warn("[Printer] Failed to load T&C:", e);
+            return null;
+        }
+    }
+
     // Set paper width (mm) and calculate chars per line
     async setPaperWidth(mm, save = true) {
         this.printerWidthMM = mm;
@@ -476,6 +487,25 @@ class PrinterService {
             }
             receipt += "\n";
 
+            // --- TERMS & CONDITIONS ---
+            const tcText1 = await this.loadTermsAndConditions();
+            if (tcText1) {
+                receipt += line;
+                // Wrap T&C text to PRINTER_WIDTH
+                const words1 = tcText1.split(' ');
+                let currentLine1 = '';
+                words1.forEach(word => {
+                    if ((currentLine1 + word).length > PRINTER_WIDTH) {
+                        receipt += currentLine1.trim() + '\n';
+                        currentLine1 = word + ' ';
+                    } else {
+                        currentLine1 += word + ' ';
+                    }
+                });
+                if (currentLine1.trim()) receipt += currentLine1.trim() + '\n';
+                receipt += '\n';
+            }
+
             console.log("[Printer] Form1 sending to printer, receipt length:", receipt.length);
             await PrinterInterface.printBill(receipt);
             return true;
@@ -599,8 +629,12 @@ class PrinterService {
             };
 
             receipt += printMetaLine(metaLeft1, "");
-            receipt += printMetaLine(metaLeft2, metaRight1);
-            receipt += printMetaLine(metaLeft3, "");
+            receipt += printMetaLine(metaLeft2, ""); // Inv No only
+            receipt += printMetaLine(metaLeft3, ""); // Type only
+            if (metaRight1) {
+                receipt += `${LEFT_PAD}${metaRight1}\n`;
+            }
+            receipt += "\n"; 
 
             // Customer
             let previousBalance = null;
@@ -621,9 +655,11 @@ class PrinterService {
                     } catch (e) { console.log('[Printer] Error fetching customer info', e); }
                 }
 
-                receipt += LEFT_PAD + "Customer: " + ESC_BOLD_ON + customerText + ESC_BOLD_OFF + "\n";
+                // Force single line for customer name
+                const maxCustLen = PRINTER_WIDTH - LEFT_PAD.length - 10;
+                receipt += LEFT_PAD + "Customer: " + ESC_BOLD_ON + customerText.substring(0, maxCustLen) + ESC_BOLD_OFF + "\n";
                 if (place) {
-                    receipt += `${LEFT_PAD}Place: ${place}\n`;
+                    receipt += `${LEFT_PAD}Place : ${place}\n`;
                 }
             }
 
@@ -632,14 +668,17 @@ class PrinterService {
             // --- ITEMS TABLE ---
             // NO | ITEM NAME | QTY | PRICE | TOTAL
             // Dynamic column widths based on printer width
+            // Use PRINTER_WIDTH-2 as effective content width to give 2-char safety margin
+            // (some printers physically fit 2 fewer chars than the formula predicts)
             let noLen = 2;
             let qtyLen = 6;
             let priceLen = 8;
             let totalLen = 9;
             const separators = 4;
+            const CONTENT_WIDTH = PRINTER_WIDTH >= 44 ? PRINTER_WIDTH - 2 : PRINTER_WIDTH;
 
             if (PRINTER_WIDTH >= 60) {
-                // Wide printer (4 inch) - give them more space
+                // Wide printer (4 inch+) - give them more space
                 noLen = 4;
                 qtyLen = 10;
                 priceLen = 12;
@@ -652,7 +691,7 @@ class PrinterService {
                 totalLen = 10;
             }
 
-            const itemLen = Math.max(8, PRINTER_WIDTH - LEFT_PAD.length - noLen - qtyLen - priceLen - totalLen - separators);
+            const itemLen = Math.max(8, CONTENT_WIDTH - LEFT_PAD.length - noLen - qtyLen - priceLen - totalLen - separators);
 
             const hdrNo = "NO".padEnd(noLen, " ");
             const hdrItem = "ITEM NAME".padEnd(itemLen, " ");
@@ -711,7 +750,9 @@ class PrinterService {
             // --- TOTAL ---
             const totalLabel = "TOTAL:";
             const totalVal = totalAmount.toFixed(2);
-            receipt += ESC_SIZE_LARGE + totalLabel + " ".repeat(Math.max(1, PRINTER_WIDTH - totalLabel.length - totalVal.length)) + totalVal + ESC_SIZE_NORMAL + "\n";
+            // Use CONTENT_WIDTH-LEFT_PAD.length to prevent right-edge clipping
+            const totalLineWidth = CONTENT_WIDTH - LEFT_PAD.length;
+            receipt += LEFT_PAD + ESC_SIZE_LARGE + totalLabel + " ".repeat(Math.max(1, totalLineWidth - totalLabel.length - totalVal.length)) + totalVal + ESC_SIZE_NORMAL + "\n";
 
             receipt += line;
             receipt += centerText("Thank You!");
@@ -722,12 +763,25 @@ class PrinterService {
             if (!isReturn && previousBalance !== null && previousBalance !== undefined && !isNaN(Number(previousBalance))) {
                 const balLabel = "PREVIOUS BALANCE:";
                 const balVal = Number(previousBalance).toFixed(2);
-                const availableForBal = PRINTER_WIDTH - LEFT_PAD.length - balLabel.length;
-                if (availableForBal >= balVal.length + 1) {
-                    receipt += `${LEFT_PAD}${balLabel}${" ".repeat(availableForBal - balVal.length)}${balVal}\n`;
-                } else {
-                    receipt += `${LEFT_PAD}${balLabel}\n${LEFT_PAD}${" ".repeat(Math.max(0, PRINTER_WIDTH - LEFT_PAD.length - balVal.length))}${balVal}\n`;
-                }
+                receipt += `${LEFT_PAD}${ESC_BOLD_ON}${balLabel} ${balVal}${ESC_BOLD_OFF}\n`;
+            }
+
+            // --- TERMS & CONDITIONS ---
+            const tcText2 = await this.loadTermsAndConditions();
+            if (tcText2) {
+                receipt += line;
+                const words2 = tcText2.split(' ');
+                let currentLine2 = '';
+                words2.forEach(word => {
+                    if ((currentLine2 + word).length > (CONTENT_WIDTH - LEFT_PAD.length)) {
+                        receipt += LEFT_PAD + currentLine2.trim() + '\n';
+                        currentLine2 = word + ' ';
+                    } else {
+                        currentLine2 += word + ' ';
+                    }
+                });
+                if (currentLine2.trim()) receipt += LEFT_PAD + currentLine2.trim() + '\n';
+                receipt += '\n';
             }
 
             console.log("[Printer] Form2 sending to printer, receipt length:", receipt.length);
@@ -856,8 +910,11 @@ class PrinterService {
             };
 
             receipt += printMetaLine(metaLeft1, "");
-            receipt += printMetaLine(metaLeft2, metaRight1);
-            receipt += printMetaLine(metaLeft3, "");
+            receipt += printMetaLine(metaLeft2, ""); // Inv No only
+            receipt += printMetaLine(metaLeft3, ""); // Type only
+            if (metaRight1) {
+                receipt += `${metaRight1}\n`;
+            }
 
             // Customer
             let previousBalance = null;
@@ -878,9 +935,12 @@ class PrinterService {
                     } catch (e) { console.log('[Printer] Error fetching customer info', e); }
                 }
 
-                receipt += "Customer: " + ESC_BOLD_ON + customerText + ESC_BOLD_OFF + "\n";
+                receipt += "\n";
+                // Force single line for customer name
+                const maxCustLenF3 = PRINTER_WIDTH - 10;
+                receipt += "Customer: " + ESC_BOLD_ON + customerText.substring(0, Math.max(0, maxCustLenF3)) + ESC_BOLD_OFF + "\n";
                 if (place) {
-                    receipt += `Place: ${place}\n`;
+                    receipt += `Place : ${place}\n`;
                 }
             }
 
@@ -893,6 +953,8 @@ class PrinterService {
             const qtyLen = 6;
             const priceLen = 8;
             const totalLen = 8;
+            // Use PRINTER_WIDTH-2 safety margin for row calculations
+            const CONTENT_WIDTH_F3 = PRINTER_WIDTH >= 32 ? PRINTER_WIDTH - 2 : PRINTER_WIDTH;
 
             const hdrNo = "NO".padEnd(noLen, " ");
             const hdrItem = "ITEM NAME";
@@ -904,7 +966,7 @@ class PrinterService {
             const hdrTotal = "TOTAL".padStart(totalLen, " ");
             // Fixed HSN + Tax header prefix — same width as used in data rows
             const hsnTaxHdrLen = 14; // e.g. "HSN:XXXX T:18%"
-            const spacer2ndLine = " ".repeat(Math.max(0, PRINTER_WIDTH - hsnTaxHdrLen - qtyLen - priceLen - totalLen - 3));
+            const spacer2ndLine = " ".repeat(Math.max(0, CONTENT_WIDTH_F3 - hsnTaxHdrLen - qtyLen - priceLen - totalLen - 3));
             receipt += ESC_BOLD_ON + `${spacer2ndLine}${'HSN'.padEnd(6)}${'TAX%'.padStart(8)} ${hdrQty} ${hdrPrice} ${hdrTotal}` + ESC_BOLD_OFF + "\n";
 
             receipt += line;
@@ -964,7 +1026,7 @@ class PrinterService {
                     const hsnPart = `HSN:${hsnVal}`.padEnd(10);
                     const taxPart = `${taxStr}`.padStart(4);
                     const hsnTaxPrefix = `${hsnPart}${taxPart}`;
-                    const valueSpacer = " ".repeat(Math.max(0, PRINTER_WIDTH - hsnTaxPrefix.length - qtyLen - priceLen - totalLen - 3));
+                    const valueSpacer = " ".repeat(Math.max(0, CONTENT_WIDTH_F3 - hsnTaxPrefix.length - qtyLen - priceLen - totalLen - 3));
 
                     receipt += `${valueSpacer}${hsnTaxPrefix} ${qtyStr} ${priceStr} ${totalStr}\n`;
 
@@ -980,7 +1042,7 @@ class PrinterService {
             const qtyLen_F3 = 6;
             const priceLen_F3 = 8;
             const totalLen_F3 = 8;
-            const prefixOffset = Math.max(0, PRINTER_WIDTH - hsnTaxPrefixLen - qtyLen_F3 - priceLen_F3 - totalLen_F3 - 3) + hsnTaxPrefixLen + 1;
+            const prefixOffset = Math.max(0, CONTENT_WIDTH_F3 - hsnTaxPrefixLen - qtyLen_F3 - priceLen_F3 - totalLen_F3 - 3) + hsnTaxPrefixLen + 1;
             
             const qtyLabel = "TOTAL QTY:";
             const paddedQty = totalQtyVal.padStart(qtyLen_F3, " ");
@@ -999,21 +1061,47 @@ class PrinterService {
                 const taxLabel = "TAX:";
                 const netTotalLabel = taxSetting === 'plus_tax' ? "NET TOTAL:" : "TOTAL:";
 
-                receipt += `${taxableLabel}` + " ".repeat(Math.max(1, PRINTER_WIDTH - taxableLabel.length - taxableVal.length)) + taxableVal + "\n";
-                receipt += `${taxLabel}` + " ".repeat(Math.max(1, PRINTER_WIDTH - taxLabel.length - taxVal.length)) + taxVal + "\n";
-                receipt += ESC_SIZE_LARGE + netTotalLabel + " ".repeat(Math.max(1, PRINTER_WIDTH - netTotalLabel.length - netTotalVal.length)) + netTotalVal + ESC_SIZE_NORMAL + "\n";
+                receipt += `${taxableLabel}` + " ".repeat(Math.max(1, CONTENT_WIDTH_F3 - taxableLabel.length - taxableVal.length)) + taxableVal + "\n";
+                receipt += `${taxLabel}` + " ".repeat(Math.max(1, CONTENT_WIDTH_F3 - taxLabel.length - taxVal.length)) + taxVal + "\n";
+                receipt += ESC_SIZE_LARGE + netTotalLabel + " ".repeat(Math.max(1, CONTENT_WIDTH_F3 - netTotalLabel.length - netTotalVal.length)) + netTotalVal + ESC_SIZE_NORMAL + "\n";
             } else {
                 // --- TOTAL only (no_tax or other) ---
                 const totalLabel = "TOTAL:";
                 const totalVal = totalAmount.toFixed(2);
-                receipt += ESC_SIZE_LARGE + totalLabel + " ".repeat(Math.max(1, PRINTER_WIDTH - totalLabel.length - totalVal.length)) + totalVal + ESC_SIZE_NORMAL + "\n";
+                receipt += ESC_SIZE_LARGE + totalLabel + " ".repeat(Math.max(1, CONTENT_WIDTH_F3 - totalLabel.length - totalVal.length)) + totalVal + ESC_SIZE_NORMAL + "\n";
             }
 
             receipt += line;
             receipt += centerText("Thank You!");
             receipt += "\n";
 
+            // Previous Balance at the bottom, ONLY if not Return
+            const isReturn = (order.type === 'Return') || (receiptTitle.includes("RETURN"));
+            if (!isReturn && previousBalance !== null && previousBalance !== undefined && !isNaN(Number(previousBalance))) {
+                const balLabel = "PREVIOUS BALANCE:";
+                const balVal = Number(previousBalance).toFixed(2);
+                receipt += `${ESC_BOLD_ON}${balLabel} ${balVal}${ESC_BOLD_OFF}\n`;
+            }
 
+
+
+            // --- TERMS & CONDITIONS ---
+            const tcText3 = await this.loadTermsAndConditions();
+            if (tcText3) {
+                receipt += line;
+                const words3 = tcText3.split(' ');
+                let currentLine3 = '';
+                words3.forEach(word => {
+                    if ((currentLine3 + word).length > CONTENT_WIDTH_F3) {
+                        receipt += currentLine3.trim() + '\n';
+                        currentLine3 = word + ' ';
+                    } else {
+                        currentLine3 += word + ' ';
+                    }
+                });
+                if (currentLine3.trim()) receipt += currentLine3.trim() + '\n';
+                receipt += '\n';
+            }
 
             console.log("[Printer] Form3 sending to printer, receipt length:", receipt.length);
             if (PrinterInterface.printText) {
@@ -1190,6 +1278,24 @@ class PrinterService {
             }
 
             receipt += "\n";
+
+            // --- TERMS & CONDITIONS ---
+            const tcTextC = await this.loadTermsAndConditions();
+            if (tcTextC) {
+                receipt += line;
+                const wordsC = tcTextC.split(' ');
+                let currentLineC = '';
+                wordsC.forEach(word => {
+                    if ((currentLineC + word).length > PRINTER_WIDTH) {
+                        receipt += currentLineC.trim() + '\n';
+                        currentLineC = word + ' ';
+                    } else {
+                        currentLineC += word + ' ';
+                    }
+                });
+                if (currentLineC.trim()) receipt += currentLineC.trim() + '\n';
+                receipt += '\n';
+            }
 
             await PrinterInterface.printBill(receipt);
             return true;

@@ -8,12 +8,15 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import {
   Animated,
   Dimensions,
+  KeyboardAvoidingView,
   Modal,
+  Platform,
   SafeAreaView,
   ScrollView,
   StatusBar,
   StyleSheet,
   Text,
+  TextInput,
   TouchableOpacity,
   View
 } from 'react-native';
@@ -47,6 +50,9 @@ const Home = ({ navigation }) => {
   const [defaultQuantity, setDefaultQuantity] = useState(1); // Default to 1
   const [printFormType, setPrintFormType] = useState('form1'); // 'form1' | 'form2' | 'form3'
   const [taxCodeSetting, setTaxCodeSetting] = useState('no_tax'); // 'no_tax' | 'plus_tax' | 'reverse_tax'
+  const [termsAndConditions, setTermsAndConditions] = useState(''); // T&C text for print footer
+  const [termsInput, setTermsInput] = useState(''); // Editing buffer for T&C
+  const [tcModalVisible, setTcModalVisible] = useState(false); // Modal for editing T&C
   useEffect(() => {
     // Load username from storage
     const loadUsername = async () => {
@@ -223,6 +229,11 @@ const Home = ({ navigation }) => {
     try {
       await printerService.loadSettings();
       setPaperSize(printerService.printerWidthMM);
+      // Load Terms & Conditions
+      const tc = await AsyncStorage.getItem('printer_terms_conditions');
+      const tcText = tc || '';
+      setTermsAndConditions(tcText);
+      setTermsInput(tcText);
     } catch (e) {
       console.log("Printer settings load error", e);
     }
@@ -234,6 +245,25 @@ const Home = ({ navigation }) => {
       await printerService.setPaperWidth(size);
     } catch (e) {
       console.log("Printer paper size set error", e);
+    }
+  };
+
+  const handleSaveTermsAndConditions = async () => {
+    try {
+      await AsyncStorage.setItem('printer_terms_conditions', termsInput.trim());
+      setTermsAndConditions(termsInput.trim());
+    } catch (e) {
+      console.log("Error saving T&C", e);
+    }
+  };
+
+  const handleClearTermsAndConditions = async () => {
+    try {
+      await AsyncStorage.removeItem('printer_terms_conditions');
+      setTermsAndConditions('');
+      setTermsInput('');
+    } catch (e) {
+      console.log("Error clearing T&C", e);
     }
   };
 
@@ -453,7 +483,10 @@ const Home = ({ navigation }) => {
           visible={settingsModalVisible}
           onRequestClose={() => setSettingsModalVisible(false)}
         >
-          <View style={styles.modalOverlay}>
+          <KeyboardAvoidingView 
+            behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+            style={styles.modalOverlay}
+          >
             <View style={styles.modalContent}>
 
               {/* Header */}
@@ -830,11 +863,137 @@ const Home = ({ navigation }) => {
                       {'-'.repeat(Math.floor((paperSize / 58) * 32))}
                     </Text>
                   </View>
+
+                  {/* Terms & Conditions Button */}
+                  <View style={{ marginTop: 20 }}>
+                    <TouchableOpacity
+                      style={{
+                        flexDirection: 'row',
+                        alignItems: 'center',
+                        justifyContent: 'space-between',
+                        backgroundColor: '#f8f9fa',
+                        padding: 16,
+                        borderRadius: 12,
+                        borderWidth: 1,
+                        borderColor: '#e0e0e0'
+                      }}
+                      onPress={() => setTcModalVisible(true)}
+                    >
+                      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
+                        <Ionicons name="document-text-outline" size={24} color={Colors.primary.main} />
+                        <View>
+                          <Text style={{ fontWeight: '600', color: Colors.text.primary }}>Terms & Conditions</Text>
+                          <Text style={{ fontSize: 12, color: Colors.text.tertiary }}>
+                            {termsAndConditions ? 'T&C added' : 'Add print footer text'}
+                          </Text>
+                        </View>
+                      </View>
+                      <Ionicons name="chevron-forward" size={20} color={Colors.text.tertiary} />
+                    </TouchableOpacity>
+                  </View>
                 </View>
               )}
 
             </View>
-          </View>
+          </KeyboardAvoidingView>
+        </Modal>
+
+        {/* Dedicated T&C Modal */}
+        <Modal
+          animationType="fade"
+          transparent={true}
+          visible={tcModalVisible}
+          onRequestClose={() => setTcModalVisible(false)}
+        >
+          <KeyboardAvoidingView 
+            behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+            style={{
+              flex: 1,
+              backgroundColor: 'rgba(0,0,0,0.5)',
+              justifyContent: 'center',
+              padding: 20
+            }}
+          >
+            <View style={{
+              backgroundColor: '#fff',
+              borderRadius: 20,
+              padding: 24,
+              width: '100%',
+              maxWidth: 400,
+              elevation: 20
+            }}>
+              <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 }}>
+                <Text style={{ fontSize: 18, fontWeight: '700', color: Colors.text.primary }}>Edit Terms & Conditions</Text>
+                <TouchableOpacity onPress={() => setTcModalVisible(false)}>
+                  <Ionicons name="close" size={24} color={Colors.text.primary} />
+                </TouchableOpacity>
+              </View>
+
+              <Text style={{ color: Colors.text.tertiary, fontSize: 13, marginBottom: 12 }}>
+                This text will be printed at the bottom of every receipt.
+              </Text>
+
+              <TextInput
+                style={{
+                  borderWidth: 1,
+                  borderColor: '#ddd',
+                  borderRadius: 12,
+                  padding: 14,
+                  minHeight: 120,
+                  textAlignVertical: 'top',
+                  fontSize: 15,
+                  color: '#333',
+                  backgroundColor: '#f9f9f9',
+                  marginBottom: 20,
+                }}
+                multiline
+                autoFocus
+                placeholder="Enter terms and conditions..."
+                placeholderTextColor="#aaa"
+                value={termsInput}
+                onChangeText={setTermsInput}
+              />
+
+              <View style={{ flexDirection: 'row', gap: 12 }}>
+                <TouchableOpacity
+                  style={{
+                    flex: 1,
+                    backgroundColor: Colors.primary.main,
+                    paddingVertical: 14,
+                    borderRadius: 12,
+                    alignItems: 'center',
+                    elevation: 2
+                  }}
+                  onPress={async () => {
+                    await handleSaveTermsAndConditions();
+                    setTcModalVisible(false);
+                  }}
+                >
+                  <Text style={{ color: '#fff', fontWeight: '700', fontSize: 16 }}>Save</Text>
+                </TouchableOpacity>
+                
+                {termsAndConditions ? (
+                  <TouchableOpacity
+                    style={{
+                      flex: 1,
+                      backgroundColor: '#fff',
+                      paddingVertical: 14,
+                      borderRadius: 12,
+                      alignItems: 'center',
+                      borderWidth: 1,
+                      borderColor: '#f44336'
+                    }}
+                    onPress={async () => {
+                      await handleClearTermsAndConditions();
+                      setTcModalVisible(false);
+                    }}
+                  >
+                    <Text style={{ color: '#f44336', fontWeight: '700', fontSize: 16 }}>Remove</Text>
+                  </TouchableOpacity>
+                ) : null}
+              </View>
+            </View>
+          </KeyboardAvoidingView>
         </Modal>
 
       </SafeAreaView>
