@@ -238,6 +238,11 @@ class DatabaseService {
             }
 
             await this.db.runAsync('CREATE INDEX IF NOT EXISTS idx_products_barcode ON products(barcode)');
+            await this.db.runAsync('CREATE INDEX IF NOT EXISTS idx_products_name ON products(name)');
+            await this.db.runAsync('CREATE INDEX IF NOT EXISTS idx_products_code ON products(code)');
+            await this.db.runAsync('CREATE INDEX IF NOT EXISTS idx_products_brand ON products(brand)');
+            await this.db.runAsync('CREATE INDEX IF NOT EXISTS idx_products_category ON products(category)');
+            await this.db.runAsync('CREATE INDEX IF NOT EXISTS idx_products_dept ON products(department_name)');
 
             await this.db.runAsync(
                 'CREATE TABLE IF NOT EXISTS company_info (id INTEGER PRIMARY KEY AUTOINCREMENT, client_id TEXT UNIQUE, name TEXT, address TEXT, phone TEXT, email TEXT, data TEXT, created_at TEXT, updated_at TEXT)'
@@ -808,6 +813,36 @@ class DatabaseService {
         }
     }
 
+    /**
+     * Get batches for a specific list of product codes
+     */
+    async getBatchesByProductCodes(productCodes) {
+        try {
+            if (!productCodes || productCodes.length === 0) return [];
+            const placeholders = productCodes.map(() => '?').join(',');
+            const result = await this.db.getAllAsync(
+                `SELECT * FROM batches WHERE product_code IN (${placeholders}) ORDER BY product_code, barcode ASC`,
+                productCodes
+            );
+
+            return (result || []).map(batch => {
+                if (batch.prices) {
+                    try {
+                        batch.prices = JSON.parse(batch.prices);
+                    } catch (e) {
+                        batch.prices = [];
+                    }
+                } else {
+                    batch.prices = [];
+                }
+                return batch;
+            });
+        } catch (error) {
+            console.error('[DB] Error getting batches by codes:', error);
+            return [];
+        }
+    }
+
     // ==================== BULK INSERT FOR BATCHES (OPTIMIZED WITH TRANSACTION) ====================
     async saveBatchesBulk(batchesWithProductCode) {
         try {
@@ -1063,6 +1098,32 @@ class DatabaseService {
     }
 
     /**
+     * Get photos for a specific list of product codes
+     */
+    async getPhotosByProductCodes(productCodes) {
+        try {
+            if (!productCodes || productCodes.length === 0) return new Map();
+            const placeholders = productCodes.map(() => '?').join(',');
+            const result = await this.db.getAllAsync(
+                `SELECT product_code, url, order_index FROM product_photos WHERE product_code IN (${placeholders}) ORDER BY product_code, order_index ASC`,
+                productCodes
+            );
+
+            const photosByProduct = new Map();
+            for (const photo of result || []) {
+                if (!photosByProduct.has(photo.product_code)) {
+                    photosByProduct.set(photo.product_code, []);
+                }
+                photosByProduct.get(photo.product_code).push({ url: photo.url });
+            }
+            return photosByProduct;
+        } catch (error) {
+            console.error('[DB] Error getting photos by codes:', error);
+            return new Map();
+        }
+    }
+
+    /**
      * Get ALL product goddowns in a single query and return as Map grouped by product_code
      * This is MUCH faster than calling getProductGoddowns() for each product
      */
@@ -1089,6 +1150,36 @@ class DatabaseService {
             return goddownsByProduct;
         } catch (error) {
             console.error('[DB] Error getting all goddowns:', error);
+            return new Map();
+        }
+    }
+
+    /**
+     * Get goddowns for a specific list of product codes
+     */
+    async getGoddownsByProductCodes(productCodes) {
+        try {
+            if (!productCodes || productCodes.length === 0) return new Map();
+            const placeholders = productCodes.map(() => '?').join(',');
+            const result = await this.db.getAllAsync(
+                `SELECT product_code, barcode, name, quantity FROM product_goddowns WHERE product_code IN (${placeholders}) ORDER BY product_code, name ASC`,
+                productCodes
+            );
+
+            const goddownsByProduct = new Map();
+            for (const godown of result || []) {
+                if (!goddownsByProduct.has(godown.product_code)) {
+                    goddownsByProduct.set(godown.product_code, []);
+                }
+                goddownsByProduct.get(godown.product_code).push({
+                    barcode: godown.barcode,
+                    name: godown.name,
+                    quantity: godown.quantity
+                });
+            }
+            return goddownsByProduct;
+        } catch (error) {
+            console.error('[DB] Error getting goddowns by codes:', error);
             return new Map();
         }
     }

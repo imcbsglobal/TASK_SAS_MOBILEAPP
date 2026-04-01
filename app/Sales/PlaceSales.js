@@ -792,8 +792,16 @@ export default function PlaceSales() {
         setSelectedOrderToPrint({ ...orderToPrint, _formType: formType });
         setPrinterModalVisible(true);
         setIsScanningPrinters(true);
-        const devices = await printerService.getDeviceList('ble');
-        setPrinters(devices);
+        const result = await printerService.getDeviceList('ble');
+        if (result && result.error === 'BLUETOOTH_OFF') {
+          Alert.alert("Bluetooth Off", "Please turn on Bluetooth in your device settings to scan for printers.");
+          setPrinters([]);
+        } else if (result && result.error === 'PERMISSIONS_DENIED') {
+          Alert.alert("Permissions Required", "Bluetooth permissions are required to scan for printers.");
+          setPrinters([]);
+        } else {
+          setPrinters(Array.isArray(result) ? result : []);
+        }
         setIsScanningPrinters(false);
       }
     } catch (error) {
@@ -807,10 +815,22 @@ export default function PlaceSales() {
     setPrinters([]);
     setConnectionType(type);
     try {
-      const devices = await printerService.getDeviceList(type);
-      setPrinters(devices);
-    } catch (e) { Alert.alert("Error", "Scan failed"); }
-    finally { setIsScanningPrinters(false); }
+      const result = await printerService.getDeviceList(type);
+      if (result && result.error === 'BLUETOOTH_OFF') {
+        Alert.alert("Bluetooth Off", "Please turn on Bluetooth in your device settings to scan for printers.");
+        setPrinters([]);
+      } else if (result && result.error === 'PERMISSIONS_DENIED') {
+        Alert.alert("Permissions Required", "Bluetooth permissions are required to scan for printers.");
+        setPrinters([]);
+      } else {
+        setPrinters(Array.isArray(result) ? result : []);
+      }
+    } catch (e) {
+      console.error("[Printer] Scan UI error:", e);
+      Alert.alert("Error", "Scan failed");
+    } finally {
+      setIsScanningPrinters(false);
+    }
   };
 
   const handleSharePDF = async (order) => {

@@ -4,7 +4,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as NetInfo from "@react-native-community/netinfo";
 import { LinearGradient } from "expo-linear-gradient";
 import { useFocusEffect, useLocalSearchParams, useRouter } from "expo-router";
-import { useCallback, useEffect, useRef, useState } from "react";
+import React, { useCallback, useEffect, useRef, useState } from "react";
 import {
   ActivityIndicator,
   Alert,
@@ -318,7 +318,7 @@ export default function SalesDetails() {
   const [totalCount, setTotalCount] = useState(0);
   const [loadingMore, setLoadingMore] = useState(false);
   const [hasMore, setHasMore] = useState(true);
-  const PRODUCTS_PER_PAGE = 500; // Increased to load more products initially
+  const PRODUCTS_PER_PAGE = 100; // Optimized load size
 
   // Track last processed barcode to prevent duplicates
   const lastProcessedBarcode = useRef(null);
@@ -1890,6 +1890,10 @@ export default function SalesDetails() {
               keyExtractor={(item) => item.id.toString()}
               contentContainerStyle={styles.listContent}
               showsVerticalScrollIndicator={false}
+              initialNumToRender={10}
+              maxToRenderPerBatch={10}
+              windowSize={5}
+              removeClippedSubviews={Platform.OS === 'android'}
               refreshControl={
                 <RefreshControl
                   refreshing={refreshing}
@@ -2706,7 +2710,7 @@ export default function SalesDetails() {
 }
 
 // Separated Component for better performance
-const CodeItem = ({ item, inStock, stockQty, currentQty, displayValue, isInCart, isHighlighted, setEditingQty, changeQty, removeItem, addToCart, openImageModal, openDetailsModal, defaultQuantity, editingQty }) => (
+const CodeItemBase = ({ item, inStock, stockQty, currentQty, displayValue, isInCart, isHighlighted, setEditingQty, changeQty, removeItem, addToCart, openImageModal, openDetailsModal, defaultQuantity, editingQty }) => (
   <View style={[
     styles.productCard,
     isInCart && styles.productCardInCart,
@@ -2917,6 +2921,22 @@ const CodeItem = ({ item, inStock, stockQty, currentQty, displayValue, isInCart,
     </View>
   </View>
 );
+
+
+
+// Memoize CodeItem to prevent redundant re-renders
+const CodeItem = React.memo(CodeItemBase, (prevProps, nextProps) => {
+  // Only re-render if essential props change
+  return (
+    prevProps.item.id === nextProps.item.id &&
+    prevProps.currentQty === nextProps.currentQty &&
+    prevProps.displayValue === nextProps.displayValue &&
+    prevProps.isInCart === nextProps.isInCart &&
+    prevProps.isHighlighted === nextProps.isHighlighted &&
+    prevProps.inStock === nextProps.inStock &&
+    prevProps.stockQty === nextProps.stockQty
+  );
+});
 
 const styles = StyleSheet.create({
   container: { flex: 1 },

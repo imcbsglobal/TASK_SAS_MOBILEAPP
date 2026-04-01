@@ -243,33 +243,35 @@ class BatchService {
 
             console.log(`[BatchService] ✅ Loaded ${products.length} products from database`);
 
-            // OPTIMIZED: Get ALL batches in a single query instead of N queries
-            const allBatches = await dbService.getAllBatches();
+            // OPTIMIZED: Get batches, photos, and goddowns ONLY for the products we just loaded
+            const productCodes = products.map(p => p.code);
+            
+            const [batches, allPhotos, allGoddowns] = await Promise.all([
+                dbService.getBatchesByProductCodes(productCodes),
+                dbService.getPhotosByProductCodes(productCodes),
+                dbService.getGoddownsByProductCodes(productCodes)
+            ]);
 
             // Group batches by product code for O(1) lookup
             const batchesByProduct = {};
-            for (const batch of allBatches) {
+            for (const batch of batches) {
                 if (!batchesByProduct[batch.product_code]) {
                     batchesByProduct[batch.product_code] = [];
                 }
                 batchesByProduct[batch.product_code].push(batch);
             }
 
-            // OPTIMIZED: Get ALL photos and goddowns in single queries instead of N queries each
-            const allPhotos = await dbService.getAllProductPhotos(); // Returns Map<product_code, photos[]>
-            const allGoddowns = await dbService.getAllProductGoddowns(); // Returns Map<product_code, goddowns[]>
-
             // Combine products with their batches, photos, and goddowns
             const productsWithBatches = [];
 
             for (const product of products) {
-                const batches = batchesByProduct[product.code] || [];
+                const productBatches = batchesByProduct[product.code] || [];
                 const photos = allPhotos.get(product.code) || [];
                 const goddowns = allGoddowns.get(product.code) || [];
 
                 productsWithBatches.push({
                     ...product,
-                    batches,
+                    batches: productBatches,
                     photos,
                     goddowns
                 });
@@ -277,8 +279,7 @@ class BatchService {
 
             const duration = ((Date.now() - startTime) / 1000).toFixed(2);
             console.log(`[BatchService] ✅ Loaded ${productsWithBatches.length} products with batches in ${duration}s`);
-            console.log(`[BatchService] Total batches: ${allBatches.length}, photos: ${allPhotos.size} products, goddowns: ${allGoddowns.size} products`);
-
+            
             return productsWithBatches;
         } catch (error) {
             console.error('[BatchService] Error getting product batches offline:', error);

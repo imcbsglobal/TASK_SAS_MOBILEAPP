@@ -1,5 +1,6 @@
 // src/services/syncService.js - OPTIMIZED VERSION
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import * as FileSystem from 'expo-file-system/legacy';
 import dbService from './database';
 
 const API_BASE_URL = 'https://tasksas.com/api';
@@ -116,7 +117,8 @@ class SyncService {
                 this.downloadCustomers(),
                 this.downloadAreas(),
                 this.downloadSettings(),
-                this.downloadUsers()
+                this.downloadUsers(),
+                this.downloadLogo()
             ]);
 
             // Process results
@@ -552,6 +554,69 @@ class SyncService {
             return false;
         } catch (error) {
             console.error('[Sync] Error downloading users:', error);
+            return false;
+        }
+    }
+
+    async downloadLogo() {
+        try {
+            console.log('[Sync] Checking for company logo...');
+            const token = await this.getAuthToken();
+            
+            const response = await fetch(`${API_BASE_URL}/settings/logo/`, {
+                method: 'GET',
+                headers: {
+                    'Authorization': `Bearer ${token}`,
+                    'Content-Type': 'application/json',
+                }
+            });
+
+            if (!response.ok) {
+                console.warn(`[Sync] Logo API returned ${response.status}`);
+                return false;
+            }
+
+            const data = await response.json();
+            if (data.logo_url) {
+                console.log(`[Sync] Found logo URL: ${data.logo_url}`);
+                
+                const fileUri = FileSystem.documentDirectory + 'printer_logo.png';
+                
+                // Ensure fresh download by deleting existing file first
+                try {
+                    const existing = await FileSystem.getInfoAsync(fileUri);
+                    if (existing.exists) {
+                        await FileSystem.deleteAsync(fileUri, { idempotent: true });
+                    }
+                } catch (e) { console.log('[Sync] Error clearing old logo', e); }
+
+                // Download image
+                const downloadRes = await FileSystem.downloadAsync(
+                    data.logo_url,
+                    fileUri
+                );
+
+                if (downloadRes.status === 200) {
+                    await AsyncStorage.setItem('printer_logo_synced', 'true');
+                    console.log(`[Sync] Logo downloaded successfully to ${fileUri}`);
+                    
+                    // Verify base64 content
+                    try {
+                        const b64 = await FileSystem.readAsStringAsync(fileUri, { encoding: FileSystem.EncodingType.Base64 });
+                        console.log(`[Sync] Logo Base64 Preview: ${b64.substring(0, 50)}... (Total: ${b64.length})`);
+                    } catch (e) { console.warn("[Sync] Could not read logo for preview", e); }
+                    
+                    return true;
+                } else {
+                    console.warn(`[Sync] Failed to download logo image. Status: ${downloadRes.status}, URI: ${data.logo_url}`);
+                }
+            } else {
+                console.log('[Sync] No logo URL found in API response. Clearing existing logo.');
+                await AsyncStorage.removeItem('printer_logo_synced');
+            }
+            return false;
+        } catch (error) {
+            console.error('[Sync] Error downloading logo:', error);
             return false;
         }
     }

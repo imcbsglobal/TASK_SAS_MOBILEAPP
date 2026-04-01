@@ -1,4 +1,5 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
+import * as FileSystem from 'expo-file-system/legacy';
 import { Alert, NativeModules, PermissionsAndroid, Platform } from "react-native";
 
 // Safe Import Pattern
@@ -19,12 +20,14 @@ try {
         init: async () => { console.log("Mock BLE Init"); return Promise.resolve(); },
         getDeviceList: async () => [],
         connectPrinter: async () => { console.log("Mock BLE Connect"); return Promise.resolve(true); },
+        printPic: async (base64, options) => { console.log("Mock BLE PrintPic", options); return Promise.resolve(); },
         printBill: async () => { console.log("Mock BLE Print"); return Promise.resolve(); },
     };
     USBPrinter = {
         init: async () => { console.log("Mock USB Init"); return Promise.resolve(); },
         getDeviceList: async () => [],
         connectPrinter: async () => { console.log("Mock USB Connect"); return Promise.resolve(true); },
+        printPic: async (base64, options) => { console.log("Mock USB PrintPic", options); return Promise.resolve(); },
         printBill: async () => { console.log("Mock USB Print"); return Promise.resolve(); },
     };
 }
@@ -43,6 +46,7 @@ class PrinterService {
 
         // Cache for company info
         this.companyInfo = null;
+        this.lastError = null;
     }
 
     // Load saved settings
@@ -203,10 +207,18 @@ class PrinterService {
                 try {
                     await new Promise(resolve => setTimeout(resolve, 500));
                     if (BLEPrinter && BLEPrinter.init) {
-                        await BLEPrinter.init();
-                        this.isBLEInitialized = true;
-                        console.log("[Printer] BLE Init Success");
-                        return true;
+                        try {
+                            await BLEPrinter.init();
+                            this.isBLEInitialized = true;
+                            this.lastError = null;
+                            console.log("[Printer] BLE Init Success");
+                            return true;
+                        } catch (bleErr) {
+                            const errMsg = bleErr.message || bleErr || "";
+                            this.lastError = errMsg;
+                            console.warn("[Printer] BLE Init Failed (Native):", errMsg);
+                            return false;
+                        }
                     } else {
                         console.warn("[Printer] BLEPrinter module undefined");
                         return false;
@@ -247,12 +259,17 @@ class PrinterService {
             this.connectionType = type;
             if (type === 'ble') {
                 if (!initSuccess && !this.isBLEInitialized) {
-                    console.warn("[Printer] Skipping BLE scan - not initialized (Bluetooth might be off)");
+                    const reason = this.lastError || "Bluetooth might be off";
+                    console.warn(`[Printer] Skipping BLE scan - ${reason}`);
+                    // Return special error object if it's a known state
+                    if (reason.toLowerCase().includes("not enabled")) {
+                        return { error: "BLUETOOTH_OFF" };
+                    }
                     return [];
                 }
 
                 const hasPerm = await this.requestPermissions();
-                if (!hasPerm) return [];
+                if (!hasPerm) return { error: "PERMISSIONS_DENIED" };
 
                 try {
                     const devices = BLEPrinter ? await BLEPrinter.getDeviceList() : [];
@@ -284,10 +301,19 @@ class PrinterService {
 
     async connect(device) {
         try {
+            if (!device) return false;
             let printerMac = device.inner_mac_address || device.vendor_id;
             console.log(`[Printer] Connecting to ${this.connectionType}:`, printerMac);
 
             if (this.connectionType === 'ble') {
+                // Defensive check: Re-verify initialization
+                if (!this.isBLEInitialized) {
+                    const success = await this.init('ble');
+                    if (!success) {
+                        const reason = this.lastError || "Bluetooth is off";
+                        throw new Error(reason);
+                    }
+                }
                 if (BLEPrinter) await BLEPrinter.connectPrinter(printerMac);
             } else {
                 if (USBPrinter) await USBPrinter.connectPrinter(device.vendor_id, device.product_id);
@@ -298,8 +324,13 @@ class PrinterService {
             console.log("[Printer] Connected successfully");
             return true;
         } catch (err) {
-            console.warn("[Printer] Connection failed:", err.message || err);
+            const msg = err.message || err;
+            console.warn("[Printer] Connection failed:", msg);
             this.connected = false;
+            // Provide more specific error if known
+            if (msg.toLowerCase().includes("not enabled")) {
+                Alert.alert("Bluetooth Off", "Please turn on Bluetooth in your device settings and try again.");
+            }
             return false;
         }
     }
@@ -319,6 +350,27 @@ class PrinterService {
                     return false;
                 }
             }
+
+            // --- LOGO (Patched) ---
+            try {
+                const isSynced = await AsyncStorage.getItem('printer_logo_synced');
+                if (isSynced === 'true') {
+                    const logoUri = FileSystem.documentDirectory + 'printer_logo.png';
+                    const info = await FileSystem.getInfoAsync(logoUri);
+                    if (info.exists) {
+                        const PrinterInterface = this.connectionType === 'ble' ? BLEPrinter : USBPrinter;
+                        console.log(`[Printer] Attempting logo print (Patched). Path: ${logoUri}`);
+                        try {
+                            await PrinterInterface.printPic(logoUri);
+                        } catch (e) {
+                            console.warn("[Printer] Logo print attempt failed:", e);
+                        }
+                        await PrinterInterface.printText("\x1B\x61\x00"); // Reset to left
+                        await new Promise(resolve => setTimeout(resolve, 500));
+                        console.log(`[Printer] Logo print attempt finished`);
+                    }
+                }
+            } catch (logoErr) { console.warn("[Printer] Logo print error:", logoErr); }
 
             // Ensure company info is loaded
             await this.loadCompanyInfo();
@@ -474,8 +526,8 @@ class PrinterService {
             // --- TOTAL ---
             const totalLabel = "TOTAL:";
             const totalVal = totalAmount.toFixed(2);
-            const totalPad = PRINTER_WIDTH - totalLabel.length - totalVal.length;
-            receipt += `${totalLabel}${" ".repeat(Math.max(0, totalPad))}${totalVal}\n`;
+            const totalPad = PRINTER_WIDTH - totalLabel.length - totalVal.length - 1;
+            receipt += `${" ".repeat(Math.max(0, totalPad))}${totalLabel} ${totalVal}\n`;
 
             receipt += line;
             receipt += centerText("Thank You!");
@@ -533,6 +585,27 @@ class PrinterService {
                     return false;
                 }
             }
+
+            // --- LOGO (Patched) ---
+            try {
+                const isSynced = await AsyncStorage.getItem('printer_logo_synced');
+                if (isSynced === 'true') {
+                    const logoUri = FileSystem.documentDirectory + 'printer_logo.png';
+                    const info = await FileSystem.getInfoAsync(logoUri);
+                    if (info.exists) {
+                        const PrinterInterface = this.connectionType === 'ble' ? BLEPrinter : USBPrinter;
+                        console.log(`[Printer] Attempting logo print (Patched). Path: ${logoUri}`);
+                        try {
+                            await PrinterInterface.printPic(logoUri);
+                        } catch (e) {
+                            console.warn("[Printer] Logo print attempt failed:", e);
+                        }
+                        await PrinterInterface.printText("\x1B\x61\x00"); // Reset to left align
+                        await new Promise(resolve => setTimeout(resolve, 800));
+                        console.log(`[Printer] Logo print attempt finished`);
+                    }
+                }
+            } catch (logoErr) { console.warn("[Printer] Logo print error:", logoErr); }
 
             // Ensure company info is loaded (same as printOrder - do NOT call loadSettings here)
             await this.loadCompanyInfo();
@@ -752,7 +825,8 @@ class PrinterService {
             const totalVal = totalAmount.toFixed(2);
             // Use CONTENT_WIDTH-LEFT_PAD.length to prevent right-edge clipping
             const totalLineWidth = CONTENT_WIDTH - LEFT_PAD.length;
-            receipt += LEFT_PAD + ESC_SIZE_LARGE + totalLabel + " ".repeat(Math.max(1, totalLineWidth - totalLabel.length - totalVal.length)) + totalVal + ESC_SIZE_NORMAL + "\n";
+            const totalPadSize = Math.max(0, totalLineWidth - totalLabel.length - totalVal.length - 1);
+            receipt += LEFT_PAD + ESC_SIZE_LARGE + " ".repeat(totalPadSize) + totalLabel + " " + totalVal + ESC_SIZE_NORMAL + "\n";
 
             receipt += line;
             receipt += centerText("Thank You!");
@@ -816,6 +890,27 @@ class PrinterService {
                     return false;
                 }
             }
+
+            // --- LOGO (Patched) ---
+            try {
+                const isSynced = await AsyncStorage.getItem('printer_logo_synced');
+                if (isSynced === 'true') {
+                    const logoUri = FileSystem.documentDirectory + 'printer_logo.png';
+                    const info = await FileSystem.getInfoAsync(logoUri);
+                    if (info.exists) {
+                        const PrinterInterface = this.connectionType === 'ble' ? BLEPrinter : USBPrinter;
+                        console.log(`[Printer] Attempting logo print (Patched). Path: ${logoUri}`);
+                        try {
+                            await PrinterInterface.printPic(logoUri);
+                        } catch (e) {
+                            console.warn("[Printer] Logo print attempt failed:", e);
+                        }
+                        await PrinterInterface.printText("\x1B\x61\x00"); // Reset to left align
+                        await new Promise(resolve => setTimeout(resolve, 800));
+                        console.log(`[Printer] Logo print attempt finished`);
+                    }
+                }
+            } catch (logoErr) { console.warn("[Printer] Logo print error:", logoErr); }
 
             // Ensure company info is loaded
             await this.loadCompanyInfo();
@@ -1061,14 +1156,14 @@ class PrinterService {
                 const taxLabel = "TAX:";
                 const netTotalLabel = taxSetting === 'plus_tax' ? "NET TOTAL:" : "TOTAL:";
 
-                receipt += `${taxableLabel}` + " ".repeat(Math.max(1, CONTENT_WIDTH_F3 - taxableLabel.length - taxableVal.length)) + taxableVal + "\n";
-                receipt += `${taxLabel}` + " ".repeat(Math.max(1, CONTENT_WIDTH_F3 - taxLabel.length - taxVal.length)) + taxVal + "\n";
-                receipt += ESC_SIZE_LARGE + netTotalLabel + " ".repeat(Math.max(1, CONTENT_WIDTH_F3 - netTotalLabel.length - netTotalVal.length)) + netTotalVal + ESC_SIZE_NORMAL + "\n";
+                receipt += " ".repeat(Math.max(0, CONTENT_WIDTH_F3 - taxableLabel.length - taxableVal.length - 1)) + `${taxableLabel} ` + taxableVal + "\n";
+                receipt += " ".repeat(Math.max(0, CONTENT_WIDTH_F3 - taxLabel.length - taxVal.length - 1)) + `${taxLabel} ` + taxVal + "\n";
+                const netTotalPad = Math.max(0, CONTENT_WIDTH_F3 - netTotalLabel.length - netTotalVal.length - 1);
+                receipt += ESC_SIZE_LARGE + " ".repeat(netTotalPad) + netTotalLabel + " " + netTotalVal + ESC_SIZE_NORMAL + "\n";
             } else {
                 // --- TOTAL only (no_tax or other) ---
-                const totalLabel = "TOTAL:";
-                const totalVal = totalAmount.toFixed(2);
-                receipt += ESC_SIZE_LARGE + totalLabel + " ".repeat(Math.max(1, CONTENT_WIDTH_F3 - totalLabel.length - totalVal.length)) + totalVal + ESC_SIZE_NORMAL + "\n";
+                const totalPad_F3 = Math.max(0, CONTENT_WIDTH_F3 - totalLabel.length - totalVal.length - 1);
+                receipt += ESC_SIZE_LARGE + " ".repeat(totalPad_F3) + totalLabel + " " + totalVal + ESC_SIZE_NORMAL + "\n";
             }
 
             receipt += line;
@@ -1135,6 +1230,27 @@ class PrinterService {
                     return false;
                 }
             }
+
+            // --- LOGO (Patched) ---
+            try {
+                const isSynced = await AsyncStorage.getItem('printer_logo_synced');
+                if (isSynced === 'true') {
+                    const logoUri = FileSystem.documentDirectory + 'printer_logo.png';
+                    const info = await FileSystem.getInfoAsync(logoUri);
+                    if (info.exists) {
+                        const PrinterInterface = this.connectionType === 'ble' ? BLEPrinter : USBPrinter;
+                        console.log(`[Printer] Attempting logo print (Patched). Path: ${logoUri}`);
+                        try {
+                            await PrinterInterface.printPic(logoUri);
+                        } catch (e) {
+                            console.warn("[Printer] Logo print attempt failed:", e);
+                        }
+                        await PrinterInterface.printText("\x1B\x61\x00"); // Reset to left
+                        await new Promise(resolve => setTimeout(resolve, 500));
+                        console.log(`[Printer] Logo print attempt finished`);
+                    }
+                }
+            } catch (logoErr) { console.warn("[Printer] Logo print error:", logoErr); }
 
             // Ensure settings and company info are loaded
             await this.loadSettings();
@@ -1245,8 +1361,8 @@ class PrinterService {
 
             // --- TOTAL ---
             const totalLabel = "Total";
-            const totalPad = PRINTER_WIDTH - totalLabel.length - amount.length;
-            receipt += `${totalLabel}${" ".repeat(Math.max(1, totalPad))}${amount}\n`;
+            const totalPadSize_C = PRINTER_WIDTH - totalLabel.length - amount.length - 1;
+            receipt += `${" ".repeat(Math.max(0, totalPadSize_C))}${totalLabel} ${amount}\n`;
             receipt += line;
 
             // --- AMOUNT IN WORDS ---

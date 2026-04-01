@@ -300,11 +300,18 @@ export default function UploadScreen() {
     setPrinters([]);
     setConnectionType(type);
     try {
-      // printerService.getDeviceList() handles init and permissions safely now
-      const devices = await printerService.getDeviceList(type);
-      setPrinters(devices);
+      const result = await printerService.getDeviceList(type);
+      if (result && result.error === 'BLUETOOTH_OFF') {
+        Alert.alert("Bluetooth Off", "Please turn on Bluetooth in your device settings to scan for printers.");
+        setPrinters([]);
+      } else if (result && result.error === 'PERMISSIONS_DENIED') {
+        Alert.alert("Permissions Required", "Bluetooth permissions are required to scan for printers.");
+        setPrinters([]);
+      } else {
+        setPrinters(Array.isArray(result) ? result : []);
+      }
     } catch (e) {
-      console.error(e);
+      console.error("[Printer] Scan UI error:", e);
       Alert.alert("Error", "Failed to scan for printers");
     } finally {
       setIsScanningPrinters(false);

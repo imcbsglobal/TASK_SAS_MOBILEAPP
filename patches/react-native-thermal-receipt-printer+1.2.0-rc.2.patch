@@ -1,0 +1,676 @@
+diff --git a/node_modules/react-native-thermal-receipt-printer/android/.classpath b/node_modules/react-native-thermal-receipt-printer/android/.classpath
+index 4a04201..bbe97e5 100644
+--- a/node_modules/react-native-thermal-receipt-printer/android/.classpath
++++ b/node_modules/react-native-thermal-receipt-printer/android/.classpath
+@@ -1,6 +1,6 @@
+ <?xml version="1.0" encoding="UTF-8"?>
+ <classpath>
+-	<classpathentry kind="con" path="org.eclipse.jdt.launching.JRE_CONTAINER/org.eclipse.jdt.internal.debug.ui.launcher.StandardVMType/JavaSE-11/"/>
++	<classpathentry kind="con" path="org.eclipse.jdt.launching.JRE_CONTAINER/org.eclipse.jdt.internal.debug.ui.launcher.StandardVMType/JavaSE-17/"/>
+ 	<classpathentry kind="con" path="org.eclipse.buildship.core.gradleclasspathcontainer"/>
+ 	<classpathentry kind="output" path="bin/default"/>
+ </classpath>
+diff --git a/node_modules/react-native-thermal-receipt-printer/android/.project b/node_modules/react-native-thermal-receipt-printer/android/.project
+index 6fcfcb6..32e032b 100644
+--- a/node_modules/react-native-thermal-receipt-printer/android/.project
++++ b/node_modules/react-native-thermal-receipt-printer/android/.project
+@@ -1,6 +1,6 @@
+ <?xml version="1.0" encoding="UTF-8"?>
+ <projectDescription>
+-	<name>reactnativethermalreceiptprinter</name>
++	<name>react-native-thermal-receipt-printer</name>
+ 	<comment>Project android created by Buildship.</comment>
+ 	<projects>
+ 	</projects>
+@@ -22,7 +22,7 @@
+ 	</natures>
+ 	<filteredResources>
+ 		<filter>
+-			<id>1699147488234</id>
++			<id>0</id>
+ 			<name></name>
+ 			<type>30</type>
+ 			<matcher>
+diff --git a/node_modules/react-native-thermal-receipt-printer/android/.settings/org.eclipse.buildship.core.prefs b/node_modules/react-native-thermal-receipt-printer/android/.settings/org.eclipse.buildship.core.prefs
+index f7b6943..5e3cd9b 100644
+--- a/node_modules/react-native-thermal-receipt-printer/android/.settings/org.eclipse.buildship.core.prefs
++++ b/node_modules/react-native-thermal-receipt-printer/android/.settings/org.eclipse.buildship.core.prefs
+@@ -1,13 +1,13 @@
+-arguments=--init-script C\:\\Users\\trant\\AppData\\Roaming\\Code\\User\\globalStorage\\redhat.java\\1.25.0\\config_win\\org.eclipse.osgi\\55\\0\\.cp\\gradle\\init\\init.gradle --init-script C\:\\Users\\trant\\AppData\\Roaming\\Code\\User\\globalStorage\\redhat.java\\1.25.0\\config_win\\org.eclipse.osgi\\55\\0\\.cp\\gradle\\protobuf\\init.gradle
++arguments=
+ auto.sync=false
+ build.scans.enabled=false
+ connection.gradle.distribution=GRADLE_DISTRIBUTION(WRAPPER)
+-connection.project.dir=
++connection.project.dir=../../../android
+ eclipse.preferences.version=1
+ gradle.user.home=
+-java.home=C\:/Program Files/OpenJDK/openjdk-11.0.15_10
++java.home=
+ jvm.arguments=
+ offline.mode=false
+-override.workspace.settings=true
+-show.console.view=true
+-show.executions.view=true
++override.workspace.settings=false
++show.console.view=false
++show.executions.view=false
+diff --git a/node_modules/react-native-thermal-receipt-printer/android/src/main/java/com/pinmi/react/printer/adapter/BLEPrinterAdapter.java b/node_modules/react-native-thermal-receipt-printer/android/src/main/java/com/pinmi/react/printer/adapter/BLEPrinterAdapter.java
+index 431c179..d1b425f 100644
+--- a/node_modules/react-native-thermal-receipt-printer/android/src/main/java/com/pinmi/react/printer/adapter/BLEPrinterAdapter.java
++++ b/node_modules/react-native-thermal-receipt-printer/android/src/main/java/com/pinmi/react/printer/adapter/BLEPrinterAdapter.java
+@@ -244,71 +244,73 @@ public class BLEPrinterAdapter implements PrinterAdapter{
+ 
+     public static Bitmap getBitmapFromURL(String src) {
+         try {
+-            URL url = new URL(src);
+-            HttpURLConnection connection = (HttpURLConnection) url.openConnection();
+-            connection.setDoInput(true);
+-            connection.connect();
+-            InputStream input = connection.getInputStream();
+-            Bitmap myBitmap = BitmapFactory.decodeStream(input);
+-
+-            ByteArrayOutputStream baos = new ByteArrayOutputStream();
+-            myBitmap.compress(Bitmap.CompressFormat.PNG, 100, baos);
+-
+-            return myBitmap;
+-        } catch (IOException e) {
+-            // Log exception
++            if (src.startsWith("http")) {
++                URL url = new URL(src);
++                HttpURLConnection connection = (HttpURLConnection) url.openConnection();
++                connection.setDoInput(true);
++                connection.connect();
++                InputStream input = connection.getInputStream();
++                return BitmapFactory.decodeStream(input);
++            } else {
++                String path = src.replace("file://", "");
++                return BitmapFactory.decodeFile(path);
++            }
++        } catch (Exception e) {
+             return null;
+         }
+     }
+ 
+     @Override
+-    public void printImageData(String imageUrl, Callback errorCallback) {
+-
+-        final Bitmap bitmapImage = getBitmapFromURL(imageUrl);
+-
+-        if (bitmapImage == null) {
+-            errorCallback.invoke("image not found");
+-            return;
+-        }
+-        if(this.mBluetoothSocket == null){
++    public void printImageData(final String imageUrl, final Callback errorCallback) {
++        final BluetoothSocket socket = this.mBluetoothSocket;
++        if (socket == null) {
+             errorCallback.invoke("bluetooth connection is not built, may be you forgot to connectPrinter");
+             return;
+         }
+ 
+-        final BluetoothSocket socket = this.mBluetoothSocket;
++        new Thread(new Runnable() {
++            @Override
++            public void run() {
++                try {
++                    Log.v(LOG_TAG, "start to print image data: " + imageUrl);
++                    Bitmap bitmapImage = getBitmapFromURL(imageUrl);
+ 
+-        try {
+-            int[][] pixels = getPixelsSlow(bitmapImage);
++                    if (bitmapImage == null) {
++                        Log.e(LOG_TAG, "image not found: " + imageUrl);
++                        errorCallback.invoke("image not found");
++                        return;
++                    }
+ 
+-            OutputStream printerOutputStream = socket.getOutputStream();
++                    Log.v(LOG_TAG, "processing pixels...");
++                    int[][] pixels = getPixelsSlow(bitmapImage);
+ 
+-            printerOutputStream.write(SET_LINE_SPACE_24);
+-            printerOutputStream.write(CENTER_ALIGN);
++                    OutputStream printerOutputStream = socket.getOutputStream();
+ 
+-            for (int y = 0; y < pixels.length; y += 24) {
+-                // Like I said before, when done sending data,
+-                // the printer will resume to normal text printing
+-                printerOutputStream.write(SELECT_BIT_IMAGE_MODE);
+-                // Set nL and nH based on the width of the image
+-                printerOutputStream.write(
+-                        new byte[] { (byte) (0x00ff & pixels[y].length), (byte) ((0xff00 & pixels[y].length) >> 8) });
+-                for (int x = 0; x < pixels[y].length; x++) {
+-                    // for each stripe, recollect 3 bytes (3 bytes = 24 bits)
+-                    printerOutputStream.write(recollectSlice(y, x, pixels));
+-                }
++                    Log.v(LOG_TAG, "sending commands to printer...");
++                    printerOutputStream.write(SET_LINE_SPACE_24);
++                    printerOutputStream.write(CENTER_ALIGN);
++
++                    for (int y = 0; y < pixels.length; y += 24) {
++                        printerOutputStream.write(SELECT_BIT_IMAGE_MODE);
++                        printerOutputStream.write(
++                                new byte[] { (byte) (0x00ff & pixels[y].length), (byte) ((0xff00 & pixels[y].length) >> 8) });
++                        for (int x = 0; x < pixels[y].length; x++) {
++                            printerOutputStream.write(recollectSlice(y, x, pixels));
++                        }
++                        printerOutputStream.write(LINE_FEED);
++                    }
++                    printerOutputStream.write(SET_LINE_SPACE_32);
+ 
+-                // Do a line feed, if not the printing will resume on the same line
+-                printerOutputStream.write(LINE_FEED);
++                    printerOutputStream.flush();
++                    Log.v(LOG_TAG, "image print finished");
++                    errorCallback.invoke((String) null);
++                } catch (Exception e) {
++                    Log.e(LOG_TAG, "failed to print image data" + imageUrl);
++                    e.printStackTrace();
++                    errorCallback.invoke(e.getMessage());
++                }
+             }
+-            printerOutputStream.write(SET_LINE_SPACE_32);
+-            printerOutputStream.write(LINE_FEED);
+-
+-            printerOutputStream.flush();
+-        } catch (IOException e) {
+-            Log.e(LOG_TAG, "failed to print data");
+-            e.printStackTrace();
+-        }
+-
++        }).start();
+     }
+ 
+ 
+@@ -351,9 +353,9 @@ public class BLEPrinterAdapter implements PrinterAdapter{
+                 printerOutputStream.write(LINE_FEED);
+             }
+             printerOutputStream.write(SET_LINE_SPACE_32);
+-            printerOutputStream.write(LINE_FEED);
+ 
+             printerOutputStream.flush();
++            errorCallback.invoke((String) null);
+         } catch (IOException e) {
+             Log.e(LOG_TAG, "failed to print data");
+             e.printStackTrace();
+@@ -388,16 +390,37 @@ public class BLEPrinterAdapter implements PrinterAdapter{
+     }
+ 
+     public static int[][] getPixelsSlow(Bitmap image2) {
+-
+         Bitmap image = resizeTheImageForPrinting(image2);
+-
+         int width = image.getWidth();
+         int height = image.getHeight();
+-        int[][] result = new int[height][width];
++        
++        int minRow = height;
++        int maxRow = -1;
++        int[][] tempResult = new int[height][width];
++
+         for (int row = 0; row < height; row++) {
++            boolean rowHasContent = false;
+             for (int col = 0; col < width; col++) {
+-                result[row][col] = getRGB(image, col, row);
++                int pixel = getRGB(image, col, row);
++                tempResult[row][col] = pixel;
++                if (shouldPrintColor(pixel)) {
++                    rowHasContent = true;
++                }
+             }
++            if (rowHasContent) {
++                if (row < minRow) minRow = row;
++                if (row > maxRow) maxRow = row;
++            }
++        }
++
++        if (maxRow < minRow) {
++            return new int[0][0]; // Completely empty image
++        }
++
++        int newHeight = maxRow - minRow + 1;
++        int[][] result = new int[newHeight][width];
++        for (int i = 0; i < newHeight; i++) {
++            result[i] = tempResult[minRow + i];
+         }
+         return result;
+     }
+@@ -420,11 +443,11 @@ public class BLEPrinterAdapter implements PrinterAdapter{
+         return slices;
+     }
+ 
+-    private boolean shouldPrintColor(int col) {
+-        final int threshold = 127;
++    private static boolean shouldPrintColor(int col) {
++        final int threshold = 210;
+         int a, r, g, b, luminance;
+         a = (col >> 24) & 0xff;
+-        if (a != 0xff) {// Ignore transparencies
++        if (a < 128) {
+             return false;
+         }
+         r = (col >> 16) & 0xff;
+@@ -453,13 +476,8 @@ public class BLEPrinterAdapter implements PrinterAdapter{
+     }
+ 
+     public static int getRGB(Bitmap bmpOriginal, int col, int row) {
+-        // get one pixel color
+-        int pixel = bmpOriginal.getPixel(col, row);
+-        // retrieve color of all channels
+-        int R = Color.red(pixel);
+-        int G = Color.green(pixel);
+-        int B = Color.blue(pixel);
+-        return Color.rgb(R, G, B);
++        // preserve all channels, including alpha
++        return bmpOriginal.getPixel(col, row);
+     }
+ 
+     public static Bitmap getBitmapResized(Bitmap image, float decreaseSizeBy) {
+diff --git a/node_modules/react-native-thermal-receipt-printer/android/src/main/java/com/pinmi/react/printer/adapter/NetPrinterAdapter.java b/node_modules/react-native-thermal-receipt-printer/android/src/main/java/com/pinmi/react/printer/adapter/NetPrinterAdapter.java
+index 9510114..64354d4 100644
+--- a/node_modules/react-native-thermal-receipt-printer/android/src/main/java/com/pinmi/react/printer/adapter/NetPrinterAdapter.java
++++ b/node_modules/react-native-thermal-receipt-printer/android/src/main/java/com/pinmi/react/printer/adapter/NetPrinterAdapter.java
+@@ -252,18 +252,28 @@ public class NetPrinterAdapter implements PrinterAdapter {
+ 
+     public static Bitmap getBitmapFromURL(String src) {
+         try {
+-            URL url = new URL(src);
+-            HttpURLConnection connection = (HttpURLConnection) url.openConnection();
+-            connection.setDoInput(true);
+-            connection.connect();
+-            InputStream input = connection.getInputStream();
+-            Bitmap myBitmap = BitmapFactory.decodeStream(input);
+-
+-            ByteArrayOutputStream baos = new ByteArrayOutputStream();
+-            myBitmap.compress(Bitmap.CompressFormat.PNG, 100, baos);
+-
+-            return myBitmap;
+-        } catch (IOException e) {
++            if (src.startsWith("http")) {
++                URL url = new URL(src);
++                HttpURLConnection connection = (HttpURLConnection) url.openConnection();
++                connection.setDoInput(true);
++                connection.connect();
++                InputStream input = connection.getInputStream();
++                Bitmap myBitmap = BitmapFactory.decodeStream(input);
++
++                ByteArrayOutputStream baos = new ByteArrayOutputStream();
++                myBitmap.compress(Bitmap.CompressFormat.PNG, 100, baos);
++
++                return myBitmap;
++            } else {
++                String path = src.replace("file://", "");
++                Bitmap myBitmap = BitmapFactory.decodeFile(path);
++                if (myBitmap != null) {
++                    ByteArrayOutputStream baos = new ByteArrayOutputStream();
++                    myBitmap.compress(Bitmap.CompressFormat.PNG, 100, baos);
++                }
++                return myBitmap;
++            }
++        } catch (Exception e) {
+             // Log exception
+             return null;
+         }
+@@ -309,9 +319,9 @@ public class NetPrinterAdapter implements PrinterAdapter {
+                 printerOutputStream.write(LINE_FEED);
+             }
+             printerOutputStream.write(SET_LINE_SPACE_32);
+-            printerOutputStream.write(LINE_FEED);
+ 
+             printerOutputStream.flush();
++            errorCallback.invoke((String) null);
+         } catch (IOException e) {
+             Log.e(LOG_TAG, "failed to print data");
+             e.printStackTrace();
+@@ -358,7 +368,6 @@ public class NetPrinterAdapter implements PrinterAdapter {
+                 printerOutputStream.write(LINE_FEED);
+             }
+             printerOutputStream.write(SET_LINE_SPACE_32);
+-            printerOutputStream.write(LINE_FEED);
+ 
+             printerOutputStream.flush();
+         } catch (IOException e) {
+@@ -394,17 +403,38 @@ public class NetPrinterAdapter implements PrinterAdapter {
+     }
+ 
+     public static int[][] getPixelsSlow(Bitmap image2) {
+-
+         Bitmap image = resizeTheImageForPrinting(image2);
+-
+         int width = image.getWidth();
+         int height = image.getHeight();
+-        int[][] result = new int[height][width];
++        
++        int minRow = height;
++        int maxRow = -1;
++        int[][] tempResult = new int[height][width];
++
+         for (int row = 0; row < height; row++) {
++            boolean rowHasContent = false;
+             for (int col = 0; col < width; col++) {
+-                result[row][col] = getRGB(image, col, row);
++                int pixel = getRGB(image, col, row);
++                tempResult[row][col] = pixel;
++                if (shouldPrintColor(pixel)) {
++                    rowHasContent = true;
++                }
++            }
++            if (rowHasContent) {
++                if (row < minRow) minRow = row;
++                if (row > maxRow) maxRow = row;
+             }
+         }
++
++        if (maxRow < minRow) {
++            return new int[0][0]; // Completely empty image
++        }
++
++        int newHeight = maxRow - minRow + 1;
++        int[][] result = new int[newHeight][width];
++        for (int i = 0; i < newHeight; i++) {
++            result[i] = tempResult[minRow + i];
++        }
+         return result;
+     }
+ 
+@@ -426,11 +456,11 @@ public class NetPrinterAdapter implements PrinterAdapter {
+         return slices;
+     }
+ 
+-    private boolean shouldPrintColor(int col) {
+-        final int threshold = 127;
++    private static boolean shouldPrintColor(int col) {
++        final int threshold = 210;
+         int a, r, g, b, luminance;
+         a = (col >> 24) & 0xff;
+-        if (a != 0xff) {// Ignore transparencies
++        if (a < 128) {
+             return false;
+         }
+         r = (col >> 16) & 0xff;
+@@ -459,13 +489,8 @@ public class NetPrinterAdapter implements PrinterAdapter {
+     }
+ 
+     public static int getRGB(Bitmap bmpOriginal, int col, int row) {
+-        // get one pixel color
+-        int pixel = bmpOriginal.getPixel(col, row);
+-        // retrieve color of all channels
+-        int R = Color.red(pixel);
+-        int G = Color.green(pixel);
+-        int B = Color.blue(pixel);
+-        return Color.rgb(R, G, B);
++        // preserve all channels, including alpha
++        return bmpOriginal.getPixel(col, row);
+     }
+ 
+     public static Bitmap getBitmapResized(Bitmap image, float decreaseSizeBy) {
+diff --git a/node_modules/react-native-thermal-receipt-printer/android/src/main/java/com/pinmi/react/printer/adapter/USBPrinterAdapter.java b/node_modules/react-native-thermal-receipt-printer/android/src/main/java/com/pinmi/react/printer/adapter/USBPrinterAdapter.java
+index 88b75da..bc457d1 100644
+--- a/node_modules/react-native-thermal-receipt-printer/android/src/main/java/com/pinmi/react/printer/adapter/USBPrinterAdapter.java
++++ b/node_modules/react-native-thermal-receipt-printer/android/src/main/java/com/pinmi/react/printer/adapter/USBPrinterAdapter.java
+@@ -249,72 +249,74 @@ public class USBPrinterAdapter implements PrinterAdapter {
+ 
+     public static Bitmap getBitmapFromURL(String src) {
+         try {
+-            URL url = new URL(src);
+-            HttpURLConnection connection = (HttpURLConnection) url.openConnection();
+-            connection.setDoInput(true);
+-            connection.connect();
+-            InputStream input = connection.getInputStream();
+-            Bitmap myBitmap = BitmapFactory.decodeStream(input);
+-
+-            ByteArrayOutputStream baos = new ByteArrayOutputStream();
+-            myBitmap.compress(Bitmap.CompressFormat.PNG, 100, baos);
+-
+-            return myBitmap;
+-        } catch (IOException e) {
+-            // Log exception
++            if (src.startsWith("http")) {
++                URL url = new URL(src);
++                HttpURLConnection connection = (HttpURLConnection) url.openConnection();
++                connection.setDoInput(true);
++                connection.connect();
++                InputStream input = connection.getInputStream();
++                return BitmapFactory.decodeStream(input);
++            } else {
++                String path = src.replace("file://", "");
++                return BitmapFactory.decodeFile(path);
++            }
++        } catch (Exception e) {
+             return null;
+         }
+     }
+ 
+ 
+     @Override
+-    public void printImageData(final String imageUrl, Callback errorCallback) {
+-        final Bitmap bitmapImage = getBitmapFromURL(imageUrl);
+-
+-        if(bitmapImage == null) {
+-            errorCallback.invoke("image not found");
+-            return;
+-        }
+-
+-        Log.v(LOG_TAG, "start to print image data " + bitmapImage);
+-        boolean isConnected = openConnection();
+-        if (isConnected) {
+-            Log.v(LOG_TAG, "Connected to device");
+-            int[][] pixels = getPixelsSlow(bitmapImage);
+-
+-            int b = mUsbDeviceConnection.bulkTransfer(mEndPoint, SET_LINE_SPACE_24, SET_LINE_SPACE_24.length, 100000);
+-
+-            b = mUsbDeviceConnection.bulkTransfer(mEndPoint, CENTER_ALIGN, CENTER_ALIGN.length, 100000);
+-
+-            for (int y = 0; y < pixels.length; y += 24) {
+-                // Like I said before, when done sending data,
+-                // the printer will resume to normal text printing
+-                mUsbDeviceConnection.bulkTransfer(mEndPoint, SELECT_BIT_IMAGE_MODE, SELECT_BIT_IMAGE_MODE.length, 100000);
+-
+-                // Set nL and nH based on the width of the image
+-                byte[] row = new byte[]{(byte)(0x00ff & pixels[y].length)
+-                        , (byte)((0xff00 & pixels[y].length) >> 8)};
+-
+-                mUsbDeviceConnection.bulkTransfer(mEndPoint, row, row.length, 100000);
++    public void printImageData(final String imageUrl, final Callback errorCallback) {
++        new Thread(new Runnable() {
++            @Override
++            public void run() {
++                try {
++                    Log.v(LOG_TAG, "start to print image data: " + imageUrl);
++                    Bitmap bitmapImage = getBitmapFromURL(imageUrl);
++
++                    if (bitmapImage == null) {
++                        Log.e(LOG_TAG, "image not found: " + imageUrl);
++                        errorCallback.invoke("image not found");
++                        return;
++                    }
+ 
+-                for (int x = 0; x < pixels[y].length; x++) {
+-                    // for each stripe, recollect 3 bytes (3 bytes = 24 bits)
+-                    byte[] slice = recollectSlice(y, x, pixels);
+-                    mUsbDeviceConnection.bulkTransfer(mEndPoint, slice, slice.length, 100000);
++                    boolean isConnected = openConnection();
++                    if (isConnected) {
++                        Log.v(LOG_TAG, "Connected to device, processing pixels...");
++                        int[][] pixels = getPixelsSlow(bitmapImage);
++
++                        mUsbDeviceConnection.bulkTransfer(mEndPoint, SET_LINE_SPACE_24, SET_LINE_SPACE_24.length, 100000);
++                        mUsbDeviceConnection.bulkTransfer(mEndPoint, CENTER_ALIGN, CENTER_ALIGN.length, 100000);
++
++                        for (int y = 0; y < pixels.length; y += 24) {
++                            mUsbDeviceConnection.bulkTransfer(mEndPoint, SELECT_BIT_IMAGE_MODE, SELECT_BIT_IMAGE_MODE.length, 100000);
++                            byte[] row = new byte[] { (byte) (0x00ff & pixels[y].length),
++                                    (byte) ((0xff00 & pixels[y].length) >> 8) };
++                            mUsbDeviceConnection.bulkTransfer(mEndPoint, row, row.length, 100000);
++
++                            for (int x = 0; x < pixels[y].length; x++) {
++                                byte[] slice = recollectSlice(y, x, pixels);
++                                mUsbDeviceConnection.bulkTransfer(mEndPoint, slice, slice.length, 100000);
++                            }
++                            mUsbDeviceConnection.bulkTransfer(mEndPoint, LINE_FEED, LINE_FEED.length, 100000);
++                        }
++
++                        mUsbDeviceConnection.bulkTransfer(mEndPoint, SET_LINE_SPACE_32, SET_LINE_SPACE_32.length, 100000);
++                        Log.v(LOG_TAG, "image print finished");
++                        errorCallback.invoke((String) null);
++                    } else {
++                        String msg = "failed to connected to device";
++                        Log.e(LOG_TAG, msg);
++                        errorCallback.invoke(msg);
++                    }
++                } catch (Exception e) {
++                    Log.e(LOG_TAG, "failed to print image data" + imageUrl);
++                    e.printStackTrace();
++                    errorCallback.invoke(e.getMessage());
+                 }
+-
+-                // Do a line feed, if not the printing will resume on the same line
+-                mUsbDeviceConnection.bulkTransfer(mEndPoint, LINE_FEED, LINE_FEED.length, 100000);
+             }
+-
+-            mUsbDeviceConnection.bulkTransfer(mEndPoint, SET_LINE_SPACE_32, SET_LINE_SPACE_32.length, 100000);
+-            mUsbDeviceConnection.bulkTransfer(mEndPoint, LINE_FEED, LINE_FEED.length, 100000);
+-        } else {
+-            String msg = "failed to connected to device";
+-            Log.v(LOG_TAG, msg);
+-            errorCallback.invoke(msg);
+-        }
+-
++        }).start();
+     }
+ 
+     private Bitmap TextToQrImageEncode(String Value) {
+@@ -385,7 +387,6 @@ public class USBPrinterAdapter implements PrinterAdapter {
+             }
+ 
+             mUsbDeviceConnection.bulkTransfer(mEndPoint, SET_LINE_SPACE_32, SET_LINE_SPACE_32.length, 100000);
+-            mUsbDeviceConnection.bulkTransfer(mEndPoint, LINE_FEED, LINE_FEED.length, 100000);
+         } else {
+             String msg = "failed to connected to device";
+             Log.v(LOG_TAG, msg);
+@@ -396,16 +397,37 @@ public class USBPrinterAdapter implements PrinterAdapter {
+     }
+ 
+     public static int[][] getPixelsSlow(Bitmap image2) {
+-
+         Bitmap image = resizeTheImageForPrinting(image2);
+-
+         int width = image.getWidth();
+         int height = image.getHeight();
+-        int[][] result = new int[height][width];
++        
++        int minRow = height;
++        int maxRow = -1;
++        int[][] tempResult = new int[height][width];
++
+         for (int row = 0; row < height; row++) {
++            boolean rowHasContent = false;
+             for (int col = 0; col < width; col++) {
+-                result[row][col] = getRGB(image, col, row);
++                int pixel = getRGB(image, col, row);
++                tempResult[row][col] = pixel;
++                if (shouldPrintColor(pixel)) {
++                    rowHasContent = true;
++                }
+             }
++            if (rowHasContent) {
++                if (row < minRow) minRow = row;
++                if (row > maxRow) maxRow = row;
++            }
++        }
++
++        if (maxRow < minRow) {
++            return new int[0][0]; // Completely empty image
++        }
++
++        int newHeight = maxRow - minRow + 1;
++        int[][] result = new int[newHeight][width];
++        for (int i = 0; i < newHeight; i++) {
++            result[i] = tempResult[minRow + i];
+         }
+         return result;
+     }
+@@ -428,11 +450,11 @@ public class USBPrinterAdapter implements PrinterAdapter {
+         return slices;
+     }
+ 
+-    private boolean shouldPrintColor(int col) {
+-        final int threshold = 127;
++    private static boolean shouldPrintColor(int col) {
++        final int threshold = 210;
+         int a, r, g, b, luminance;
+         a = (col >> 24) & 0xff;
+-        if (a != 0xff) {// Ignore transparencies
++        if (a < 128) {
+             return false;
+         }
+         r = (col >> 16) & 0xff;
+@@ -461,13 +483,8 @@ public class USBPrinterAdapter implements PrinterAdapter {
+     }
+ 
+     public static int getRGB(Bitmap bmpOriginal, int col, int row) {
+-        // get one pixel color
+-        int pixel = bmpOriginal.getPixel(col, row);
+-        // retrieve color of all channels
+-        int R = Color.red(pixel);
+-        int G = Color.green(pixel);
+-        int B = Color.blue(pixel);
+-        return Color.rgb(R, G, B);
++        // preserve all channels, including alpha
++        return bmpOriginal.getPixel(col, row);
+     }
+ 
+     public static Bitmap getBitmapResized(Bitmap image, float decreaseSizeBy) {
+diff --git a/node_modules/react-native-thermal-receipt-printer/dist/index.js b/node_modules/react-native-thermal-receipt-printer/dist/index.js
+index 8181db7..db8d733 100644
+--- a/node_modules/react-native-thermal-receipt-printer/dist/index.js
++++ b/node_modules/react-native-thermal-receipt-printer/dist/index.js
+@@ -91,6 +91,15 @@ export var USBPrinter = {
+             return console.warn(error);
+         });
+     },
++    printPic: function (imageUrl, opts) {
++        if (opts === void 0) { opts = {}; }
++        return new Promise(function (resolve, reject) {
++            RNUSBPrinter.printImageData(imageUrl, function (error) {
++                if (error) return reject(error);
++                resolve();
++            });
++        });
++    },
+ };
+ export var BLEPrinter = {
+     init: function () {
+@@ -138,6 +147,15 @@ export var BLEPrinter = {
+             });
+         }
+     },
++    printPic: function (imageUrl, opts) {
++        if (opts === void 0) { opts = {}; }
++        return new Promise(function (resolve, reject) {
++            RNBLEPrinter.printImageData(imageUrl, function (error) {
++                if (error) return reject(error);
++                resolve();
++            });
++        });
++    },
+ };
+ export var NetPrinter = {
+     init: function () {
+@@ -185,6 +203,15 @@ export var NetPrinter = {
+             });
+         }
+     },
++    printPic: function (imageUrl, opts) {
++        if (opts === void 0) { opts = {}; }
++        return new Promise(function (resolve, reject) {
++            RNNetPrinter.printImageData(imageUrl, function (error) {
++                if (error) return reject(error);
++                resolve();
++            });
++        });
++    },
+ };
+ export var NetPrinterEventEmitter = new NativeEventEmitter(RNNetPrinter);
+ export var RN_THERMAL_RECEIPT_PRINTER_EVENTS;
