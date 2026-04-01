@@ -365,7 +365,6 @@ class PrinterService {
                         } catch (e) {
                             console.warn("[Printer] Logo print attempt failed:", e);
                         }
-                        await PrinterInterface.printText("\x1B\x61\x00"); // Reset to left
                         await new Promise(resolve => setTimeout(resolve, 500));
                         console.log(`[Printer] Logo print attempt finished`);
                     }
@@ -600,7 +599,6 @@ class PrinterService {
                         } catch (e) {
                             console.warn("[Printer] Logo print attempt failed:", e);
                         }
-                        await PrinterInterface.printText("\x1B\x61\x00"); // Reset to left align
                         await new Promise(resolve => setTimeout(resolve, 800));
                         console.log(`[Printer] Logo print attempt finished`);
                     }
@@ -637,7 +635,6 @@ class PrinterService {
             const line = LEFT_PAD + "-".repeat(PRINTER_WIDTH - LEFT_PAD.length) + "\n";
 
             let receipt = "";
-            receipt += "\x1B\x40"; // ESC @ - Initialize printer
 
             // --- HEADER ---
             // Firm name: Bold and Larger
@@ -905,7 +902,6 @@ class PrinterService {
                         } catch (e) {
                             console.warn("[Printer] Logo print attempt failed:", e);
                         }
-                        await PrinterInterface.printText("\x1B\x61\x00"); // Reset to left align
                         await new Promise(resolve => setTimeout(resolve, 800));
                         console.log(`[Printer] Logo print attempt finished`);
                     }
@@ -941,7 +937,6 @@ class PrinterService {
             const line = "-".repeat(PRINTER_WIDTH) + "\n";
 
             let receipt = "";
-            receipt += "\x1B\x40"; // ESC @ - Initialize printer
 
             // --- HEADER ---
             // Firm name: Bold and Larger
@@ -1245,7 +1240,6 @@ class PrinterService {
                         } catch (e) {
                             console.warn("[Printer] Logo print attempt failed:", e);
                         }
-                        await PrinterInterface.printText("\x1B\x61\x00"); // Reset to left
                         await new Promise(resolve => setTimeout(resolve, 500));
                         console.log(`[Printer] Logo print attempt finished`);
                     }
