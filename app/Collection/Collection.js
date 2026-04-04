@@ -1,7 +1,7 @@
 // app/Collection/Collection.js
 import { Ionicons } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
-import { useRouter } from 'expo-router';
+import { useGlobalSearchParams, useRouter } from 'expo-router';
 import { useEffect } from "react";
 import {
   BackHandler,
@@ -17,6 +17,8 @@ import { BorderRadius, Colors, Gradients, Shadows, Spacing, Typography } from ".
 export default function CollectionScreen() {
 
   const router = useRouter();
+  const params = useGlobalSearchParams();
+  const preselectedCustomerCode = params?.preselectedCustomerCode || null;
 
   // Handle Android back button
   useEffect(() => {
@@ -41,7 +43,10 @@ export default function CollectionScreen() {
       icon: "add-circle",
       color: Colors.success.main,
       bg: Colors.success[50],
-      onPress: () => router.push("./AddCollection"),
+      onPress: () => router.push({
+        pathname: "./AddCollection",
+        params: preselectedCustomerCode ? { preselectedCustomerCode } : {}
+      }),
       gradient: Gradients.success
     },
     {

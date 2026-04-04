@@ -136,8 +136,22 @@ export default function PunchInScreen() {
     setPickerFilteredCustomers(filtered);
   }, [customerSearchQuery, filteredCustomers, showCustomerPicker]);
 
-  // If punched in, maybe redirect or notify?
-  // For now, we just update the status variable which will affect the Action Step UI.
+  // If punched in, auto-select customer and move to Step 2
+  useEffect(() => {
+    if (!loading && step === 1 && punchStatus?.is_punched_in && allCustomers.length > 0) {
+      // Find customer by code (most reliable) or firm_name
+      const customer = allCustomers.find(c => 
+        (punchStatus.customer_code && c.code === punchStatus.customer_code) || 
+        (punchStatus.firm_name && c.name === punchStatus.firm_name)
+      );
+
+      if (customer) {
+        console.log('[PunchIn] Auto-navigating to active punch at:', customer.name);
+        setSelectedCustomerCode(customer.code);
+        setStep(2);
+      }
+    }
+  }, [punchStatus, allCustomers, loading, step]);
 
   const checkPunchStatus = async () => {
     try {
@@ -741,7 +755,13 @@ export default function PunchInScreen() {
               if (response.ok && result.success) {
                 Alert.alert(
                   "Punch Out Successful",
-                  `Work Duration: ${result.data?.work_duration_hours?.toFixed(2) || 0} hours`
+                  `Work Duration: ${result.data?.work_duration_hours?.toFixed(2) || 0} hours`,
+                  [
+                    { 
+                      text: "OK", 
+                      onPress: () => router.replace("/(tabs)/Home") 
+                    }
+                  ]
                 );
 
                 setPunchStatus(null);

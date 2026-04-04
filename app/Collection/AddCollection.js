@@ -3,7 +3,7 @@ import { Ionicons } from "@expo/vector-icons";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import NetInfo from "@react-native-community/netinfo";
 import { LinearGradient } from "expo-linear-gradient";
-import { useRouter } from "expo-router";
+import { useGlobalSearchParams, useRouter } from "expo-router";
 import { useEffect, useState } from "react";
 import {
   ActivityIndicator,
@@ -25,11 +25,14 @@ const API_CUSTOMERS = "https://tasksas.com/api/debtors/get-debtors/";
 
 export default function AddCollectionScreen() {
   const router = useRouter();
+  const params = useGlobalSearchParams();
+  const preselectedCode = params?.preselectedCustomerCode || null;
 
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [customers, setCustomers] = useState([]);
   const [isOnline, setIsOnline] = useState(true);
+  const [isCustomerLocked, setIsCustomerLocked] = useState(false);
 
   // Customer selection modal
   const [showCustomerModal, setShowCustomerModal] = useState(false);
@@ -61,6 +64,16 @@ export default function AddCollectionScreen() {
 
     return () => unsubscribe();
   }, []);
+
+  useEffect(() => {
+    if (preselectedCode && customers.length > 0 && !loading) {
+      const target = customers.find(c => c.code === preselectedCode);
+      if (target) {
+        handleSelectCustomer(target);
+        setIsCustomerLocked(true);
+      }
+    }
+  }, [preselectedCode, customers, loading]);
 
   useEffect(() => {
     if (searchQuery.trim() === "") {
@@ -401,6 +414,8 @@ export default function AddCollectionScreen() {
           showsVerticalScrollIndicator={false}
         >
           {/* Changed from Animated.View to View to ensure visibility */}
+          {/* Area Selection - hidden when locked */}
+          {!isCustomerLocked && (
           <View style={styles.formSection}>
             <Text style={styles.label}>
               Filter by Area
@@ -416,11 +431,13 @@ export default function AddCollectionScreen() {
               <Ionicons name="chevron-down" size={20} color={Colors.text.tertiary} />
             </TouchableOpacity>
           </View>
+          )}
 
           <View style={styles.formSection}>
             <Text style={styles.label}>
-              Select Customer <Text style={styles.required}>*</Text>
+              {isCustomerLocked ? 'Collection For' : <><Text>Select Customer </Text><Text style={styles.required}>*</Text></>}
             </Text>
+            {!isCustomerLocked && (
             <TouchableOpacity
               style={styles.inputBox}
               onPress={() => customers.length > 0 && setShowCustomerModal(true)}
@@ -432,6 +449,17 @@ export default function AddCollectionScreen() {
               </Text>
               <Ionicons name="chevron-down" size={20} color={Colors.text.tertiary} />
             </TouchableOpacity>
+            )}
+            {selectedCustomer && (
+              <View style={[styles.inputBox, { backgroundColor: '#f0f4ff', borderColor: Colors.primary.light }]}>
+                <Ionicons name="person-circle" size={20} color={Colors.primary.main} style={styles.inputIcon} />
+                <View style={{ flex: 1 }}>
+                  <Text style={[styles.inputText, { fontWeight: '700' }]}>{selectedCustomer.name}</Text>
+                  <Text style={{ fontSize: 12, color: Colors.text.secondary }}>Code: {selectedCustomer.code}</Text>
+                </View>
+                {isCustomerLocked && <Ionicons name="lock-closed" size={16} color={Colors.primary.main} />}
+              </View>
+            )}
           </View>
 
           <View style={styles.formSection}>

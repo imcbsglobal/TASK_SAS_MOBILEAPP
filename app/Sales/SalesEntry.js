@@ -409,6 +409,7 @@ export default function SalesEntryScreen() {
       if (targetCustomer) {
         console.log(`[Entry] Auto-selecting pre-selected customer: ${targetCustomer.name}`);
         handleSelectCustomer(targetCustomer);
+        setIsCustomerLocked(true); // Lock: cannot change customer when coming from Punch-In
 
         // Also set area if applicable, to keep UI consistent
         const customerArea = targetCustomer.area || targetCustomer.place;
