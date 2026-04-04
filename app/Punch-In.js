@@ -960,6 +960,50 @@ export default function PunchInScreen() {
           {isActiveContext ? (
             <>
               <TouchableOpacity
+                style={[styles.actionButton, styles.takeOrderButton]}
+                onPress={() => router.push({
+                  pathname: "/Order/Entry",
+                  params: { preselectedCustomerCode: customer.code }
+                })}
+              >
+                <Ionicons name="cart-outline" size={24} color="#FFF" />
+                <Text style={styles.actionButtonText}>Take Order</Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={[styles.actionButton, { backgroundColor: '#4CAF50' }]}
+                onPress={() => router.push({
+                  pathname: "/Sales/SalesEntry",
+                  params: { preselectedCustomerCode: customer.code }
+                })}
+              >
+                <Ionicons name="cash-outline" size={24} color="#FFF" />
+                <Text style={styles.actionButtonText}>Take Sales</Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={[styles.actionButton, { backgroundColor: '#FF7043' }]}
+                onPress={() => router.push({
+                  pathname: "/SalesReturn/ReturnEntry",
+                  params: { preselectedCustomerCode: customer.code }
+                })}
+              >
+                <Ionicons name="return-up-back-outline" size={24} color="#FFF" />
+                <Text style={styles.actionButtonText}>Sales Return</Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={[styles.actionButton, { backgroundColor: '#7E57C2' }]}
+                onPress={() => router.push({
+                  pathname: "/Collection/Collection",
+                  params: { preselectedCustomerCode: customer.code }
+                })}
+              >
+                <Ionicons name="wallet-outline" size={24} color="#FFF" />
+                <Text style={styles.actionButtonText}>Collection</Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity
                 style={[styles.actionButton, styles.punchOutButton]}
                 onPress={handlePunchOut}
                 disabled={punching}
@@ -972,17 +1016,6 @@ export default function PunchInScreen() {
                     <Text style={styles.actionButtonText}>Punch Out</Text>
                   </>
                 )}
-              </TouchableOpacity>
-
-              <TouchableOpacity
-                style={[styles.actionButton, styles.takeOrderButton]}
-                onPress={() => router.push({
-                  pathname: "/Order/Entry",
-                  params: { preselectedCustomerCode: customer.code }
-                })}
-              >
-                <Ionicons name="cart-outline" size={24} color="#FFF" />
-                <Text style={styles.actionButtonText}>Take Order</Text>
               </TouchableOpacity>
             </>
           ) : (
@@ -1006,13 +1039,13 @@ export default function PunchInScreen() {
             </TouchableOpacity>
           )}
 
-          <TouchableOpacity
+          {/* <TouchableOpacity
             style={styles.secondaryButton}
             onPress={handleReset}
             disabled={punching}
           >
             <Text style={styles.secondaryButtonText}>Select Different Customer</Text>
-          </TouchableOpacity>
+          </TouchableOpacity> */}
         </View>
       </View>
     );

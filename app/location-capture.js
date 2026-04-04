@@ -570,7 +570,7 @@ export default function LocationCaptureScreen() {
         <LinearGradient colors={Gradients.background} style={styles.container}>
             <SafeAreaView style={styles.safeArea}>
                 <View style={styles.header}>
-                    <TouchableOpacity onPress={() => router.push("/Company")} style={styles.backButton}>
+                    <TouchableOpacity onPress={() => router.push("/Home")} style={styles.backButton}>
                         <Ionicons name="arrow-back" size={24} color={Colors.primary.main} />
                     </TouchableOpacity>
                     <Text style={styles.title}>Location Capture</Text>

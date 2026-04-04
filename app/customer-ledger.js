@@ -1,4 +1,3 @@
-// app/customer-ledger.js
 import { Ionicons } from "@expo/vector-icons";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import DateTimePicker from "@react-native-community/datetimepicker";
@@ -8,6 +7,7 @@ import { useEffect, useState } from "react";
 import {
   ActivityIndicator,
   Alert,
+  Dimensions,
   FlatList,
   Platform,
   SafeAreaView,
@@ -18,13 +18,18 @@ import {
   View,
 } from "react-native";
 import Animated, { FadeInUp } from "react-native-reanimated";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { BorderRadius, Colors, Gradients, Shadows, Spacing, Typography } from "../constants/theme";
+
+const STATUSBAR_HEIGHT = Platform.OS === 'android' ? (StatusBar.currentHeight || 24) : 0;
+
 
 const API_URL = "https://tasksas.com/api/get-ledger-details?account_code=";
 
 export default function CustomerLedgerScreen() {
   const { code, name, current_balance } = useLocalSearchParams();
   const router = useRouter();
+  const insets = useSafeAreaInsets();
 
   const [loading, setLoading] = useState(true);
   const [ledger, setLedger] = useState([]);
@@ -241,7 +246,7 @@ export default function CustomerLedgerScreen() {
 
   return (
     <LinearGradient colors={Gradients.background} style={styles.container}>
-      <SafeAreaView style={{ flex: 1 }}>
+      <SafeAreaView style={styles.safeArea}>
         <StatusBar barStyle="dark-content" />
 
         {/* Header Card */}
@@ -349,7 +354,8 @@ export default function CustomerLedgerScreen() {
           />
         </View>
 
-        <View style={styles.footerCard}>
+        {/* Footer — in normal flow, safely above nav bar */}
+        <View style={[styles.footerCard, { marginBottom: Math.max(insets.bottom, Spacing.md) }]}>
           <LinearGradient
             colors={Gradients.surface}
             style={styles.footerGradient}
@@ -370,7 +376,12 @@ const styles = StyleSheet.create({
   container: { flex: 1 },
   loader: { flex: 1, justifyContent: "center", alignItems: "center" },
 
-  headerContainer: { paddingHorizontal: Spacing.lg, marginTop: Spacing.md },
+  safeArea: {
+    flex: 1,
+    paddingTop: STATUSBAR_HEIGHT,
+  },
+
+  headerContainer: { paddingHorizontal: Spacing.lg, paddingTop: Spacing.sm },
   headerCard: {
     borderRadius: BorderRadius.xl,
     padding: Spacing.md,
@@ -463,10 +474,8 @@ const styles = StyleSheet.create({
   amountText: { fontSize: Typography.sizes.base, fontWeight: "700", textAlign: "right" },
 
   footerCard: {
-    position: "absolute",
-    bottom: Spacing.lg,
-    left: Spacing.lg,
-    right: Spacing.lg,
+    marginHorizontal: Spacing.lg,
+    marginBottom: Spacing.md,
     borderRadius: BorderRadius.xl,
     overflow: 'hidden',
     ...Shadows.lg,

@@ -141,6 +141,11 @@ class PrinterService {
         // Formula: Chars = (mm / 58) * 32
         this.printerCharsPerLine = Math.floor((mm / 58) * 32);
 
+        // Adjust for 5-inch (127mm) prints: decrease 2 character spaces to prevent right-edge wrapping
+        if (mm >= 120) {
+            this.printerCharsPerLine -= 2;
+        }
+
         console.log(`[Printer] Set width to ${mm}mm (${this.printerCharsPerLine} chars/line)`);
 
         if (save) {

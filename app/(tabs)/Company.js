@@ -15,15 +15,189 @@ import {
 } from "react-native";
 import { BorderRadius, Colors, Gradients, Shadows, Spacing, Typography } from "../../constants/theme";
 import dbService from "../../src/services/database";
+import printerService from "../../src/services/printerService";
+import { KeyboardAvoidingView, Platform, TextInput } from "react-native";
 
 const Company = () => {
   const router = useRouter();
   const [customersCount, setCustomersCount] = useState(0);
   const [logoutVisible, setLogoutVisible] = useState(false);
 
+  // Settings Modal State
+  const [settingsModalVisible, setSettingsModalVisible] = useState(false);
+  const [isPrinterSettingsOpen, setIsPrinterSettingsOpen] = useState(false);
+  const [isProductSettingsOpen, setIsProductSettingsOpen] = useState(false);
+  const [isPaymentSettingsOpen, setIsPaymentSettingsOpen] = useState(false);
+  const [isPrintFormSettingsOpen, setIsPrintFormSettingsOpen] = useState(false);
+  const [isTaxSettingsOpen, setIsTaxSettingsOpen] = useState(false);
+  const [paperSize, setPaperSize] = useState(58); // Default 58mm
+  const [showStockOnly, setShowStockOnly] = useState(false);
+  const [defaultPaymentMethod, setDefaultPaymentMethod] = useState('Cash');
+  const [defaultQuantity, setDefaultQuantity] = useState(1); // Default to 1
+  const [printFormType, setPrintFormType] = useState('form1'); // 'form1' | 'form2' | 'form3'
+  const [taxCodeSetting, setTaxCodeSetting] = useState('no_tax'); // 'no_tax' | 'plus_tax' | 'reverse_tax'
+  const [termsAndConditions, setTermsAndConditions] = useState(''); // T&C text for print footer
+  const [termsInput, setTermsInput] = useState(''); // Editing buffer for T&C
+  const [tcModalVisible, setTcModalVisible] = useState(false); // Modal for editing T&C
+
+
   useEffect(() => {
     loadCustomerCount();
+    loadPrinterSettings();
+    loadProductSettings();
+    loadPaymentSettings();
+    loadPrintFormSettings();
+    loadTaxSettings();
   }, []);
+
+  const loadPrinterSettings = async () => {
+    // We can rely on printerService to load its own settings, but we need to know the current value for UI
+    try {
+      await printerService.loadSettings();
+      setPaperSize(printerService.printerWidthMM);
+      // Load Terms & Conditions
+      const tc = await AsyncStorage.getItem('printer_terms_conditions');
+      const tcText = tc || '';
+      setTermsAndConditions(tcText);
+      setTermsInput(tcText);
+    } catch (e) {
+      console.log("Printer settings load error", e);
+    }
+  };
+
+  const handlePaperSizeSelection = async (size) => {
+    setPaperSize(size);
+    try {
+      await printerService.setPaperWidth(size);
+    } catch (e) {
+      console.log("Printer paper size set error", e);
+    }
+  };
+
+  const handleSaveTermsAndConditions = async () => {
+    try {
+      await AsyncStorage.setItem('printer_terms_conditions', termsInput.trim());
+      setTermsAndConditions(termsInput.trim());
+    } catch (e) {
+      console.log("Error saving T&C", e);
+    }
+  };
+
+  const handleClearTermsAndConditions = async () => {
+    try {
+      await AsyncStorage.removeItem('printer_terms_conditions');
+      setTermsAndConditions('');
+      setTermsInput('');
+    } catch (e) {
+      console.log("Error clearing T&C", e);
+    }
+  };
+
+  const loadProductSettings = async () => {
+    try {
+      const currentUsername = await AsyncStorage.getItem('username');
+      if (!currentUsername) return;
+
+      const key = `settings_show_stock_only_${currentUsername}`;
+      const val = await AsyncStorage.getItem(key);
+      if (val === 'true') setShowStockOnly(true);
+      else setShowStockOnly(false);
+
+      // Load Default Quantity
+      const qtyKey = `settings_default_quantity_${currentUsername}`;
+      const qtyVal = await AsyncStorage.getItem(qtyKey);
+      if (qtyVal !== null) {
+        setDefaultQuantity(parseInt(qtyVal, 10));
+      } else {
+        setDefaultQuantity(1); // Default if not set
+      }
+    } catch (e) {
+      console.log("Error loading product settings", e);
+    }
+  };
+
+  const toggleShowStockOnly = async () => {
+    const newValue = !showStockOnly;
+    setShowStockOnly(newValue);
+    try {
+      const currentUsername = await AsyncStorage.getItem('username');
+      if (currentUsername) {
+        const key = `settings_show_stock_only_${currentUsername}`;
+        await AsyncStorage.setItem(key, String(newValue));
+      }
+    } catch (e) {
+      console.log("Error saving product settings", e);
+    }
+  };
+
+  const toggleDefaultQuantity = async () => {
+    const newValue = defaultQuantity === 1 ? 0 : 1;
+    setDefaultQuantity(newValue);
+    try {
+      const currentUsername = await AsyncStorage.getItem('username');
+      if (currentUsername) {
+        const key = `settings_default_quantity_${currentUsername}`;
+        await AsyncStorage.setItem(key, String(newValue));
+      }
+    } catch (e) {
+      console.log("Error saving default quantity settings", e);
+    }
+  };
+
+  const loadPaymentSettings = async () => {
+    try {
+      const val = await AsyncStorage.getItem('settings_default_payment_method');
+      if (val) setDefaultPaymentMethod(val);
+    } catch (e) {
+      console.log("Error loading payment settings", e);
+    }
+  };
+
+  const handlePaymentMethodSelection = async (method) => {
+    setDefaultPaymentMethod(method);
+    try {
+      await AsyncStorage.setItem('settings_default_payment_method', method);
+    } catch (e) {
+      console.log("Error saving payment settings", e);
+    }
+  };
+
+  const loadPrintFormSettings = async () => {
+    try {
+      const val = await AsyncStorage.getItem('settings_print_form_type');
+      if (val) setPrintFormType(val);
+    } catch (e) {
+      console.log("Error loading print form settings", e);
+    }
+  };
+
+  const handlePrintFormSelection = async (formType) => {
+    setPrintFormType(formType);
+    try {
+      await AsyncStorage.setItem('settings_print_form_type', formType);
+    } catch (e) {
+      console.log("Error saving print form settings", e);
+    }
+  };
+
+  const loadTaxSettings = async () => {
+    try {
+      const val = await AsyncStorage.getItem('settings_tax_code');
+      if (val) setTaxCodeSetting(val);
+    } catch (e) {
+      console.log("Error loading tax settings", e);
+    }
+  };
+
+  const handleTaxSettingSelection = async (setting) => {
+    setTaxCodeSetting(setting);
+    try {
+      await AsyncStorage.setItem('settings_tax_code', setting);
+    } catch (e) {
+      console.log("Error saving tax settings", e);
+    }
+  };
+
 
   const loadCustomerCount = async () => {
     try {
@@ -101,13 +275,24 @@ const Company = () => {
       // Always allowed
     },
     {
-      icon: "people",
-      title: "Customers",
-      description: `${customersCount} registered customers`,
-      onPress: () => router.push("/customers"),
-      color: Colors.secondary.main,
-      bg: Colors.secondary[50],
-      moduleCode: 'MOD012', // Customers Module
+      icon: "settings-outline",
+      title: "Settings",
+      description: "Printer & App configuration",
+      onPress: () => {
+        loadPrinterSettings();
+        loadProductSettings();
+        loadPaymentSettings();
+        loadPrintFormSettings();
+        loadTaxSettings();
+        setIsPrinterSettingsOpen(false);
+        setIsProductSettingsOpen(false);
+        setIsPaymentSettingsOpen(false);
+        setIsPrintFormSettingsOpen(false);
+        setIsTaxSettingsOpen(false);
+        setSettingsModalVisible(true);
+      },
+      color: Colors.text.primary,
+      bg: Colors.neutral[100],
     }
   ];
 
@@ -117,7 +302,6 @@ const Company = () => {
     return allowedModules.has(action.moduleCode);
   });
 
-  const showLocationCapture = allowedModules === null || allowedModules.has('MOD011'); // Punch In Module
 
   return (
     <LinearGradient colors={Gradients.background} style={styles.container}>
@@ -175,25 +359,6 @@ const Company = () => {
           </View>
 
 
-          {/* Attendance Section */}
-          {showLocationCapture && (
-            <View style={styles.section}>
-              <Text style={styles.sectionTitle}>Attendance</Text>
-              <View style={styles.attendanceCard}>
-                <TouchableOpacity
-                  style={styles.attendanceItem}
-                  activeOpacity={0.7}
-                  onPress={() => router.push("/location-capture")}
-                >
-                  <View style={[styles.attendanceIcon, { backgroundColor: Colors.warning[50] }]}>
-                    <Ionicons name="location" size={24} color={Colors.warning.main} />
-                  </View>
-                  <Text style={styles.attendanceLabel}>Location Capture</Text>
-                </TouchableOpacity>
-              </View>
-            </View>
-          )}
-
           <View style={styles.infoSection}>
             <View style={styles.infoCard}>
               <Ionicons name="information-circle" size={20} color={Colors.primary.main} />
@@ -213,6 +378,528 @@ const Company = () => {
             <Text style={styles.logoutText}>Logout</Text>
           </TouchableOpacity>
         </ScrollView>
+
+        {/* Settings Modal */}
+        <Modal
+          animationType="slide"
+          transparent={true}
+          visible={settingsModalVisible}
+          onRequestClose={() => setSettingsModalVisible(false)}
+        >
+          <KeyboardAvoidingView 
+            behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+            style={styles.modalOverlay}
+          >
+            <View style={styles.modalContent}>
+
+              {/* Header */}
+              <View style={styles.modalHeader}>
+                {isPrinterSettingsOpen || isProductSettingsOpen || isPaymentSettingsOpen || isPrintFormSettingsOpen || isTaxSettingsOpen ? (
+                  <TouchableOpacity onPress={() => {
+                    setIsPrinterSettingsOpen(false);
+                    setIsProductSettingsOpen(false);
+                    setIsPaymentSettingsOpen(false);
+                    setIsPrintFormSettingsOpen(false);
+                    setIsTaxSettingsOpen(false);
+                  }} style={styles.backButton}>
+                    <Ionicons name="arrow-back" size={24} color={Colors.text.primary} />
+                  </TouchableOpacity>
+                ) : null}
+
+                <Text style={styles.modalTitle}>
+                  {isPrinterSettingsOpen ? "Printer Settings" :
+                    (isProductSettingsOpen ? "Product Settings" :
+                      (isPaymentSettingsOpen ? "Payment Settings" :
+                        (isPrintFormSettingsOpen ? "Print Form" :
+                          (isTaxSettingsOpen ? "Tax Settings" : "Settings"))))}
+                </Text>
+
+                <TouchableOpacity onPress={() => setSettingsModalVisible(false)}>
+                  <Ionicons name="close" size={24} color={Colors.text.primary} />
+                </TouchableOpacity>
+              </View>
+
+              {/* Content Logic */}
+              {!isPrinterSettingsOpen && !isProductSettingsOpen && !isPaymentSettingsOpen && !isPrintFormSettingsOpen && !isTaxSettingsOpen ? (
+                /* Main Settings Menu */
+                <View>
+                  <TouchableOpacity
+                    style={styles.menuItem}
+                    onPress={() => setIsPrinterSettingsOpen(true)}
+                  >
+                    <View style={styles.menuItemLeft}>
+                      <View style={[styles.menuIconContainer, { backgroundColor: 'rgba(99, 102, 241, 0.1)' }]}>
+                        <Ionicons name="print-outline" size={24} color={Colors.primary.main} />
+                      </View>
+                      <View>
+                        <Text style={styles.menuItemTitle}>Printer Settings</Text>
+                        <Text style={styles.menuItemSubtitle}>Configure paper size & width</Text>
+                      </View>
+                    </View>
+                    <Ionicons name="chevron-forward" size={24} color={Colors.text.tertiary} />
+                  </TouchableOpacity>
+
+                  {/* Print Form Settings */}
+                  <TouchableOpacity
+                    style={styles.menuItem}
+                    onPress={() => setIsPrintFormSettingsOpen(true)}
+                    activeOpacity={0.7}
+                  >
+                    <View style={styles.menuItemLeft}>
+                      <View style={[styles.menuIconContainer, { backgroundColor: 'rgba(99, 102, 241, 0.08)' }]}>
+                        <Ionicons name="document-text-outline" size={24} color={Colors.primary.main} />
+                      </View>
+                      <View>
+                        <Text style={styles.menuItemTitle}>Print Form</Text>
+                        <Text style={styles.menuItemSubtitle}>
+                          {printFormType === 'form3' ? 'Form 3 selected' : printFormType === 'form2' ? 'Form 2 selected (No HSN/GST)' : 'Form 1 selected (With HSN/GST)'}
+                        </Text>
+                      </View>
+                    </View>
+                    <Ionicons name="chevron-forward" size={24} color={Colors.text.tertiary} />
+                  </TouchableOpacity>
+
+                  {/* Tax Code Settings */}
+                  <TouchableOpacity
+                    style={styles.menuItem}
+                    onPress={() => setIsTaxSettingsOpen(true)}
+                    activeOpacity={0.7}
+                  >
+                    <View style={styles.menuItemLeft}>
+                      <View style={[styles.menuIconContainer, { backgroundColor: 'rgba(233, 30, 99, 0.1)' }]}>
+                        <Ionicons name="calculator-outline" size={24} color="#E91E63" />
+                      </View>
+                      <View>
+                        <Text style={styles.menuItemTitle}>Tax Code Settings</Text>
+                        <Text style={styles.menuItemSubtitle}>Configure tax logic for Form 3</Text>
+                      </View>
+                    </View>
+                    <Ionicons name="chevron-forward" size={24} color={Colors.text.tertiary} />
+                  </TouchableOpacity>
+
+                  {/* Product Settings */}
+                  <TouchableOpacity
+                    style={styles.menuItem}
+                    onPress={() => setIsProductSettingsOpen(true)}
+                    activeOpacity={0.7}
+                  >
+                    <View style={styles.menuItemLeft}>
+                      <View style={[styles.menuIconContainer, { backgroundColor: 'rgba(255, 152, 0, 0.1)' }]}>
+                        <Ionicons name="cube-outline" size={24} color="#FF9800" />
+                      </View>
+                      <View>
+                        <Text style={styles.menuItemTitle}>Products</Text>
+                        <Text style={styles.menuItemSubtitle}>Manage product visibility</Text>
+                      </View>
+                    </View>
+                    <Ionicons name="chevron-forward" size={24} color={Colors.text.tertiary} />
+                  </TouchableOpacity>
+
+                  {/* Payment Settings */}
+                  <TouchableOpacity
+                    style={styles.menuItem}
+                    onPress={() => setIsPaymentSettingsOpen(true)}
+                    activeOpacity={0.7}
+                  >
+                    <View style={styles.menuItemLeft}>
+                      <View style={[styles.menuIconContainer, { backgroundColor: 'rgba(76, 175, 80, 0.1)' }]}>
+                        <Ionicons name="card-outline" size={24} color={Colors.success.main} />
+                      </View>
+                      <View>
+                        <Text style={styles.menuItemTitle}>Payment Method</Text>
+                        <Text style={styles.menuItemSubtitle}>Set default for new orders</Text>
+                      </View>
+                    </View>
+                    <Ionicons name="chevron-forward" size={24} color={Colors.text.tertiary} />
+                  </TouchableOpacity>
+                </View>
+              ) : isProductSettingsOpen ? (
+                /* Inner Product Settings View */
+                <View style={styles.settingItem}>
+                  <TouchableOpacity
+                    style={[styles.menuItem, { borderBottomWidth: 0 }]}
+                    onPress={toggleShowStockOnly}
+                    activeOpacity={0.8}
+                  >
+                    <View style={styles.menuItemLeft}>
+                      <View style={[styles.menuIconContainer, { backgroundColor: showStockOnly ? 'rgba(76, 175, 80, 0.1)' : 'rgba(158, 158, 158, 0.1)' }]}>
+                        <Ionicons name={showStockOnly ? "checkmark-circle" : "ellipse-outline"} size={24} color={showStockOnly ? Colors.success.main : Colors.text.tertiary} />
+                      </View>
+                      <View style={{ flex: 1 }}>
+                        <Text style={styles.menuItemTitle}>Show Stock Only</Text>
+                        <Text style={styles.menuItemSubtitle} numberOfLines={2}>Only display products with available stock</Text>
+                      </View>
+                    </View>
+                    <Ionicons
+                      name={showStockOnly ? "toggle" : "toggle-outline"}
+                      size={32}
+                      color={showStockOnly ? Colors.success.main : Colors.text.tertiary}
+                    />
+                  </TouchableOpacity>
+
+                  <View style={{ height: 1, backgroundColor: '#f0f0f0', marginVertical: 8 }} />
+
+                  <TouchableOpacity
+                    style={[styles.menuItem, { borderBottomWidth: 0 }]}
+                    onPress={toggleDefaultQuantity}
+                    activeOpacity={0.8}
+                  >
+                    <View style={styles.menuItemLeft}>
+                      <View style={[styles.menuIconContainer, { backgroundColor: defaultQuantity === 1 ? 'rgba(76, 175, 80, 0.1)' : 'rgba(158, 158, 158, 0.1)' }]}>
+                        <Text style={{ fontSize: 16, fontWeight: 'bold', color: defaultQuantity === 1 ? Colors.success.main : Colors.text.tertiary }}>
+                          {defaultQuantity}
+                        </Text>
+                      </View>
+                      <View style={{ flex: 1 }}>
+                        <Text style={styles.menuItemTitle}>Default Form Quantity</Text>
+                        <Text style={styles.menuItemSubtitle} numberOfLines={2}>
+                          {defaultQuantity === 1 ? "Start with quantity 1" : "Start with quantity 0 (Manual Entry)"}
+                        </Text>
+                      </View>
+                    </View>
+                    <Ionicons
+                      name={defaultQuantity === 1 ? "toggle" : "toggle-outline"}
+                      size={32}
+                      color={defaultQuantity === 1 ? Colors.success.main : Colors.text.tertiary}
+                    />
+                  </TouchableOpacity>
+                </View>
+              ) : isPaymentSettingsOpen ? (
+                /* Inner Payment Settings View */
+                <View style={styles.settingItem}>
+                  <View style={styles.settingLabelContainer}>
+                    <Text style={styles.settingLabel}>Default Payment Method</Text>
+                  </View>
+
+                  <View style={styles.sizeSelectionContainer}>
+                    <TouchableOpacity
+                      style={[styles.sizeOption, defaultPaymentMethod === 'Cash' && styles.sizeOptionSelected]}
+                      onPress={() => handlePaymentMethodSelection('Cash')}
+                    >
+                      <Ionicons name={defaultPaymentMethod === 'Cash' ? "radio-button-on" : "radio-button-off"} size={24} color={defaultPaymentMethod === 'Cash' ? Colors.primary.main : Colors.text.tertiary} />
+                      <View>
+                        <Text style={[styles.sizeOptionTitle, defaultPaymentMethod === 'Cash' && styles.sizeOptionTitleSelected]}>Cash</Text>
+                        <Text style={styles.sizeOptionSubtitle}>Standard Cash/Bank</Text>
+                      </View>
+                    </TouchableOpacity>
+
+                    <TouchableOpacity
+                      style={[styles.sizeOption, defaultPaymentMethod === 'Credit' && styles.sizeOptionSelected]}
+                      onPress={() => handlePaymentMethodSelection('Credit')}
+                    >
+                      <Ionicons name={defaultPaymentMethod === 'Credit' ? "radio-button-on" : "radio-button-off"} size={24} color={defaultPaymentMethod === 'Credit' ? Colors.primary.main : Colors.text.tertiary} />
+                      <View>
+                        <Text style={[styles.sizeOptionTitle, defaultPaymentMethod === 'Credit' && styles.sizeOptionTitleSelected]}>Credit</Text>
+                        <Text style={styles.sizeOptionSubtitle}>Credit Sale</Text>
+                      </View>
+                    </TouchableOpacity>
+                  </View>
+
+                  <Text style={styles.helperText}>
+                    This method will be auto-selected when you create a new order.
+                  </Text>
+                </View>
+              ) : isPrintFormSettingsOpen ? (
+                /* Inner Print Form Settings View */
+                <View style={styles.settingItem}>
+                  <Text style={[styles.settingLabel, { marginBottom: 12 }]}>Select Print Format</Text>
+                  <Text style={[styles.helperText, { marginBottom: 16 }]}>
+                    Choose which receipt layout to use when printing orders.
+                  </Text>
+
+                  <View style={[styles.sizeSelectionContainer, { flexDirection: 'column', alignItems: 'stretch' }]}>
+                    {printFormType === 'form1' && (
+                    <TouchableOpacity
+                      style={[styles.sizeOption, { marginBottom: 12, justifyContent: 'flex-start' }, printFormType === 'form1' && styles.sizeOptionSelected]}
+                      onPress={() => handlePrintFormSelection('form1')}
+                    >
+                      <Ionicons name={printFormType === 'form1' ? "radio-button-on" : "radio-button-off"} size={24} color={printFormType === 'form1' ? Colors.primary.main : Colors.text.tertiary} style={{ marginRight: 12 }} />
+                      <View>
+                        <Text style={[styles.sizeOptionTitle, printFormType === 'form1' && styles.sizeOptionTitleSelected]}>Form 1</Text>
+                        <Text style={styles.sizeOptionSubtitle}>Standard with HSN / GST</Text>
+                      </View>
+                    </TouchableOpacity>
+                    )}
+
+                    {printFormType === 'form2' && (
+                    <TouchableOpacity
+                      style={[styles.sizeOption, { marginBottom: 12, justifyContent: 'flex-start' }, printFormType === 'form2' && styles.sizeOptionSelected]}
+                      onPress={() => handlePrintFormSelection('form2')}
+                    >
+                      <Ionicons name={printFormType === 'form2' ? "radio-button-on" : "radio-button-off"} size={24} color={printFormType === 'form2' ? Colors.primary.main : Colors.text.tertiary} style={{ marginRight: 12 }} />
+                      <View>
+                        <Text style={[styles.sizeOptionTitle, printFormType === 'form2' && styles.sizeOptionTitleSelected]}>Form 2</Text>
+                        <Text style={styles.sizeOptionSubtitle}>No HSN / GST (Compact)</Text>
+                      </View>
+                    </TouchableOpacity>
+                    )}
+
+                    {printFormType === 'form3' && (
+                    <TouchableOpacity
+                      style={[styles.sizeOption, { marginBottom: 40, justifyContent: 'flex-start' }, printFormType === 'form3' && styles.sizeOptionSelected]}
+                      onPress={() => handlePrintFormSelection('form3')}
+                    >
+                      <Ionicons name={printFormType === 'form3' ? "radio-button-on" : "radio-button-off"} size={24} color={printFormType === 'form3' ? Colors.primary.main : Colors.text.tertiary} style={{ marginRight: 12 }} />
+                      <View>
+                        <Text style={[styles.sizeOptionTitle, printFormType === 'form3' && styles.sizeOptionTitleSelected]}>Form 3</Text>
+                        <Text style={styles.sizeOptionSubtitle}>Dynamic Tax support</Text>
+                      </View>
+                    </TouchableOpacity>
+                    )}
+                  </View>
+                </View>
+              ) : isTaxSettingsOpen ? (
+                /* Inner Tax Settings View */
+                <View style={styles.settingItem}>
+                  <View style={styles.settingLabelContainer}>
+                    <Text style={styles.settingLabel}>Tax Code Settings</Text>
+                  </View>
+                  
+                  <Text style={[styles.helperText, { marginBottom: 16 }]}>
+                    Choose how tax is calculated for products on Form 3.
+                  </Text>
+
+                  <View style={[styles.sizeSelectionContainer, { flexDirection: 'column', alignItems: 'stretch' }]}>
+                    {taxCodeSetting === 'no_tax' && (
+                    <TouchableOpacity
+                      style={[styles.sizeOption, { marginBottom: 12, justifyContent: 'flex-start' }, taxCodeSetting === 'no_tax' && styles.sizeOptionSelected]}
+                      onPress={() => handleTaxSettingSelection('no_tax')}
+                    >
+                      <Ionicons name={taxCodeSetting === 'no_tax' ? "radio-button-on" : "radio-button-off"} size={24} color={taxCodeSetting === 'no_tax' ? Colors.primary.main : Colors.text.tertiary} style={{ marginRight: 12 }} />
+                      <View>
+                        <Text style={[styles.sizeOptionTitle, taxCodeSetting === 'no_tax' && styles.sizeOptionTitleSelected]}>No Tax</Text>
+                        <Text style={styles.sizeOptionSubtitle}>Standard calculation (Tax ignored)</Text>
+                      </View>
+                    </TouchableOpacity>
+                    )}
+
+                    {taxCodeSetting === 'plus_tax' && (
+                    <TouchableOpacity
+                      style={[styles.sizeOption, { marginBottom: 12, justifyContent: 'flex-start' }, taxCodeSetting === 'plus_tax' && styles.sizeOptionSelected]}
+                      onPress={() => handleTaxSettingSelection('plus_tax')}
+                    >
+                      <Ionicons name={taxCodeSetting === 'plus_tax' ? "radio-button-on" : "radio-button-off"} size={24} color={taxCodeSetting === 'plus_tax' ? Colors.primary.main : Colors.text.tertiary} style={{ marginRight: 12 }} />
+                      <View>
+                        <Text style={[styles.sizeOptionTitle, taxCodeSetting === 'plus_tax' && styles.sizeOptionTitleSelected]}>Plus Tax</Text>
+                        <Text style={styles.sizeOptionSubtitle}>Tax added to rate</Text>
+                      </View>
+                    </TouchableOpacity>
+                    )}
+
+                    {taxCodeSetting === 'reverse_tax' && (
+                    <TouchableOpacity
+                      style={[styles.sizeOption, { marginBottom: 40, justifyContent: 'flex-start' }, taxCodeSetting === 'reverse_tax' && styles.sizeOptionSelected]}
+                      onPress={() => handleTaxSettingSelection('reverse_tax')}
+                    >
+                      <Ionicons name={taxCodeSetting === 'reverse_tax' ? "radio-button-on" : "radio-button-off"} size={24} color={taxCodeSetting === 'reverse_tax' ? Colors.primary.main : Colors.text.tertiary} style={{ marginRight: 12 }} />
+                      <View>
+                        <Text style={[styles.sizeOptionTitle, taxCodeSetting === 'reverse_tax' && styles.sizeOptionTitleSelected]}>Reverse Tax</Text>
+                        <Text style={styles.sizeOptionSubtitle}>Rate includes tax</Text>
+                      </View>
+                    </TouchableOpacity>
+                    )}
+                  </View>
+                </View>
+              ) : (
+                /* Inner Printer Settings View */
+                <View style={styles.settingItem}>
+
+                  <View style={styles.settingLabelContainer}>
+                    <Text style={styles.settingLabel}>Paper Size</Text>
+                  </View>
+
+                  <View style={styles.sizeSelectionContainer}>
+                    <TouchableOpacity
+                      style={[styles.sizeOption, paperSize === 58 && styles.sizeOptionSelected]}
+                      onPress={() => handlePaperSizeSelection(58)}
+                    >
+                      <Ionicons name={paperSize === 58 ? "radio-button-on" : "radio-button-off"} size={24} color={paperSize === 58 ? Colors.primary.main : Colors.text.tertiary} />
+                      <View>
+                        <Text style={[styles.sizeOptionTitle, paperSize === 58 && styles.sizeOptionTitleSelected]}>2 Inch</Text>
+                        <Text style={styles.sizeOptionSubtitle}>Standard Receipt</Text>
+                      </View>
+                    </TouchableOpacity>
+
+                    <TouchableOpacity
+                      style={[styles.sizeOption, paperSize === 80 && styles.sizeOptionSelected]}
+                      onPress={() => handlePaperSizeSelection(80)}
+                    >
+                      <Ionicons name={paperSize === 80 ? "radio-button-on" : "radio-button-off"} size={24} color={paperSize === 80 ? Colors.primary.main : Colors.text.tertiary} />
+                      <View>
+                        <Text style={[styles.sizeOptionTitle, paperSize === 80 && styles.sizeOptionTitleSelected]}>3 Inch</Text>
+                        <Text style={styles.sizeOptionSubtitle}>Wide Receipt</Text>
+                      </View>
+                    </TouchableOpacity>
+
+                    <TouchableOpacity
+                      style={[styles.sizeOption, paperSize === 104 && styles.sizeOptionSelected]}
+                      onPress={() => handlePaperSizeSelection(104)}
+                    >
+                      <Ionicons name={paperSize === 104 ? "radio-button-on" : "radio-button-off"} size={24} color={paperSize === 104 ? Colors.primary.main : Colors.text.tertiary} />
+                      <View>
+                        <Text style={[styles.sizeOptionTitle, paperSize === 104 && styles.sizeOptionTitleSelected]}>4 Inch</Text>
+                        <Text style={styles.sizeOptionSubtitle}>Extra Wide Receipt</Text>
+                      </View>
+                    </TouchableOpacity>
+
+                    <TouchableOpacity
+                      style={[styles.sizeOption, paperSize === 127 && styles.sizeOptionSelected]}
+                      onPress={() => handlePaperSizeSelection(127)}
+                    >
+                      <Ionicons name={paperSize === 127 ? "radio-button-on" : "radio-button-off"} size={24} color={paperSize === 127 ? Colors.primary.main : Colors.text.tertiary} />
+                      <View>
+                        <Text style={[styles.sizeOptionTitle, paperSize === 127 && styles.sizeOptionTitleSelected]}>5 Inch</Text>
+                        <Text style={styles.sizeOptionSubtitle}>Ultra Wide Receipt</Text>
+                      </View>
+                    </TouchableOpacity>
+                  </View>
+
+                  <Text style={styles.helperText}>
+                    Select 2 Inch for portable printers, 3 Inch for desktop, 4 Inch for extra wide, 5 Inch for ultra wide.
+                  </Text>
+
+                  <View style={styles.visualizerContainer}>
+                    <Text style={[styles.visualizerText, { width: '100%', textAlign: 'center' }]}>
+                      Preview Line Width:
+                    </Text>
+                    <Text style={[styles.visualizerLine, { fontSize: 10 }]}>
+                      {'-'.repeat(Math.floor((paperSize / 58) * 32))}
+                    </Text>
+                  </View>
+
+                  {/* Terms & Conditions Button */}
+                  <View style={{ marginTop: 20 }}>
+                    <TouchableOpacity
+                      style={{
+                        flexDirection: 'row',
+                        alignItems: 'center',
+                        justifyContent: 'space-between',
+                        backgroundColor: '#f8f9fa',
+                        padding: 16,
+                        borderRadius: 12,
+                        borderWidth: 1,
+                        borderColor: '#e0e0e0'
+                      }}
+                      onPress={() => setTcModalVisible(true)}
+                    >
+                      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
+                        <Ionicons name="document-text-outline" size={24} color={Colors.primary.main} />
+                        <View>
+                          <Text style={{ fontWeight: '600', color: Colors.text.primary }}>Terms & Conditions</Text>
+                          <Text style={{ fontSize: 12, color: Colors.text.tertiary }}>
+                            {termsAndConditions ? 'T&C added' : 'Add print footer text'}
+                          </Text>
+                        </View>
+                      </View>
+                      <Ionicons name="chevron-forward" size={20} color={Colors.text.tertiary} />
+                    </TouchableOpacity>
+                  </View>
+                </View>
+              )}
+
+            </View>
+          </KeyboardAvoidingView>
+        </Modal>
+
+        {/* Dedicated T&C Modal */}
+        <Modal
+          animationType="fade"
+          transparent={true}
+          visible={tcModalVisible}
+          onRequestClose={() => setTcModalVisible(false)}
+        >
+          <KeyboardAvoidingView 
+            behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+            style={{
+              flex: 1,
+              backgroundColor: 'rgba(0,0,0,0.5)',
+              justifyContent: 'center',
+              padding: 20
+            }}
+          >
+            <View style={{
+              backgroundColor: '#fff',
+              borderRadius: 20,
+              padding: 24,
+              width: '100%',
+              maxWidth: 400,
+              elevation: 20
+            }}>
+              <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 }}>
+                <Text style={{ fontSize: 18, fontWeight: '700', color: Colors.text.primary }}>Edit Terms & Conditions</Text>
+                <TouchableOpacity onPress={() => setTcModalVisible(false)}>
+                  <Ionicons name="close" size={24} color={Colors.text.primary} />
+                </TouchableOpacity>
+              </View>
+
+              <Text style={{ color: Colors.text.tertiary, fontSize: 13, marginBottom: 12 }}>
+                This text will be printed at the bottom of every receipt.
+              </Text>
+
+              <TextInput
+                style={{
+                  borderWidth: 1,
+                  borderColor: '#ddd',
+                  borderRadius: 12,
+                  padding: 14,
+                  minHeight: 120,
+                  textAlignVertical: 'top',
+                  fontSize: 15,
+                  color: '#333',
+                  backgroundColor: '#f9f9f9',
+                  marginBottom: 20,
+                }}
+                multiline
+                autoFocus
+                placeholder="Enter terms and conditions..."
+                placeholderTextColor="#aaa"
+                value={termsInput}
+                onChangeText={setTermsInput}
+              />
+
+              <View style={{ flexDirection: 'row', gap: 12 }}>
+                <TouchableOpacity
+                  style={{
+                    flex: 1,
+                    backgroundColor: Colors.primary.main,
+                    paddingVertical: 14,
+                    borderRadius: 12,
+                    alignItems: 'center',
+                    elevation: 2
+                  }}
+                  onPress={async () => {
+                    await handleSaveTermsAndConditions();
+                    setTcModalVisible(false);
+                  }}
+                >
+                  <Text style={{ color: '#fff', fontWeight: '700', fontSize: 16 }}>Save</Text>
+                </TouchableOpacity>
+                
+                {termsAndConditions ? (
+                  <TouchableOpacity
+                    style={{
+                      flex: 1,
+                      backgroundColor: '#fff',
+                      paddingVertical: 14,
+                      borderRadius: 12,
+                      alignItems: 'center',
+                      borderWidth: 1,
+                      borderColor: '#f44336'
+                    }}
+                    onPress={async () => {
+                      await handleClearTermsAndConditions();
+                      setTcModalVisible(false);
+                    }}
+                  >
+                    <Text style={{ color: '#f44336', fontWeight: '700', fontSize: 16 }}>Remove</Text>
+                  </TouchableOpacity>
+                ) : null}
+              </View>
+            </View>
+          </KeyboardAvoidingView>
+        </Modal>
+
+
 
         {/* Logout Confirmation Modal */}
         <Modal
@@ -484,6 +1171,200 @@ const styles = StyleSheet.create({
     backgroundColor: Colors.error.main,
     alignItems: 'center',
   },
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.5)',
+    justifyContent: 'flex-end', // sheet style or center? center might be better for small settings
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: Spacing.xl
+  },
+  modalContent: {
+    backgroundColor: '#fff',
+    borderRadius: BorderRadius.xl,
+    padding: Spacing.xl,
+    width: '100%',
+    maxWidth: 400,
+    elevation: 10,
+  },
+  modalHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: Spacing.xl,
+    borderBottomWidth: 1,
+    borderBottomColor: '#eee',
+    paddingBottom: Spacing.md
+  },
+  modalTitle: {
+    fontSize: Typography.sizes.xl,
+    fontWeight: '700',
+    color: Colors.text.primary,
+  },
+  settingItem: {
+    marginBottom: Spacing.xl,
+  },
+  settingLabelContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: Spacing.md,
+    gap: 10
+  },
+  settingLabel: {
+    fontSize: Typography.sizes.lg,
+    fontWeight: '600',
+    color: Colors.text.primary,
+  },
+  stepperContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: Spacing.lg,
+    backgroundColor: Colors.background,
+    padding: Spacing.md,
+    borderRadius: BorderRadius.lg,
+  },
+  stepButton: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    backgroundColor: Colors.primary.main,
+    justifyContent: 'center',
+    alignItems: 'center',
+    elevation: 3
+  },
+  valueContainer: {
+    alignItems: 'center',
+    minWidth: 80,
+  },
+  valueText: {
+    fontSize: 28,
+    fontWeight: '700',
+    color: Colors.text.primary,
+  },
+  unitText: {
+    fontSize: 14,
+    color: Colors.text.secondary,
+    fontWeight: '500'
+  },
+  helperText: {
+    textAlign: 'center',
+    marginTop: 8,
+    color: Colors.text.tertiary,
+    fontSize: 12
+  },
+  closeButton: {
+    backgroundColor: Colors.secondary.main,
+    padding: Spacing.md,
+    borderRadius: BorderRadius.lg,
+    alignItems: 'center',
+    marginTop: Spacing.sm
+  },
+  closeButtonText: {
+    color: '#fff',
+    fontWeight: '700',
+    fontSize: 16
+  },
+  menuItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingVertical: Spacing.md,
+    borderBottomWidth: 1,
+    borderBottomColor: 'rgba(0,0,0,0.05)',
+    marginBottom: Spacing.xs
+  },
+  menuItemLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.md,
+    flex: 1, // Allow taking up available space
+    paddingRight: Spacing.md // Add spacing before the right icon/toggle
+  },
+  menuIconContainer: {
+    width: 48,
+    height: 48,
+    borderRadius: 12,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  menuItemTitle: {
+    fontSize: Typography.sizes.md,
+    fontWeight: '600',
+    color: Colors.text.primary,
+  },
+  menuItemSubtitle: {
+    fontSize: Typography.sizes.xs,
+    color: Colors.text.tertiary,
+    marginTop: 2
+  },
+  backButton: {
+    marginRight: Spacing.sm
+  },
+  visualizerContainer: {
+    marginTop: Spacing.lg,
+    padding: Spacing.md,
+    backgroundColor: '#f8f9fa',
+    borderRadius: BorderRadius.lg,
+    alignItems: 'center'
+  },
+  visualizerText: {
+    fontSize: 10,
+    color: Colors.text.tertiary,
+    marginBottom: 4,
+    textTransform: 'uppercase',
+    letterSpacing: 1
+  },
+  visualizerLine: {
+    fontFamily: 'monospace',
+    color: Colors.text.secondary
+  },
+  sizeSelectionContainer: {
+    flexDirection: 'column',
+    gap: Spacing.md,
+    marginBottom: Spacing.md
+  },
+  sizeOption: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: Spacing.md,
+    borderRadius: BorderRadius.md,
+    borderWidth: 1,
+    borderColor: 'rgba(0,0,0,0.1)',
+    gap: Spacing.sm,
+    backgroundColor: '#fff'
+  },
+  sizeOptionSelected: {
+    borderColor: Colors.primary.main,
+    backgroundColor: Colors.primary[50]
+  },
+  sizeOptionTitle: {
+    fontWeight: '600',
+    fontSize: 14,
+    color: Colors.text.secondary
+  },
+  sizeOptionTitleSelected: {
+    color: Colors.primary.main
+  },
+  sizeOptionSubtitle: {
+    fontSize: 10,
+    color: Colors.text.tertiary
+  },
+  printPreviewBox: {
+    backgroundColor: '#f8f8f8',
+    borderRadius: 6,
+    padding: 8,
+    width: '100%',
+    borderWidth: 1,
+    borderColor: '#e0e0e0',
+  },
+  printPreviewText: {
+    fontFamily: 'monospace',
+    fontSize: 9,
+    color: '#333',
+    lineHeight: 14,
+  },
+
   confirmButtonText: {
     fontSize: Typography.sizes.base,
     fontWeight: '600',
