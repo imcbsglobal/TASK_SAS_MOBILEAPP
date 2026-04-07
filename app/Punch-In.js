@@ -1,11 +1,12 @@
-
 import { Ionicons } from "@expo/vector-icons";
 import AsyncStorage from "@react-native-async-storage/async-storage";
-import { Picker } from '@react-native-picker/picker'; // Added Picker
+import { Picker } from '@react-native-picker/picker';
 import * as ImagePicker from 'expo-image-picker';
 import { LinearGradient } from "expo-linear-gradient";
 import * as Location from 'expo-location';
 import { useFocusEffect, useRouter } from "expo-router";
+import * as FileSystem from 'expo-file-system/legacy';
+import * as Sharing from 'expo-sharing';
 import { useCallback, useEffect, useState } from "react";
 import {
   ActivityIndicator,
@@ -13,16 +14,29 @@ import {
   Dimensions,
   FlatList,
   Image,
+  LayoutAnimation,
   Modal,
-  SafeAreaView,
+  Platform,
   ScrollView,
   StyleSheet,
   Text,
   TextInput,
   TouchableOpacity,
+  UIManager,
   View
 } from "react-native";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { BorderRadius, Colors, Gradients, Shadows, Spacing, Typography } from "../constants/theme";
+import dbService from "../src/services/database";
+import pdfService from "../src/services/pdfService";
+import printerService from "../src/services/printerService";
+
+// LayoutAnimation setup for Android
+if (Platform.OS === 'android') {
+  if (UIManager && UIManager.setLayoutAnimationEnabledExperimental) {
+    UIManager.setLayoutAnimationEnabledExperimental(true);
+  }
+}
 
 const { width } = Dimensions.get('window');
 
@@ -46,6 +60,7 @@ const deg2rad = (deg) => {
 
 export default function PunchInScreen() {
   const router = useRouter();
+  const insets = useSafeAreaInsets();
 
   // Data State
   const [allCustomers, setAllCustomers] = useState([]);
@@ -80,6 +95,10 @@ export default function PunchInScreen() {
   const [punching, setPunching] = useState(false);
   const [loggedInUser, setLoggedInUser] = useState("");
   const [punchinStatusToPost, setPunchinStatusToPost] = useState("");
+
+  // Transaction Management State
+  const [expandedSection, setExpandedSection] = useState(null); // 'pending' | 'uploaded'
+  const [selectedSubCategory, setSelectedSubCategory] = useState(null); // 'Order', 'Sales', 'Return', 'Collection'
 
   useFocusEffect(
     useCallback(() => {
@@ -187,6 +206,26 @@ export default function PunchInScreen() {
     } catch (error) {
       console.error('[PunchIn] Error checking status:', error);
     }
+  };
+
+  // --- Transaction Management Logic ---
+
+  const handleManagementSectionPress = (section) => {
+    LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
+    if (expandedSection === section) {
+      setExpandedSection(null);
+      setSelectedSubCategory(null);
+    } else {
+      setExpandedSection(section);
+      setSelectedSubCategory(null);
+    }
+  };
+
+  const handleSubCategoryPress = (category) => {
+    router.push({
+      pathname: "/Management/TransactionList",
+      params: { type: expandedSection, category: category }
+    });
   };
 
   const loadData = async () => {
@@ -809,6 +848,7 @@ export default function PunchInScreen() {
     }
   };
 
+
   const renderSelectionStep = () => {
     const selectedCustomer = getSelectedCustomerDetails();
 
@@ -881,6 +921,10 @@ export default function PunchInScreen() {
 
         {/* Location Verification Log Card */}
         {renderLocationLogCard()}
+
+        {/* Transaction Management Sections */}
+        {renderManagementSection('pending')}
+        {renderManagementSection('uploaded')}
 
         <TouchableOpacity
           style={[
@@ -1120,9 +1164,257 @@ export default function PunchInScreen() {
     );
   };
 
+  const renderCustomerPicker = () => (
+    <Modal
+      visible={showCustomerPicker}
+      animationType="slide"
+      transparent={true}
+      onRequestClose={() => setShowCustomerPicker(false)}
+    >
+      <View style={styles.modalOverlay}>
+        <View style={styles.pickerModalContent}>
+          <View style={styles.pickerModalHeader}>
+            <Text style={styles.pickerModalTitle}>Select Customer</Text>
+            <TouchableOpacity onPress={() => setShowCustomerPicker(false)}>
+              <Ionicons name="close-circle" size={24} color={Colors.text.tertiary} />
+            </TouchableOpacity>
+          </View>
+
+          <View style={styles.pickerSearchContainer}>
+            <Ionicons name="search" size={20} color={Colors.text.tertiary} style={{ marginRight: 8 }} />
+            <TextInput
+              style={styles.pickerSearchInput}
+              placeholder="Search customer..."
+              value={customerSearchQuery}
+              onChangeText={setCustomerSearchQuery}
+              autoFocus={true}
+            />
+          </View>
+
+          <FlatList
+            data={pickerFilteredCustomers}
+            keyExtractor={item => item.code}
+            style={styles.pickerList}
+            renderItem={({ item }) => (
+              <TouchableOpacity
+                style={styles.pickerListItem}
+                onPress={() => {
+                  setSelectedCustomerCode(item.code);
+                  setShowCustomerPicker(false);
+                }}
+              >
+                <View>
+                  <Text style={styles.pickerListItemText}>{item.name}</Text>
+                  <Text style={styles.pickerListItemSubText}>{item.place || "N/A"}</Text>
+                </View>
+                {selectedCustomerCode === item.code && (
+                  <Ionicons name="checkmark" size={20} color={Colors.primary.main} />
+                )}
+              </TouchableOpacity>
+            )}
+            ListEmptyComponent={
+              <Text style={styles.pickerEmptyText}>No customers found</Text>
+            }
+          />
+        </View>
+      </View>
+    </Modal>
+  );
+
+  const renderLocationLogModal = () => (
+    <Modal
+      visible={showLocationLog}
+      animationType="slide"
+      transparent={true}
+      onRequestClose={() => setShowLocationLog(false)}
+    >
+      <View style={styles.modalOverlay}>
+        <View style={styles.pickerModalContent}>
+          <View style={styles.pickerModalHeader}>
+            <Text style={styles.pickerModalTitle}>Location Log</Text>
+            <TouchableOpacity onPress={() => setShowLocationLog(false)}>
+              <Ionicons name="close-circle" size={24} color={Colors.text.tertiary} />
+            </TouchableOpacity>
+          </View>
+
+          <FlatList
+            data={rawLocations.filter(l =>
+              (l.status === 'verified' || l.status === 'pending') &&
+              l.taskDoneBy === loggedInUser
+            )}
+            keyExtractor={(item, index) => item.id?.toString() || index.toString()}
+            style={styles.pickerList}
+            contentContainerStyle={{ paddingBottom: 20 }}
+            renderItem={({ item }) => (
+              <View style={styles.logListItem}>
+                <View style={styles.logListHeader}>
+                  <Text style={styles.logListStoreName}>{item.storeName || item.firm_name}</Text>
+                  <View style={[
+                    styles.logStatusBadge,
+                    { backgroundColor: item.status === 'verified' ? Colors.success[50] : Colors.warning[50] }
+                  ]}>
+                    <Text style={[
+                      styles.logStatusText,
+                      { color: item.status === 'verified' ? Colors.success.main : Colors.warning.main }
+                    ]}>
+                      {(item.status || 'unknown').toUpperCase()}
+                    </Text>
+                  </View>
+                </View>
+
+                <View style={styles.logListRow}>
+                  <Ionicons name="location-outline" size={14} color={Colors.text.tertiary} />
+                  <Text style={styles.logListLocation}>{item.storeLocation || item.area || 'Unknown Location'}</Text>
+                </View>
+
+                <View style={styles.logListFooter}>
+                  <Text style={styles.logListMeta}>
+                    By: <Text style={{ fontWeight: '600' }}>{item.taskDoneBy || 'N/A'}</Text>
+                  </Text>
+                  <Text style={styles.logListMeta}>
+                    {item.lastCapturedTime ? new Date(item.lastCapturedTime).toLocaleDateString() : '-'}
+                  </Text>
+                </View>
+              </View>
+            )}
+            ListEmptyComponent={
+              <Text style={styles.pickerEmptyText}>No verification logs found</Text>
+            }
+          />
+        </View>
+      </View>
+    </Modal>
+  );
+
+  const renderConfirmModal = () => (
+    <Modal
+      visible={showConfirmModal}
+      animationType="slide"
+      transparent={true}
+      onRequestClose={closeConfirmModal}
+    >
+      <View style={styles.modalOverlay}>
+        <View style={styles.confirmModalContent}>
+          <Text style={styles.modalTitle}>Confirm Punch In</Text>
+          <Text style={styles.modalSubtitle}>Shop: {getSelectedCustomerDetails()?.name}</Text>
+
+          {selfieUri && (
+            <Image source={{ uri: selfieUri }} style={styles.selfieImage} />
+          )}
+
+          <TextInput
+            style={styles.notesInput}
+            placeholder="Add notes (optional)"
+            placeholderTextColor={Colors.text.tertiary}
+            value={notes}
+            onChangeText={setNotes}
+            multiline={true}
+            numberOfLines={3}
+          />
+
+          <View style={styles.modalActions}>
+            <TouchableOpacity
+              style={[styles.modalButton, styles.modalButtonCancel]}
+              onPress={takeSelfie}
+              disabled={punching}
+            >
+              <Text style={styles.modalButtonTextCancel}>Retake</Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={[styles.modalButton, styles.modalButtonSave]}
+              onPress={confirmPunchIn}
+              disabled={punching}
+            >
+              {punching ? (
+                <ActivityIndicator size="small" color="#FFF" />
+              ) : (
+                <Text style={styles.modalButtonText}>Confirm Punch In</Text>
+              )}
+            </TouchableOpacity>
+          </View>
+
+          <TouchableOpacity style={styles.closeButton} onPress={closeConfirmModal} disabled={punching}>
+            <Ionicons name="close-circle" size={32} color={Colors.neutral[400]} />
+          </TouchableOpacity>
+        </View>
+      </View>
+    </Modal>
+  );
+
+  const renderSubCategoryGrid = (section) => {
+    const categories = ['Order', 'Sales', 'Return', 'Collection'];
+    const icons = {
+      Order: 'cart-outline',
+      Sales: 'receipt-outline',
+      Return: 'refresh-circle-outline',
+      Collection: 'wallet-outline'
+    };
+
+    return (
+      <View style={styles.subCategoryGrid}>
+        {categories.map(cat => (
+          <TouchableOpacity
+            key={cat}
+            style={styles.subCategoryButton}
+            onPress={() => handleSubCategoryPress(cat)}
+          >
+            <View style={styles.subCategoryIconBox}>
+              <Ionicons 
+                name={icons[cat] || 'document-outline'} 
+                size={24} 
+                color={Colors.primary.main} 
+              />
+            </View>
+            <Text style={styles.subCategoryLabel}>{cat}</Text>
+          </TouchableOpacity>
+        ))}
+      </View>
+    );
+  };
+
+  const renderManagementSection = (section) => {
+    const isExpanded = expandedSection === section;
+    const title = section === 'pending' ? 'Pending Transactions' : 'Uploaded Transactions';
+    const subtitle = section === 'pending' ? 'Items waiting to be synced' : 'Last 2 days history';
+    const icon = section === 'pending' ? 'cloud-upload-outline' : 'cloud-done-outline';
+    const iconColor = section === 'pending' ? Colors.warning.main : Colors.success.main;
+
+    return (
+      <View style={styles.managementSectionWrapper}>
+        <TouchableOpacity 
+          style={styles.managementHeaderCard}
+          onPress={() => handleManagementSectionPress(section)}
+          activeOpacity={0.7}
+        >
+          <View style={styles.managementHeaderLeft}>
+            <View style={[styles.managementIconCircle, { backgroundColor: iconColor + '15' }]}>
+              <Ionicons name={icon} size={24} color={iconColor} />
+            </View>
+            <View>
+              <Text style={styles.managementTitle}>{title}</Text>
+              <Text style={styles.managementSubtitle}>{subtitle}</Text>
+            </View>
+          </View>
+          <Ionicons 
+            name={isExpanded ? "chevron-up" : "chevron-down"} 
+            size={20} 
+            color={Colors.text.tertiary} 
+          />
+        </TouchableOpacity>
+
+        {isExpanded && (
+          <View style={styles.managementExpandedContent}>
+            {renderSubCategoryGrid(section)}
+          </View>
+        )}
+      </View>
+    );
+  };
+
   return (
-    <LinearGradient colors={Gradients.background} style={styles.container}>
-      <SafeAreaView style={styles.safeArea}>
+    <LinearGradient colors={Gradients.background} style={[styles.container, { paddingBottom: insets.bottom }]}>
+      <View style={[styles.safeArea, { paddingTop: Math.max(insets.top, 20) }]}>
         <View style={styles.header}>
           <TouchableOpacity onPress={() => router.push("/Home")} style={styles.backButton}>
             <Ionicons name="arrow-back" size={24} color={Colors.primary.main} />
@@ -1142,181 +1434,11 @@ export default function PunchInScreen() {
           )}
         </ScrollView>
 
-        {/* Searchable Picker Modal */}
-        <Modal
-          visible={showCustomerPicker}
-          animationType="slide"
-          transparent={true}
-          onRequestClose={() => setShowCustomerPicker(false)}
-        >
-          <View style={styles.modalOverlay}>
-            <View style={styles.pickerModalContent}>
-              <View style={styles.pickerModalHeader}>
-                <Text style={styles.pickerModalTitle}>Select Customer</Text>
-                <TouchableOpacity onPress={() => setShowCustomerPicker(false)}>
-                  <Ionicons name="close-circle" size={24} color={Colors.text.tertiary} />
-                </TouchableOpacity>
-              </View>
-
-              <View style={styles.pickerSearchContainer}>
-                <Ionicons name="search" size={20} color={Colors.text.tertiary} style={{ marginRight: 8 }} />
-                <TextInput
-                  style={styles.pickerSearchInput}
-                  placeholder="Search customer..."
-                  value={customerSearchQuery}
-                  onChangeText={setCustomerSearchQuery}
-                  autoFocus={true}
-                />
-              </View>
-
-              <FlatList
-                data={pickerFilteredCustomers}
-                keyExtractor={item => item.code}
-                style={styles.pickerList}
-                renderItem={({ item }) => (
-                  <TouchableOpacity
-                    style={styles.pickerListItem}
-                    onPress={() => {
-                      setSelectedCustomerCode(item.code);
-                      setShowCustomerPicker(false);
-                    }}
-                  >
-                    <View>
-                      <Text style={styles.pickerListItemText}>{item.name}</Text>
-                      <Text style={styles.pickerListItemSubText}>{item.place || "N/A"}</Text>
-                    </View>
-                    {selectedCustomerCode === item.code && (
-                      <Ionicons name="checkmark" size={20} color={Colors.primary.main} />
-                    )}
-                  </TouchableOpacity>
-                )}
-                ListEmptyComponent={
-                  <Text style={styles.pickerEmptyText}>No customers found</Text>
-                }
-              />
-            </View>
-          </View>
-        </Modal>
-
-        {/* Location Log Modal */}
-        <Modal
-          visible={showLocationLog}
-          animationType="slide"
-          transparent={true}
-          onRequestClose={() => setShowLocationLog(false)}
-        >
-          <View style={styles.modalOverlay}>
-            <View style={styles.pickerModalContent}>
-              <View style={styles.pickerModalHeader}>
-                <Text style={styles.pickerModalTitle}>Location Log</Text>
-                <TouchableOpacity onPress={() => setShowLocationLog(false)}>
-                  <Ionicons name="close-circle" size={24} color={Colors.text.tertiary} />
-                </TouchableOpacity>
-              </View>
-
-              <FlatList
-                data={rawLocations.filter(l =>
-                  (l.status === 'verified' || l.status === 'pending') &&
-                  l.taskDoneBy === loggedInUser
-                )}
-                keyExtractor={(item, index) => item.id?.toString() || index.toString()}
-                style={styles.pickerList}
-                contentContainerStyle={{ paddingBottom: 20 }}
-                renderItem={({ item }) => (
-                  <View style={styles.logListItem}>
-                    <View style={styles.logListHeader}>
-                      <Text style={styles.logListStoreName}>{item.storeName || item.firm_name}</Text>
-                      <View style={[
-                        styles.logStatusBadge,
-                        { backgroundColor: item.status === 'verified' ? Colors.success[50] : Colors.warning[50] }
-                      ]}>
-                        <Text style={[
-                          styles.logStatusText,
-                          { color: item.status === 'verified' ? Colors.success.main : Colors.warning.main }
-                        ]}>
-                          {(item.status || 'unknown').toUpperCase()}
-                        </Text>
-                      </View>
-                    </View>
-
-                    <View style={styles.logListRow}>
-                      <Ionicons name="location-outline" size={14} color={Colors.text.tertiary} />
-                      <Text style={styles.logListLocation}>{item.storeLocation || item.area || 'Unknown Location'}</Text>
-                    </View>
-
-                    <View style={styles.logListFooter}>
-                      <Text style={styles.logListMeta}>
-                        By: <Text style={{ fontWeight: '600' }}>{item.taskDoneBy || 'N/A'}</Text>
-                      </Text>
-                      <Text style={styles.logListMeta}>
-                        {item.lastCapturedTime ? new Date(item.lastCapturedTime).toLocaleDateString() : '-'}
-                      </Text>
-                    </View>
-                  </View>
-                )}
-                ListEmptyComponent={
-                  <Text style={styles.pickerEmptyText}>No verification logs found</Text>
-                }
-              />
-            </View>
-          </View>
-        </Modal>
-
-        {/* Selfie Confirmation Modal */}
-        <Modal
-          visible={showConfirmModal}
-          animationType="slide"
-          transparent={true}
-          onRequestClose={closeConfirmModal}
-        >
-          <View style={styles.modalOverlay}>
-            <View style={styles.confirmModalContent}>
-              <Text style={styles.modalTitle}>Confirm Punch In</Text>
-              <Text style={styles.modalSubtitle}>Shop: {getSelectedCustomerDetails()?.name}</Text>
-
-              {selfieUri && (
-                <Image source={{ uri: selfieUri }} style={styles.selfieImage} />
-              )}
-
-              <TextInput
-                style={styles.notesInput}
-                placeholder="Add notes (optional)"
-                placeholderTextColor={Colors.text.tertiary}
-                value={notes}
-                onChangeText={setNotes}
-                multiline={true}
-                numberOfLines={3}
-              />
-
-              <View style={styles.modalActions}>
-                <TouchableOpacity
-                  style={[styles.modalButton, styles.modalButtonCancel]}
-                  onPress={takeSelfie}
-                  disabled={punching}
-                >
-                  <Text style={styles.modalButtonTextCancel}>Retake</Text>
-                </TouchableOpacity>
-
-                <TouchableOpacity
-                  style={[styles.modalButton, styles.modalButtonSave]}
-                  onPress={confirmPunchIn}
-                  disabled={punching}
-                >
-                  {punching ? (
-                    <ActivityIndicator size="small" color="#FFF" />
-                  ) : (
-                    <Text style={styles.modalButtonText}>Confirm Punch In</Text>
-                  )}
-                </TouchableOpacity>
-              </View>
-
-              <TouchableOpacity style={styles.closeButton} onPress={closeConfirmModal} disabled={punching}>
-                <Ionicons name="close-circle" size={32} color={Colors.neutral[400]} />
-              </TouchableOpacity>
-            </View>
-          </View>
-        </Modal>
-      </SafeAreaView>
+        {/* Modals */}
+        {renderCustomerPicker()}
+        {renderLocationLogModal()}
+        {renderConfirmModal()}
+      </View>
     </LinearGradient>
   );
 }
@@ -1327,7 +1449,6 @@ const styles = StyleSheet.create({
   },
   safeArea: {
     flex: 1,
-    marginTop: 35,
   },
   header: {
     flexDirection: 'row',
@@ -1891,4 +2012,278 @@ const styles = StyleSheet.create({
     fontSize: Typography.sizes.xs,
     color: Colors.text.tertiary,
   },
+  // Management Styles
+  managementSectionWrapper: {
+    marginBottom: Spacing.md,
+  },
+  managementHeaderCard: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: BorderRadius.lg,
+    padding: Spacing.lg,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    borderWidth: 1,
+    borderColor: Colors.border.light,
+    ...Shadows.sm,
+  },
+  managementHeaderLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.md,
+  },
+  managementIconCircle: {
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  managementTitle: {
+    fontSize: Typography.sizes.base,
+    fontWeight: '700',
+    color: Colors.text.primary,
+  },
+  managementSubtitle: {
+    fontSize: Typography.sizes.xs,
+    color: Colors.text.secondary,
+    marginTop: 2,
+  },
+  managementExpandedContent: {
+    backgroundColor: '#fff',
+    borderRadius: BorderRadius.lg,
+    padding: Spacing.md,
+    marginTop: -8,
+    borderWidth: 1,
+    borderColor: Colors.border.light,
+    borderTopWidth: 0,
+    borderTopLeftRadius: 0,
+    borderTopRightRadius: 0,
+    ...Shadows.sm,
+  },
+  subCategoryGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: Spacing.md,
+    justifyContent: 'space-between',
+    marginBottom: Spacing.lg,
+  },
+  subCategoryButton: {
+    width: '47%',
+    backgroundColor: Colors.neutral[50],
+    borderRadius: BorderRadius.md,
+    padding: Spacing.md,
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: Colors.border.light,
+  },
+  subCategoryButtonSelected: {
+    backgroundColor: Colors.primary.main,
+    borderColor: Colors.primary.main,
+  },
+  subCategoryIconBox: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    backgroundColor: '#FFF',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 8,
+    ...Shadows.sm,
+  },
+  subCategoryIconBoxSelected: {
+    backgroundColor: 'rgba(255,255,255,0.2)',
+  },
+  subCategoryLabel: {
+    fontSize: Typography.sizes.sm,
+    fontWeight: '600',
+    color: Colors.text.primary,
+  },
+  subCategoryLabelSelected: {
+    color: '#FFF',
+  },
+  managementListContainer: {
+    marginTop: Spacing.md,
+  },
+  managementListHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: Spacing.md,
+    paddingHorizontal: 4,
+  },
+  managementListTitle: {
+    fontSize: Typography.sizes.md,
+    fontWeight: '700',
+    color: Colors.text.primary,
+  },
+  managementListCount: {
+    fontSize: Typography.sizes.xs,
+    color: Colors.text.tertiary,
+    fontWeight: '600',
+  },
+  managementCard: {
+    backgroundColor: '#fff',
+    borderRadius: BorderRadius.md,
+    marginBottom: Spacing.sm,
+    borderWidth: 1,
+    borderColor: Colors.border.light,
+    overflow: 'hidden',
+  },
+  managementCardHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    padding: Spacing.md,
+  },
+  managementCardLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    flex: 1,
+  },
+  managementCustomerName: {
+    fontSize: Typography.sizes.base,
+    fontWeight: '600',
+    color: Colors.text.primary,
+  },
+  managementMetaText: {
+    fontSize: Typography.sizes.xs,
+    color: Colors.text.tertiary,
+    marginTop: 2,
+  },
+  managementCardRight: {
+    alignItems: 'flex-end',
+    flexDirection: 'row',
+    gap: 8,
+  },
+  managementAmount: {
+    fontSize: Typography.sizes.md,
+    fontWeight: '700',
+    color: Colors.primary.main,
+  },
+  managementCardDetails: {
+    padding: Spacing.md,
+    backgroundColor: Colors.neutral[50],
+  },
+  managementDivider: {
+    height: 1,
+    backgroundColor: Colors.border.light,
+    marginBottom: Spacing.sm,
+  },
+  managementItemRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    marginBottom: 4,
+  },
+  managementItemName: {
+    fontSize: Typography.sizes.sm,
+    color: Colors.text.secondary,
+    flex: 1,
+    marginRight: 8,
+  },
+  managementItemQty: {
+    fontSize: Typography.sizes.sm,
+    color: Colors.text.primary,
+    fontWeight: '500',
+  },
+  managementActionRow: {
+    flexDirection: 'row',
+    gap: Spacing.sm,
+    marginTop: Spacing.md,
+  },
+  managementActionButton: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+    paddingVertical: 8,
+    borderRadius: BorderRadius.sm,
+  },
+  managementActionText: {
+    fontSize: 12,
+    fontWeight: '700',
+  },
+  managementEmptyContainer: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: Spacing.xl,
+  },
+  managementEmptyText: {
+    marginTop: 12,
+    color: Colors.text.tertiary,
+    fontSize: Typography.sizes.sm,
+  },
+  // Printer Modal
+  printerModal: {
+    backgroundColor: '#FFF',
+    borderRadius: BorderRadius.xl,
+    padding: Spacing.xl,
+    width: '100%',
+    maxHeight: '80%',
+    ...Shadows.xl,
+  },
+  printerToggleRow: {
+    flexDirection: 'row',
+    backgroundColor: Colors.neutral[100],
+    borderRadius: BorderRadius.md,
+    padding: 4,
+    marginBottom: Spacing.lg,
+  },
+  printerToggleButton: {
+    flex: 1,
+    paddingVertical: 8,
+    alignItems: 'center',
+    borderRadius: BorderRadius.sm,
+  },
+  printerToggleButtonActive: {
+    backgroundColor: '#FFF',
+    ...Shadows.sm,
+  },
+  printerToggleText: {
+    fontSize: Typography.sizes.sm,
+    fontWeight: '600',
+    color: Colors.text.secondary,
+  },
+  printerToggleTextActive: {
+    color: Colors.primary.main,
+  },
+  printerList: {
+    maxHeight: 300,
+  },
+  printerItem: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingVertical: Spacing.md,
+    borderBottomWidth: 1,
+    borderBottomColor: Colors.border.light,
+  },
+  printerName: {
+    fontSize: Typography.sizes.base,
+    fontWeight: '600',
+    color: Colors.text.primary,
+  },
+  printerAddress: {
+    fontSize: Typography.sizes.xs,
+    color: Colors.text.tertiary,
+  },
+  emptyPrinterText: {
+    textAlign: 'center',
+    color: Colors.text.tertiary,
+    marginVertical: Spacing.xl,
+  },
+  rescanButton: {
+    marginTop: Spacing.lg,
+    paddingVertical: Spacing.md,
+    alignItems: 'center',
+  },
+  rescanButtonText: {
+    color: Colors.primary.main,
+    fontWeight: '700',
+    fontSize: Typography.sizes.base,
+  },
+  pendingDot: { backgroundColor: Colors.warning.main },
+  syncedDot: { backgroundColor: Colors.success.main },
 });

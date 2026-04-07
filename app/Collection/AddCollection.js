@@ -347,8 +347,9 @@ export default function AddCollectionScreen() {
 
   const saveToLocalStorage = async (collectionData) => {
     try {
+      const username = await AsyncStorage.getItem('username');
       await dbService.init();
-      await dbService.saveOfflineCollection(collectionData);
+      await dbService.saveOfflineCollection(collectionData, username);
     } catch (error) {
       console.error("Error saving to database:", error);
       throw error;

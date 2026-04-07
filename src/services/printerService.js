@@ -1162,6 +1162,8 @@ class PrinterService {
                 receipt += ESC_SIZE_LARGE + " ".repeat(netTotalPad) + netTotalLabel + " " + netTotalVal + ESC_SIZE_NORMAL + "\n";
             } else {
                 // --- TOTAL only (no_tax or other) ---
+                const totalLabel = "TOTAL:";
+                const totalVal = totalAmount.toFixed(2);
                 const totalPad_F3 = Math.max(0, CONTENT_WIDTH_F3 - totalLabel.length - totalVal.length - 1);
                 receipt += ESC_SIZE_LARGE + " ".repeat(totalPad_F3) + totalLabel + " " + totalVal + ESC_SIZE_NORMAL + "\n";
             }

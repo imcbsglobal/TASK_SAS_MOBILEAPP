@@ -608,7 +608,6 @@ const Company = () => {
                   </Text>
 
                   <View style={[styles.sizeSelectionContainer, { flexDirection: 'column', alignItems: 'stretch' }]}>
-                    {printFormType === 'form1' && (
                     <TouchableOpacity
                       style={[styles.sizeOption, { marginBottom: 12, justifyContent: 'flex-start' }, printFormType === 'form1' && styles.sizeOptionSelected]}
                       onPress={() => handlePrintFormSelection('form1')}
@@ -619,9 +618,7 @@ const Company = () => {
                         <Text style={styles.sizeOptionSubtitle}>Standard with HSN / GST</Text>
                       </View>
                     </TouchableOpacity>
-                    )}
 
-                    {printFormType === 'form2' && (
                     <TouchableOpacity
                       style={[styles.sizeOption, { marginBottom: 12, justifyContent: 'flex-start' }, printFormType === 'form2' && styles.sizeOptionSelected]}
                       onPress={() => handlePrintFormSelection('form2')}
@@ -632,9 +629,7 @@ const Company = () => {
                         <Text style={styles.sizeOptionSubtitle}>No HSN / GST (Compact)</Text>
                       </View>
                     </TouchableOpacity>
-                    )}
 
-                    {printFormType === 'form3' && (
                     <TouchableOpacity
                       style={[styles.sizeOption, { marginBottom: 40, justifyContent: 'flex-start' }, printFormType === 'form3' && styles.sizeOptionSelected]}
                       onPress={() => handlePrintFormSelection('form3')}
@@ -645,7 +640,6 @@ const Company = () => {
                         <Text style={styles.sizeOptionSubtitle}>Dynamic Tax support</Text>
                       </View>
                     </TouchableOpacity>
-                    )}
                   </View>
                 </View>
               ) : isTaxSettingsOpen ? (

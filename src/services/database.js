@@ -2,7 +2,7 @@
 import * as SQLite from 'expo-sqlite';
 
 const DB_NAME = 'taskprime_v2.db';
-const DB_VERSION = 12; // Bumped to 12 for updated_at in offline tables
+const DB_VERSION = 13; // Bumped to 13 for user-specific data filtering
 const CURRENT_VERSION = DB_VERSION;
 class DatabaseService {
     constructor() {
@@ -182,21 +182,21 @@ class DatabaseService {
                     }
                 }
 
-                // Migration for v12 (Add updated_at to offline tables)
-                if (currentVersion < 12) {
+                // Migration for v13 (Add username to offline tables)
+                if (currentVersion < 13) {
                     try {
-                        console.log('[DB] Migrating to v12 - Adding updated_at to offline tables...');
+                        console.log('[DB] Migrating to v13 - Adding username to offline tables...');
                         try {
-                            await this.db.runAsync('ALTER TABLE offline_collections ADD COLUMN updated_at TEXT');
-                            console.log('[DB] Added updated_at to offline_collections');
+                            await this.db.runAsync('ALTER TABLE offline_collections ADD COLUMN username TEXT');
+                            console.log('[DB] Added username to offline_collections');
                         } catch (e) { /* ignore */ }
 
                         try {
-                            await this.db.runAsync('ALTER TABLE offline_orders ADD COLUMN updated_at TEXT');
-                            console.log('[DB] Added updated_at to offline_orders');
+                            await this.db.runAsync('ALTER TABLE offline_orders ADD COLUMN username TEXT');
+                            console.log('[DB] Added username to offline_orders');
                         } catch (e) { /* ignore */ }
                     } catch (e) {
-                        console.log('[DB] Migration v12 minor error:', e);
+                        console.log('[DB] Migration v13 minor error:', e);
                     }
                 }
 
@@ -249,11 +249,11 @@ class DatabaseService {
             );
 
             await this.db.runAsync(
-                'CREATE TABLE IF NOT EXISTS offline_collections (id INTEGER PRIMARY KEY AUTOINCREMENT, local_id TEXT UNIQUE, customer_code TEXT, customer_name TEXT, customer_place TEXT, customer_phone TEXT, amount REAL, payment_type TEXT, cheque_number TEXT, remarks TEXT, date TEXT, synced INTEGER DEFAULT 0, created_at TEXT, updated_at TEXT, synced_at TEXT)'
+                'CREATE TABLE IF NOT EXISTS offline_collections (id INTEGER PRIMARY KEY AUTOINCREMENT, local_id TEXT UNIQUE, customer_code TEXT, customer_name TEXT, customer_place TEXT, customer_phone TEXT, amount REAL, payment_type TEXT, cheque_number TEXT, remarks TEXT, date TEXT, synced INTEGER DEFAULT 0, username TEXT, created_at TEXT, updated_at TEXT, synced_at TEXT)'
             );
 
             await this.db.runAsync(
-                'CREATE TABLE IF NOT EXISTS offline_orders (id INTEGER PRIMARY KEY AUTOINCREMENT, local_id TEXT UNIQUE, customer_code TEXT, customer_name TEXT, area TEXT, payment_type TEXT, items TEXT, total_amount REAL, date TEXT, synced INTEGER DEFAULT 0, created_at TEXT, updated_at TEXT, synced_at TEXT)'
+                'CREATE TABLE IF NOT EXISTS offline_orders (id INTEGER PRIMARY KEY AUTOINCREMENT, local_id TEXT UNIQUE, customer_code TEXT, customer_name TEXT, area TEXT, payment_type TEXT, items TEXT, total_amount REAL, date TEXT, synced INTEGER DEFAULT 0, username TEXT, created_at TEXT, updated_at TEXT, synced_at TEXT)'
             );
 
             await this.db.runAsync(
@@ -1286,17 +1286,17 @@ class DatabaseService {
     }
 
     // ==================== OFFLINE COLLECTIONS ====================
-    async saveOfflineCollection(collection) {
+    async saveOfflineCollection(collection, username = null) {
         try {
             const localId = collection.local_id || 'col_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9);
             await this.db.runAsync(
-                'INSERT INTO offline_collections (local_id, customer_code, customer_name, customer_place, customer_phone, amount, payment_type, cheque_number, remarks, date, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+                'INSERT INTO offline_collections (local_id, customer_code, customer_name, customer_place, customer_phone, amount, payment_type, cheque_number, remarks, date, username, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
                 [localId, collection.customer_code || collection.code, collection.customer_name || collection.name,
                     collection.customer_place || collection.place || null, collection.customer_phone || collection.phone || null,
                     collection.amount, collection.payment_type || collection.type, collection.cheque_number || null,
-                    collection.remarks || null, collection.date || new Date().toISOString(), new Date().toISOString()]
+                    collection.remarks || null, collection.date || new Date().toISOString(), username, new Date().toISOString()]
             );
-            console.log('[DB] Offline collection saved:', localId);
+            console.log('[DB] Offline collection saved:', localId, 'for user:', username);
             return localId;
         } catch (error) {
             console.error('[DB] Error saving collection:', error);
@@ -1397,15 +1397,15 @@ class DatabaseService {
     }
 
     // ==================== OFFLINE ORDERS ====================
-    async saveOfflineOrder(order) {
+    async saveOfflineOrder(order, username = null) {
         try {
             const localId = order.local_id || 'ord_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9);
             await this.db.runAsync(
-                'INSERT INTO offline_orders (local_id, customer_code, customer_name, area, payment_type, items, total_amount, date, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)',
+                'INSERT INTO offline_orders (local_id, customer_code, customer_name, area, payment_type, items, total_amount, date, username, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
                 [localId, order.customer_code, order.customer_name, order.area || '', order.payment_type,
-                    JSON.stringify(order.items), order.total_amount, order.date || new Date().toISOString(), new Date().toISOString()]
+                    JSON.stringify(order.items), order.total_amount, order.date || new Date().toISOString(), username, new Date().toISOString()]
             );
-            console.log('[DB] Offline order saved:', localId);
+            console.log('[DB] Offline order saved:', localId, 'for user:', username);
             return localId;
         } catch (error) {
             console.error('[DB] Error saving order:', error);
