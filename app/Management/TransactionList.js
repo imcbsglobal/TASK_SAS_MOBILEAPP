@@ -215,84 +215,162 @@ export default function TransactionListScreen() {
             
             const toSync = items.filter(item => selectedIds.has(item.id));
             let successCount = 0;
+            let failedCount = 0;
             
             for (const item of toSync) {
-              const success = await syncSingleItem(item);
-              if (success) successCount++;
+              const success = await syncSingleItem(item, false); // Don't show alert during bulk sync
+              if (success) {
+                successCount++;
+              } else {
+                failedCount++;
+              }
               setSyncProgress(prev => ({ ...prev, current: prev.current + 1 }));
             }
             
             setIsBulkSyncing(false);
             setSelectedIds(new Set());
-            Alert.alert("Sync Complete", `${successCount} items synced successfully.`);
             fetchData();
+            
+            if (failedCount === 0) {
+              Alert.alert("Sync Complete", `Successfully synced ${successCount} transactions.`);
+            } else {
+              Alert.alert("Sync Results", `${successCount} items synced, ${failedCount} failed to sync.`);
+            }
           }
         }
       ]
     );
   };
 
-  const syncSingleItem = async (item) => {
+  const syncSingleItem = async (item, showError = true) => {
     try {
       const token = await AsyncStorage.getItem("authToken");
       const deviceId = await AsyncStorage.getItem("deviceId");
       const username = await AsyncStorage.getItem("username");
+      const clientId = await AsyncStorage.getItem("client_id");
 
       let url = "";
       let payload = {};
 
-      if (item.type === 'Collection') {
+      const cleanString = (str) => String(str || "").trim();
+      const cleanNumber = (num) => {
+        const n = parseFloat(num);
+        return isNaN(n) ? 0 : n;
+      };
+
+      if (item.type === "Collection") {
         url = "https://tasksas.com/api/collection/create/";
-        payload = {
-          name: item.customer,
-          code: item.customerCode || item.code,
-          place: item.customer_place || item.place || "",
-          amount: item.amount || item.total,
-          type: item.payment_type || "Cash",
-          date: item.date || item.timestamp,
-          device_id: deviceId || "unknown"
+        // Use raw field names from SQL result (...item in fetchData)
+        const uploadData = {
+          code: cleanString(item.customer_code || ""),
+          name: cleanString(item.customer_name || ""),
+          place: cleanString(item.customer_place || ""),
+          phone: cleanString(item.customer_phone || ""),
+          amount: cleanNumber(item.amount),
+          type: cleanString(item.payment_type || "Cash"),
         };
+
+        if (item.payment_type === "Cheque" || item.cheque_number) {
+          uploadData.cheque_no = cleanString(item.cheque_number || "");
+          uploadData.ref_no = cleanString(item.ref_no || uploadData.cheque_no);
+        } else if (item.ref_no) {
+          uploadData.ref_no = cleanString(item.ref_no);
+        }
+
+        if (item.remarks) {
+          uploadData.remark = cleanString(item.remarks);
+        }
+        payload = uploadData;
       } else {
-        const categoryPath = item.type === 'Order' ? 'item-orders' : item.type === 'Sales' ? 'sales' : 'sales-return';
+        const categoryPath =
+          item.type === "Order"
+            ? "item-orders"
+            : item.type === "Sales"
+            ? "sales"
+            : "sales-return";
         url = `https://tasksas.com/api/${categoryPath}/create`;
+
+        const validItems = (item.items || []).map((it) => ({
+          product_name: cleanString(it.name || it.product_name),
+          item_code: cleanString(it.code || it.item_code),
+          barcode: cleanString(it.barcode || it.code || it.item_code),
+          price: cleanNumber(it.price),
+          quantity: cleanNumber(it.qty || it.quantity).toFixed(3),
+          amount: cleanNumber(it.total || it.amount),
+          hsn: cleanString(it.hsn),
+          gst: cleanString(it.gst)
+        }));
+
         payload = {
           device_id: deviceId || "unknown",
-          customer_name: item.customer,
-          customer_code: item.customerCode,
-          username: username,
-          items: (item.items || []).map(it => ({
-            product_name: it.name,
-            item_code: it.code,
-            price: it.price,
-            quantity: it.qty,
-            amount: it.total
-          }))
+          customer_name: cleanString(item.customer),
+          customer_code: cleanString(item.customerCode),
+          username: cleanString(username),
+          area: cleanString(item.area),
+          payment_type: cleanString(item.payment || item.payment_type),
+          remark: cleanString(item.remark || item.remarks),
+          items: validItems
         };
+
+        if (item.type === "Order") {
+          payload.client_id = cleanString(clientId);
+        }
       }
 
+      console.log(`[Sync] Uploading ${item.type}:`, JSON.stringify(payload, null, 2));
+
       const resp = await fetch(url, {
-        method: 'POST',
-        headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' },
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${token}`,
+          "Content-Type": "application/json",
+          "Accept": "application/json"
+        },
         body: JSON.stringify(payload)
       });
 
       const result = await resp.json();
-      if (resp.ok && result.success) {
-        if (item.type === 'Collection') {
-          await dbService.updateCollectionSyncStatus(item.local_id || item.id, 1);
+      console.log(`[Sync] Response for ${item.type}:`, result);
+
+      if (resp.ok) {
+        if (item.type === "Collection") {
+          await dbService.init();
+          // Exactly as in Upload.js
+          const localId = item.local_id;
+          if (localId) {
+            await dbService.markCollectionAsSynced(localId);
+          } else {
+            // Fallback for objects that might not have local_id explicitly at top level
+            await dbService.updateCollectionSyncStatus(item.id, 1);
+          }
         } else {
-          const storageKey = item.type === 'Order' ? `placed_orders_${username}` : item.type === 'Sales' ? `placed_sales_${username}` : `return_orders_${username}`;
-          const stored = await AsyncStorage.getItem(storageKey);
-          if (stored) {
-            const filtered = JSON.parse(stored).filter(it => it.id !== item.id);
-            await AsyncStorage.setItem(storageKey, JSON.stringify(filtered));
+          // Robust result.success check for Orders/Sales
+          if (result && result.success) {
+            const storageKey =
+              item.type === "Order"
+                ? `placed_orders_${username}`
+                : item.type === "Sales"
+                ? `placed_sales_${username}`
+                : `return_orders_${username}`;
+            const stored = await AsyncStorage.getItem(storageKey);
+            if (stored) {
+              const filtered = JSON.parse(stored).filter((it) => it.id !== item.id);
+              await AsyncStorage.setItem(storageKey, JSON.stringify(filtered));
+            }
+          } else {
+            const errorMsg = result?.message || result?.detail || result?.error || "Sync failed";
+            if (showError) Alert.alert(`${item.type} Sync Failed`, errorMsg);
+            return false;
           }
         }
         return true;
       }
+      const errorMsg = result?.message || result?.detail || result?.error || `Upload failed: ${resp.status}`;
+      if (showError) Alert.alert(`${item.type} Sync Failed`, errorMsg);
       return false;
     } catch (e) {
       console.error("Sync error:", e);
+      if (showError) Alert.alert("Sync error", e.message || "An unexpected error occurred during synchronization.");
       return false;
     }
   };
