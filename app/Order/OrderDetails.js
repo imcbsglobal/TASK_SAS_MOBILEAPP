@@ -541,8 +541,8 @@ export default function OrderDetails() {
         }
 
         // Override with Customer Price Code if enabled and available
-        if (appSettings.read_price_category && currentCustomer?.remarkcolumntitle) {
-          const code = currentCustomer.remarkcolumntitle;
+        if (appSettings.read_price_category && currentCustomerObj?.remarkcolumntitle) {
+          const code = currentCustomerObj.remarkcolumntitle.trim();
 
           // Verify if it's a valid code:
           // 1. Check against price_codes list in settings (if available)
@@ -595,7 +595,20 @@ export default function OrderDetails() {
       const fieldName = PRICE_FIELD_MAP[effectivePriceCode] || 'retail';
       let dynamicPrice = p[fieldName];
 
-      // Fallback if price is missing or 0
+      // PRIORITIZE: Check the dynamic prices array if it exists (highly accurate)
+      if (p.prices && Array.isArray(p.prices) && p.prices.length > 0) {
+        const searchCode = (effectivePriceCode || '').trim().toUpperCase();
+        const found = p.prices.find(pr => {
+          const pc = (pr.price_code || pr.code || '').trim().toUpperCase();
+          return pc === searchCode;
+        });
+        if (found) {
+          const val = parseFloat(found.value || found.price || 0);
+          if (val > 0) dynamicPrice = val;
+        }
+      }
+
+      // Fallback if price is still missing or 0
       if (!dynamicPrice && fieldName !== 'retail') {
         dynamicPrice = p.retail || p.price;
       }
@@ -1974,6 +1987,7 @@ export default function OrderDetails() {
                         addToCart(product, qty, null, false);
                       }
                     }}
+                    cartPrice={cartItem?.product.price}
                     openImageModal={openImageModal}
                     openDetailsModal={openDetailsModal}
                   />
@@ -2687,7 +2701,7 @@ export default function OrderDetails() {
 }
 
 // Separated Component for better performance
-const CodeItemBase = ({ item, inStock, stockQty, currentQty, displayValue, isInCart, isHighlighted, setEditingQty, changeQty, removeItem, addToCart, openImageModal, openDetailsModal, defaultQuantity, editingQty }) => (
+const CodeItemBase = ({ item, inStock, stockQty, currentQty, displayValue, isInCart, isHighlighted, setEditingQty, changeQty, removeItem, addToCart, openImageModal, openDetailsModal, defaultQuantity, editingQty, cartPrice }) => (
   <View style={[
     styles.productCard,
     isInCart && styles.productCardInCart,
@@ -2720,7 +2734,16 @@ const CodeItemBase = ({ item, inStock, stockQty, currentQty, displayValue, isInC
             <Text style={styles.mrpLabel}>MRP: {item.mrp.toFixed(2)}</Text>
           )}
           {!item.restrictedCodes?.includes(item.priceCodeUsed || 'S2') && (
-            <Text style={styles.price}>Price: {item.price ? item.price.toFixed(2) : '0.00'}</Text>
+            <View>
+              <Text style={[styles.price, isInCart && cartPrice !== undefined && cartPrice !== item.price && { textDecorationLine: 'line-through', fontSize: 12, opacity: 0.6 }]}>
+                Price: {item.price ? item.price.toFixed(2) : '0.00'}
+              </Text>
+              {isInCart && cartPrice !== undefined && cartPrice !== item.price && (
+                <Text style={[styles.price, { color: Colors.success.main, marginTop: -2 }]}>
+                  Rate: {cartPrice.toFixed(2)}
+                </Text>
+              )}
+            </View>
           )}
         </View>
       </View>
@@ -2909,7 +2932,8 @@ const CodeItem = React.memo(CodeItemBase, (prevProps, nextProps) => {
     prevProps.isInCart === nextProps.isInCart &&
     prevProps.isHighlighted === nextProps.isHighlighted &&
     prevProps.inStock === nextProps.inStock &&
-    prevProps.stockQty === nextProps.stockQty
+    prevProps.stockQty === nextProps.stockQty &&
+    prevProps.cartPrice === nextProps.cartPrice
   );
 });
 
