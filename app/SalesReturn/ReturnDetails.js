@@ -1993,6 +1993,7 @@ export default function ReturnDetails() {
                 const displayValue = editingQty[item.id] !== undefined ? editingQty[item.id] : String(currentQty);
                 const inStock = true; // Always true for return pages for now
                 const stockQty = item.stock || 0;
+                const gStock = item.goddowns ? item.goddowns.reduce((sum, g) => sum + (parseFloat(g.quantity) || 0), 0) : 0;
                 const isInCart = currentQty > 0;
                 const isHighlighted = highlightedProductId === item.id;
 
@@ -2007,6 +2008,7 @@ export default function ReturnDetails() {
                     item={item}
                     inStock={inStock}
                     stockQty={stockQty}
+                    gStock={gStock}
                     currentQty={currentQty}
                     displayValue={displayValue}
                     isInCart={isInCart}
@@ -2842,7 +2844,7 @@ export default function ReturnDetails() {
 }
 
 // Separated Component for better performance
-const CodeItemBase = ({ item, inStock, stockQty, currentQty, displayValue, isInCart, isHighlighted, setEditingQty, changeQty, removeItem, addToCart, openImageModal, openDetailsModal, defaultQuantity, editingQty, editingRemarks, setEditingRemarks, openRemarkModal, cartPrice }) => (
+const CodeItemBase = ({ item, inStock, stockQty, gStock, currentQty, displayValue, isInCart, isHighlighted, setEditingQty, changeQty, removeItem, addToCart, openImageModal, openDetailsModal, defaultQuantity, editingQty, editingRemarks, setEditingRemarks, openRemarkModal, cartPrice }) => (
   <View style={[
     styles.productCard,
     isInCart && styles.productCardInCart,
@@ -2896,10 +2898,18 @@ const CodeItemBase = ({ item, inStock, stockQty, currentQty, displayValue, isInC
       <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
         {/* Stock Display */}
         <View style={styles.stockDisplayContainer}>
-          <Text style={styles.stockLabel}>Stock:</Text>
-          <Text style={[styles.stockCount, stockQty === 0 && styles.outOfStockText]}>
-            {stockQty}
-          </Text>
+          <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+            <Text style={styles.stockLabel}>Stock:</Text>
+            <Text style={[styles.stockCount, stockQty === 0 && styles.outOfStockText]}>
+              {stockQty}
+            </Text>
+          </View>
+          <View style={{ flexDirection: 'row', alignItems: 'center', marginLeft: 12 }}>
+            <Text style={styles.stockLabel}>G.Stock:</Text>
+            <Text style={[styles.stockCount, gStock === 0 && styles.outOfStockText]}>
+              {gStock}
+            </Text>
+          </View>
         </View>
 
         {/* Details Link - Now inline with stock */}
@@ -3102,6 +3112,7 @@ const CodeItem = React.memo(CodeItemBase, (prevProps, nextProps) => {
     prevProps.isHighlighted === nextProps.isHighlighted &&
     prevProps.inStock === nextProps.inStock &&
     prevProps.stockQty === nextProps.stockQty &&
+    prevProps.gStock === nextProps.gStock &&
     prevProps.cartPrice === nextProps.cartPrice &&
     prevProps.editingRemarks?.[prevProps.item.id] === nextProps.editingRemarks?.[nextProps.item.id]
   );
@@ -3370,6 +3381,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
+    gap: 4,
     marginBottom: 2,
   },
   stockLabel: {
