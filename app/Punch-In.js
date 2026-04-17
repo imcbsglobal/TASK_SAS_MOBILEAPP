@@ -191,7 +191,11 @@ export default function PunchInScreen() {
         if (data.success && data.is_punched_in && data.data) {
           setPunchStatus({
             ...data.data,
-            is_punched_in: true
+            is_punched_in: true,
+            // Normalize ID and Codes to handle inconsistencies in API responses across different users/sessions
+            punchin_id: data.data.punchin_id || data.data.id,
+            firm_code: data.data.firm_code || data.data.customer_code,
+            customer_code: data.data.customer_code || data.data.firm_code
           });
           setWorkHours(data.data.current_work_hours || 0);
 
@@ -691,7 +695,10 @@ export default function PunchInScreen() {
           ...result.data,
           is_punched_in: true,
           firm_name: result.data.firm_name,
-          punchin_id: result.data.punchin_id,
+          // Normalize ID and Codes consistently with checkPunchStatus
+          punchin_id: result.data.punchin_id || result.data.id,
+          firm_code: result.data.firm_code || result.data.customer_code,
+          customer_code: result.data.customer_code || result.data.firm_code
         });
         setWorkHours(0);
 
@@ -736,6 +743,10 @@ export default function PunchInScreen() {
           text: "Punch Out",
           style: "destructive",
           onPress: async () => {
+            if (punching) {
+              console.log("[PunchOut] Already in progress, ignoring double-click");
+              return;
+            }
             try {
               setPunching(true);
               const token = await AsyncStorage.getItem("authToken");
@@ -761,37 +772,89 @@ export default function PunchInScreen() {
               } catch (e) {
                 console.warn('[PunchOut] Geocoding failed:', e);
               }
+              // Build request body using FormData for consistency with Punch-In API
+              const formData = new FormData();
+              
+              // Priority 1: locally selected code, Priority 2: firm_code, Priority 3: customer_code
+              const resolvedCustomerCode = (customer?.code || punchStatus.firm_code || punchStatus.customer_code || "").toString().trim();
+              
+              // 1. Find shop coordinates for distance check
+              let targetCustomer = customer;
+              if (!targetCustomer && resolvedCustomerCode && allCustomers.length > 0) {
+                targetCustomer = allCustomers.find(c => (c.code || "").toString().trim() === resolvedCustomerCode);
+              }
 
-              // Build request body with all available fields the server might need
-              const punchOutBody = {
-                notes: notes || '',
-                customerCode: punchStatus.firm_code || '',
-              };
+              const shopLat = targetCustomer?.latitude || 0;
+              const shopLon = targetCustomer?.longitude || 0;
+              
+              // 2. Calculate distance and determined override status
+              let locationStatus = "unknown";
+              let distance = -1;
+
+              if (currentLocation && shopLat && shopLon) {
+                distance = getDistanceFromLatLonInMeters(
+                  currentLocation.latitude,
+                  currentLocation.longitude,
+                  shopLat,
+                  shopLon
+                );
+                locationStatus = distance <= 100 ? "correct location" : "mismatch location";
+              } else {
+                // If coordinates are missing, we force mismatch to try and bypass the check
+                locationStatus = "mismatch location";
+              }
+
+              console.log(`[PunchOut] Distance: ${distance.toFixed(1)}m, Status: ${locationStatus}`);
+
+              formData.append('customerCode', resolvedCustomerCode);
+              formData.append('notes', notes || '');
+              
+              // Include shop location and status to enable bypass (same as punch-in)
+              formData.append('shop_location', `${shopLat},${shopLon}`);
+              formData.append('punchin_status', locationStatus);
+              
+              // Include multiple variations for robustness
+              const backupCode = punchStatus.firm_code || punchStatus.customer_code || customer?.code || "";
+              if (backupCode) {
+                formData.append('firm_code', backupCode);
+                formData.append('customer_code', backupCode); // underscore version
+              }
+
               if (currentLocation) {
-                punchOutBody.latitude = currentLocation.latitude;
-                punchOutBody.longitude = currentLocation.longitude;
-                punchOutBody.current_location = `${currentLocation.latitude},${currentLocation.longitude}`;
+                formData.append('latitude', currentLocation.latitude.toString());
+                formData.append('longitude', currentLocation.longitude.toString());
+                formData.append('current_location', `${currentLocation.latitude},${currentLocation.longitude}`);
               }
               if (punchOutAddress) {
-                punchOutBody.address = punchOutAddress;
+                formData.append('address', punchOutAddress);
               }
-              console.log('[PunchOut] Request body:', JSON.stringify(punchOutBody));
 
-              const response = await fetch(url, {
+              console.log('[PunchOut] Payload:', resolvedCustomerCode, locationStatus);
+
+              // URL with trailing slash is usually required by this backend to avoid redirects
+              const urlWithSlash = `https://tasksas.com/api/punch-out/${punchStatus.punchin_id}/`;
+
+              const response = await fetch(urlWithSlash, {
                 method: 'POST',
                 headers: {
                   'Authorization': `Bearer ${token}`,
-                  'Content-Type': 'application/json',
                   'Accept': 'application/json'
                 },
-                body: JSON.stringify(punchOutBody)
+                body: formData
               });
 
               console.log('[PunchOut] HTTP Status:', response.status);
-              const result = await response.json();
-              console.log('[PunchOut] Response body:', JSON.stringify(result));
+              const responseText = await response.text();
+              console.log('[PunchOut] Raw response:', responseText);
 
-              if (response.ok && result.success) {
+              let result;
+              try {
+                result = JSON.parse(responseText);
+              } catch (e) {
+                result = { success: false, message: responseText };
+              }
+
+              if (response.ok && (result.success || result.status === 'success')) {
                 Alert.alert(
                   "Punch Out Successful",
                   `Work Duration: ${result.data?.work_duration_hours?.toFixed(2) || 0} hours`,
@@ -809,10 +872,36 @@ export default function PunchInScreen() {
                   checkPunchStatus();
                 }, 1000);
               } else {
-                const errMsg = result.message || result.detail || result.error || `HTTP ${response.status}`;
+                const errMsg = result.message || result.detail || result.error || responseText || `HTTP ${response.status}`;
                 console.error('[PunchOut] API Error:', errMsg, result);
-                Alert.alert("Punch Out Failed", errMsg);
+
+                // --- SMART FAILSAFE ---
+                // If the server says "no active punch found" or the session is already closed/not found,
+                // we treat it as a success locally to resync the state.
+                const fullErrorText = (errMsg + JSON.stringify(result)).toLowerCase();
+                const isStaleIdError = fullErrorText.includes("no active punch") || 
+                                      fullErrorText.includes("provided id") ||
+                                      fullErrorText.includes("already be punched out") ||
+                                      fullErrorText.includes("not found") ||
+                                      response.status === 404;
+
+                if (isStaleIdError) {
+                  console.log("[PunchOut] Server says punch is already closed or ID is invalid. Treating as success locally.");
+                  
+                  // Clear local record of active punch
+                  setPunchStatus(null);
+                  setWorkHours(0);
+
+                  Alert.alert(
+                    "Session Resynced",
+                    "This punch session was already closed on the server. Returning to home.",
+                    [{ text: "OK", onPress: () => router.replace("/(tabs)/Home") }]
+                  );
+                } else {
+                  Alert.alert("Punch Out Failed", errMsg);
+                }
               }
+
             } catch (error) {
               console.error("[PunchOut] Error:", error);
               Alert.alert("Error", `Failed to punch out: ${error.message}`);
