@@ -16,14 +16,14 @@ module.exports = {
     ios: {
       supportsTablet: true,
       backgroundColor: "#ffffff",
-      bundleIdentifier: "com.hafis2001.TaskSAS",
+      bundleIdentifier: "imcbs.TaskSAS",
       infoPlist: {
         UIViewControllerBasedStatusBarAppearance: true,
         UIStatusBarStyle: "UIStatusBarStyleLightContent"
       }
     },
     android: {
-      package: "com.hafis2001.TaskSAS",
+      package: "com.imcbs.TaskSAS",
       adaptiveIcon: {
         foregroundImage: "./assets/images/adaptive-icon.png",
         backgroundColor: "#ffffff"
