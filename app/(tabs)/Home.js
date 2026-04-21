@@ -7,6 +7,7 @@ import { useRouter } from 'expo-router';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { Alert } from 'react-native';
 import {
+  ActivityIndicator,
   Animated,
   Dimensions,
   KeyboardAvoidingView,
@@ -24,6 +25,7 @@ import {
 import { BorderRadius, Colors, Gradients, Spacing, Typography } from '../../constants/theme';
 import OfflineIndicator from '../../src/components/OfflineIndicator';
 import printerService from '../../src/services/printerService';
+import dbService from '../../src/services/database';
 
 const { width } = Dimensions.get('window');
 
@@ -40,6 +42,10 @@ const Home = ({ navigation }) => {
 
   // Remote Punch-In Restriction
   const [isRemotePunchRestricted, setIsRemotePunchRestricted] = useState(false);
+
+  // Godown Stock State
+  const [godownStock, setGodownStock] = useState([]);
+  const [loadingStock, setLoadingStock] = useState(true);
 
 
   useEffect(() => {
@@ -148,6 +154,25 @@ const Home = ({ navigation }) => {
       };
 
       fetchModules();
+    }, [])
+  );
+
+  useFocusEffect(
+    useCallback(() => {
+      const fetchGodownStock = async () => {
+        try {
+          setLoadingStock(true);
+          const data = await dbService.getGodownStock();
+          // Sort or filter if needed, here we just take the first 5 for the preview
+          setGodownStock(data);
+        } catch (error) {
+          console.error('Error fetching godown stock:', error);
+        } finally {
+          setLoadingStock(false);
+        }
+      };
+
+      fetchGodownStock();
     }, [])
   );
 
@@ -330,9 +355,30 @@ const Home = ({ navigation }) => {
                       <Text style={styles.actionTitle}>
                         {action.title}
                       </Text>
-                      <Text style={styles.actionDescription} numberOfLines={2}>
-                        {action.description}
-                      </Text>
+                      
+                      {/* Special Inline G STOCK info for SALES card */}
+                      {action.title === 'SALES' && (
+                        <View style={styles.inlineGStock}>
+                          <View style={styles.inlineGStockDivider} />
+                          <View style={styles.inlineGStockList}>
+                            {godownStock.length > 0 ? (
+                              godownStock.slice(0, 2).map((st, idx) => (
+                                <Text key={idx} style={styles.inlineGStockItem} numberOfLines={1}>
+                                  • {st.product_name}: {st.quantity}
+                                </Text>
+                              ))
+                            ) : (
+                              <Text style={styles.inlineGStockEmpty}>No stock data</Text>
+                            )}
+                          </View>
+                        </View>
+                      )}
+
+                      {!action.highlight && action.title !== 'SALES' && (
+                        <Text style={styles.actionDescription} numberOfLines={2}>
+                          {action.description}
+                        </Text>
+                      )}
                     </View>
                     <Ionicons
                       name="arrow-forward-circle"
@@ -474,6 +520,41 @@ const styles = StyleSheet.create({
   footerText: {
     color: Colors.text.tertiary,
     fontSize: Typography.sizes.xs,
+  },
+
+  // Inline G STOCK styles inside SALES card
+  inlineGStock: {
+    marginTop: 8,
+  },
+  inlineGStockDivider: {
+    height: 1,
+    backgroundColor: 'rgba(255,255,255,0.2)',
+    marginBottom: 6,
+  },
+  inlineGStockHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 4,
+    gap: 4,
+  },
+  inlineGStockTitle: {
+    fontSize: 10,
+    fontWeight: '700',
+    color: '#FFFFFF',
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
+  },
+  inlineGStockList: {
+    gap: 2,
+  },
+  inlineGStockItem: {
+    fontSize: 9,
+    color: 'rgba(255,255,255,0.85)',
+  },
+  inlineGStockEmpty: {
+    fontSize: 9,
+    color: 'rgba(255,255,255,0.6)',
+    fontStyle: 'italic',
   },
 });
 

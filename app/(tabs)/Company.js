@@ -36,6 +36,7 @@ const Company = () => {
   const [defaultQuantity, setDefaultQuantity] = useState(1); // Default to 1
   const [printFormType, setPrintFormType] = useState('form1'); // 'form1' | 'form2' | 'form3'
   const [taxCodeSetting, setTaxCodeSetting] = useState('no_tax'); // 'no_tax' | 'plus_tax' | 'reverse_tax'
+  const [orderToReturn, setOrderToReturn] = useState(false);
   const [termsAndConditions, setTermsAndConditions] = useState(''); // T&C text for print footer
   const [termsInput, setTermsInput] = useState(''); // Editing buffer for T&C
   const [tcModalVisible, setTcModalVisible] = useState(false); // Modal for editing T&C
@@ -103,14 +104,16 @@ const Company = () => {
       if (val === 'true') setShowStockOnly(true);
       else setShowStockOnly(false);
 
-      // Load Default Quantity
       const qtyKey = `settings_default_quantity_${currentUsername}`;
       const qtyVal = await AsyncStorage.getItem(qtyKey);
       if (qtyVal !== null) {
         setDefaultQuantity(parseInt(qtyVal, 10));
       } else {
-        setDefaultQuantity(1); // Default if not set
+        setDefaultQuantity(1);
       }
+
+      const otrVal = await AsyncStorage.getItem('settings_order_to_return');
+      setOrderToReturn(otrVal === 'true');
     } catch (e) {
       console.log("Error loading product settings", e);
     }
@@ -141,6 +144,16 @@ const Company = () => {
       }
     } catch (e) {
       console.log("Error saving default quantity settings", e);
+    }
+  };
+
+  const toggleOrderToReturn = async () => {
+    const newValue = !orderToReturn;
+    setOrderToReturn(newValue);
+    try {
+      await AsyncStorage.setItem('settings_order_to_return', String(newValue));
+    } catch (e) {
+      console.log("Error saving order to return setting", e);
     }
   };
 
@@ -561,6 +574,31 @@ const Company = () => {
                       name={defaultQuantity === 1 ? "toggle" : "toggle-outline"}
                       size={32}
                       color={defaultQuantity === 1 ? Colors.success.main : Colors.text.tertiary}
+                    />
+                  </TouchableOpacity>
+
+                  <View style={{ height: 1, backgroundColor: '#f0f0f0', marginVertical: 8 }} />
+
+                  <TouchableOpacity
+                    style={[styles.menuItem, { borderBottomWidth: 0 }]}
+                    onPress={toggleOrderToReturn}
+                    activeOpacity={0.8}
+                  >
+                    <View style={styles.menuItemLeft}>
+                      <View style={[styles.menuIconContainer, { backgroundColor: orderToReturn ? 'rgba(76, 175, 80, 0.1)' : 'rgba(158, 158, 158, 0.1)' }]}>
+                        <Ionicons name={orderToReturn ? "return-up-back" : "return-up-back-outline"} size={24} color={orderToReturn ? Colors.success.main : Colors.text.tertiary} />
+                      </View>
+                      <View style={{ flex: 1 }}>
+                        <Text style={styles.menuItemTitle}>Order to Return</Text>
+                        <Text style={styles.menuItemSubtitle} numberOfLines={2}>
+                          {orderToReturn ? "Ask to go to return after placing order" : "No prompt after placing order"}
+                        </Text>
+                      </View>
+                    </View>
+                    <Ionicons
+                      name={orderToReturn ? "toggle" : "toggle-outline"}
+                      size={32}
+                      color={orderToReturn ? Colors.success.main : Colors.text.tertiary}
                     />
                   </TouchableOpacity>
                 </View>

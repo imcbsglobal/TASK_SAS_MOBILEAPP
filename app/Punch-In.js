@@ -38,20 +38,24 @@ if (Platform.OS === 'android') {
   }
 }
 
-const { width } = Dimensions.get('window');
+const { width, height } = Dimensions.get('window');
+const isSmallDevice = width < 360;
+const scale = (size) => Math.round(size * (width / 390));
 
 // Haversine formula to calculate distance in meters
 const getDistanceFromLatLonInMeters = (lat1, lon1, lat2, lon2) => {
   const R = 6371e3;
-  const dLat = deg2rad(lat2 - lat1);
-  const dLon = deg2rad(lon2 - lon1);
+  // Parse all to float to handle string coordinates from API
+  const φ1 = deg2rad(parseFloat(lat1));
+  const φ2 = deg2rad(parseFloat(lat2));
+  const dLat = deg2rad(parseFloat(lat2) - parseFloat(lat1));
+  const dLon = deg2rad(parseFloat(lon2) - parseFloat(lon1));
   const a =
     Math.sin(dLat / 2) * Math.sin(dLat / 2) +
-    Math.cos(deg2rad(lat1)) * Math.cos(deg2rad(lat2)) *
+    Math.cos(φ1) * Math.cos(φ2) *
     Math.sin(dLon / 2) * Math.sin(dLon / 2);
   const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
-  const d = R * c;
-  return d;
+  return R * c;
 };
 
 const deg2rad = (deg) => {
@@ -350,17 +354,21 @@ export default function PunchInScreen() {
         const customerCode = String(debtor.code || debtor.id?.toString() || '').trim();
         const locationData = firmLocationMap.get(customerCode);
 
+        const rawLat = locationData?.latitude ?? debtor.latitude;
+        const rawLon = locationData?.longitude ?? debtor.longitude;
+        const parsedLat = parseFloat(rawLat);
+        const parsedLon = parseFloat(rawLon);
+
         return {
-          ...debtor, // Spread all properties
+          ...debtor,
           code: debtor.code || debtor.id?.toString(),
           name: debtor.name || "Unknown Debtor",
           place: debtor.place || debtor.area || '',
-          area: debtor.area || '', // Ensure area is explicitly mapped
+          area: debtor.area || '',
           balance: debtor.balance || 0,
           client_id: debtor.client_id,
-          // Merge coordinates from shop location API
-          latitude: locationData?.latitude || debtor.latitude,
-          longitude: locationData?.longitude || debtor.longitude,
+          latitude: isNaN(parsedLat) ? null : parsedLat,
+          longitude: isNaN(parsedLon) ? null : parsedLon,
         };
       });
 
@@ -472,27 +480,17 @@ export default function PunchInScreen() {
     const customer = getSelectedCustomerDetails();
     if (!customer) return;
 
-    if (!currentLocation) {
-      Alert.alert("Location Missing", "Please wait for current location to update.");
-      getCurrentLocation();
-      return;
-    }
-
     if (punchStatus?.is_punched_in) {
       Alert.alert("Already Punched In", `You are currently punched in at ${punchStatus.firm_name}. Please punch out first.`);
       return;
     }
 
-    // Check if customer has valid coordinates
     if (!customer.latitude || !customer.longitude) {
       Alert.alert(
         "Location Data Missing",
         "This customer does not have location coordinates. Cannot verify location.",
         [
-          {
-            text: "Cancel",
-            style: "cancel"
-          },
+          { text: "Cancel", style: "cancel" },
           {
             text: "Continue Anyway",
             onPress: () => {
@@ -505,17 +503,49 @@ export default function PunchInScreen() {
       return;
     }
 
+    // Always fetch a FRESH location at punch time — stale cached location is the main cause of wrong distance
+    setPunching(true);
+    let freshLocation = null;
+    try {
+      const loc = await Location.getCurrentPositionAsync({
+        accuracy: Location.Accuracy.High,
+        timeout: 10000
+      });
+      freshLocation = loc.coords;
+      setCurrentLocation(loc.coords);
+    } catch {
+      try {
+        const loc = await Location.getCurrentPositionAsync({
+          accuracy: Location.Accuracy.Balanced,
+          timeout: 8000
+        });
+        freshLocation = loc.coords;
+        setCurrentLocation(loc.coords);
+      } catch {
+        freshLocation = currentLocation;
+      }
+    } finally {
+      setPunching(false);
+    }
+
+    if (!freshLocation) {
+      Alert.alert("Location Missing", "Could not get your current location. Please enable GPS and try again.");
+      return;
+    }
+
     const distance = getDistanceFromLatLonInMeters(
-      currentLocation.latitude,
-      currentLocation.longitude,
+      freshLocation.latitude,
+      freshLocation.longitude,
       customer.latitude,
       customer.longitude
     );
 
-    console.log(`Distance to ${customer.name}: ${distance.toFixed(1)}m`);
+    const gpsAccuracy = freshLocation.accuracy || 0;
+    const effectiveThreshold = 100 + gpsAccuracy;
 
-    if (distance <= 100) {
-      // User is within correct location
+    console.log(`Distance to ${customer.name}: ${distance.toFixed(1)}m, GPS accuracy: ±${gpsAccuracy.toFixed(1)}m, threshold: ${effectiveThreshold.toFixed(1)}m`);
+
+    if (distance <= effectiveThreshold) {
       Alert.alert(
         "Success",
         "You are in correct location",
@@ -530,15 +560,11 @@ export default function PunchInScreen() {
         ]
       );
     } else {
-      // User location is mismatched
       Alert.alert(
         "Location Mismatch",
-        "Your location is mismatched with the shop location. Do you want to continue?",
+        `You are ${distance.toFixed(0)}m away from the shop. Do you want to continue?`,
         [
-          {
-            text: "No",
-            style: "cancel"
-          },
+          { text: "No", style: "cancel" },
           {
             text: "Yes",
             onPress: () => {
@@ -552,58 +578,35 @@ export default function PunchInScreen() {
   };
 
   const takeSelfie = async () => {
-    console.log('[PunchIn] ===== takeSelfie CALLED =====');
     try {
-      console.log('[PunchIn] Requesting camera permissions...');
-      const { status } = await ImagePicker.requestCameraPermissionsAsync();
-      console.log('[PunchIn] Camera permission status:', status);
+      // Close modal first if open (retake scenario) to avoid modal+camera conflict
+      setShowConfirmModal(false);
+      setSelfieUri(null);
 
+      // Small delay to let modal fully dismiss before launching camera
+      await new Promise(resolve => setTimeout(resolve, 150));
+
+      const { status } = await ImagePicker.requestCameraPermissionsAsync();
       if (status !== 'granted') {
-        console.log('[PunchIn] Camera permission denied');
         Alert.alert("Permission denied", "Camera permission is required for selfie verification.");
         return;
       }
 
-      console.log('[PunchIn] Launching camera...');
       const result = await ImagePicker.launchCameraAsync({
         cameraType: 'front',
         allowsEditing: false,
-        quality: 0.5,
+        quality: 0.3,
+        base64: false,
       });
 
-      console.log('[PunchIn] Camera returned successfully');
-
-      // Increase delay to 300ms to let camera fully close
-      await new Promise(resolve => setTimeout(resolve, 300));
-
-      console.log('[PunchIn] Processing result...');
-      console.log('[PunchIn] Result canceled:', result.canceled);
-      console.log('[PunchIn] Has assets:', !!result.assets);
-
       if (!result.canceled && result.assets && result.assets.length > 0) {
-        console.log('[PunchIn] Extracting URI...');
         const uri = result.assets[0].uri;
-        console.log('[PunchIn] URI:', uri);
-
-        // Increase setTimeout delay to 200ms and add try-catch for stability
-        setTimeout(() => {
-          try {
-            console.log('[PunchIn] Updating states...');
-            setSelfieUri(uri);
-            setShowConfirmModal(true);
-            console.log('[PunchIn] States updated successfully');
-          } catch (e) {
-            console.error('[PunchIn] Error updating states:', e);
-            Alert.alert("Error", "Failed to process image. Please try again.");
-          }
-        }, 200);
-      } else {
-        console.log('[PunchIn] Camera was canceled or no assets');
+        setSelfieUri(uri);
+        setShowConfirmModal(true);
       }
     } catch (error) {
       console.error("[PunchIn] Camera error:", error);
-      console.error("[PunchIn] Error stack:", error.stack);
-      Alert.alert("Error", "Failed to open camera.");
+      Alert.alert("Error", "Failed to open camera. Please try again.");
     }
   };
 
@@ -1049,7 +1052,8 @@ export default function PunchInScreen() {
       distanceText = distance >= 1000
         ? `${(distance / 1000).toFixed(1)}km away`
         : `${distance.toFixed(0)}m away`;
-      canPunch = distance <= 100;
+      const gpsAccuracy = currentLocation.accuracy || 0;
+      canPunch = distance <= (100 + gpsAccuracy);
     }
 
     // Logic check
@@ -1572,14 +1576,14 @@ const styles = StyleSheet.create({
   formContainer: {
     backgroundColor: '#FFFFFF',
     borderRadius: BorderRadius.xl,
-    padding: Spacing.xl,
+    padding: scale(Spacing.xl),
     ...Shadows.md,
   },
   stepTitle: {
-    fontSize: Typography.sizes.lg,
+    fontSize: scale(Typography.sizes.lg),
     fontWeight: '700',
     color: Colors.text.primary,
-    marginBottom: Spacing.xl,
+    marginBottom: scale(Spacing.xl),
   },
   inputGroup: {
     marginBottom: Spacing.xl,
@@ -1697,7 +1701,7 @@ const styles = StyleSheet.create({
   primaryButton: {
     flexDirection: 'row',
     backgroundColor: Colors.primary.main,
-    paddingVertical: Spacing.md,
+    paddingVertical: scale(Spacing.md),
     borderRadius: BorderRadius.lg,
     justifyContent: 'center',
     alignItems: 'center',
@@ -1707,7 +1711,7 @@ const styles = StyleSheet.create({
   },
   primaryButtonText: {
     color: '#FFFFFF',
-    fontSize: Typography.sizes.base,
+    fontSize: scale(Typography.sizes.base),
     fontWeight: '700',
   },
   disabledButton: {
@@ -1721,25 +1725,25 @@ const styles = StyleSheet.create({
   customerCard: {
     backgroundColor: '#FFFFFF',
     borderRadius: BorderRadius.xl,
-    padding: Spacing.xl,
+    padding: scale(Spacing.xl),
     ...Shadows.lg,
   },
   customerHeader: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: Spacing.md,
-    marginBottom: Spacing.lg,
+    gap: scale(Spacing.md),
+    marginBottom: scale(Spacing.lg),
   },
   avatar: {
-    width: 60,
-    height: 60,
-    borderRadius: 30,
+    width: scale(52),
+    height: scale(52),
+    borderRadius: scale(26),
     backgroundColor: Colors.primary[100],
     justifyContent: 'center',
     alignItems: 'center',
   },
   avatarText: {
-    fontSize: Typography.sizes['2xl'],
+    fontSize: scale(Typography.sizes['2xl']),
     fontWeight: '700',
     color: Colors.primary.main,
   },
@@ -1747,13 +1751,13 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   customerNameBig: {
-    fontSize: Typography.sizes.xl,
+    fontSize: scale(Typography.sizes.xl),
     fontWeight: '700',
     color: Colors.text.primary,
     marginBottom: 4,
   },
   customerCode: {
-    fontSize: Typography.sizes.sm,
+    fontSize: scale(Typography.sizes.sm),
     color: Colors.text.secondary,
     backgroundColor: Colors.neutral[100],
     alignSelf: 'flex-start',
@@ -1852,11 +1856,11 @@ const styles = StyleSheet.create({
   },
   actionButton: {
     flexDirection: 'row',
-    paddingVertical: Spacing.lg,
+    paddingVertical: scale(Spacing.lg),
     borderRadius: BorderRadius.xl,
     justifyContent: 'center',
     alignItems: 'center',
-    gap: Spacing.md,
+    gap: scale(Spacing.md),
     ...Shadows.md,
   },
   punchInButton: {
@@ -1870,7 +1874,7 @@ const styles = StyleSheet.create({
   },
   actionButtonText: {
     color: '#FFFFFF',
-    fontSize: Typography.sizes.lg,
+    fontSize: scale(Typography.sizes.lg),
     fontWeight: '700',
   },
   secondaryButton: {
@@ -1897,27 +1901,27 @@ const styles = StyleSheet.create({
   confirmModalContent: {
     backgroundColor: '#FFFFFF',
     borderRadius: BorderRadius.xl,
-    padding: Spacing.xl,
+    padding: scale(Spacing.xl),
     width: '100%',
     maxWidth: 400,
     ...Shadows.xl,
   },
   modalTitle: {
-    fontSize: Typography.sizes.xl,
+    fontSize: scale(Typography.sizes.xl),
     fontWeight: '700',
     color: Colors.text.primary,
     marginBottom: 4,
     textAlign: 'center'
   },
   modalSubtitle: {
-    fontSize: Typography.sizes.sm,
+    fontSize: scale(Typography.sizes.sm),
     color: Colors.text.secondary,
     textAlign: 'center',
-    marginBottom: Spacing.lg,
+    marginBottom: scale(Spacing.lg),
   },
   selfieImage: {
     width: '100%',
-    height: 200,
+    height: scale(180),
     borderRadius: BorderRadius.lg,
     marginBottom: Spacing.md,
   },
@@ -2001,13 +2005,13 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   logCardTitle: {
-    fontSize: Typography.sizes.md,
+    fontSize: scale(Typography.sizes.md),
     fontWeight: '700',
     color: Colors.text.primary,
     marginBottom: 2,
   },
   logCardSubtitle: {
-    fontSize: Typography.sizes.xs,
+    fontSize: scale(Typography.sizes.xs),
     color: Colors.text.secondary,
   },
   logStatsRow: {
@@ -2026,13 +2030,13 @@ const styles = StyleSheet.create({
     position: 'relative',
   },
   logStatValue: {
-    fontSize: Typography.sizes.lg,
+    fontSize: scale(Typography.sizes.lg),
     fontWeight: '700',
     color: Colors.text.primary,
     marginBottom: 2,
   },
   logStatLabel: {
-    fontSize: Typography.sizes.xs,
+    fontSize: scale(Typography.sizes.xs),
     color: Colors.text.tertiary,
     textTransform: 'uppercase',
     letterSpacing: 0.5,
@@ -2129,12 +2133,12 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   managementTitle: {
-    fontSize: Typography.sizes.base,
+    fontSize: scale(Typography.sizes.base),
     fontWeight: '700',
     color: Colors.text.primary,
   },
   managementSubtitle: {
-    fontSize: Typography.sizes.xs,
+    fontSize: scale(Typography.sizes.xs),
     color: Colors.text.secondary,
     marginTop: 2,
   },

@@ -2,7 +2,7 @@
 import * as SQLite from 'expo-sqlite';
 
 const DB_NAME = 'taskprime_v2.db';
-const DB_VERSION = 13; // Bumped to 13 for user-specific data filtering
+const DB_VERSION = 14; // Bumped to 14 for Godown Stock support
 const CURRENT_VERSION = DB_VERSION;
 class DatabaseService {
     constructor() {
@@ -289,7 +289,7 @@ class DatabaseService {
             await this.db.runAsync('CREATE INDEX IF NOT EXISTS idx_goddowns_barcode ON product_goddowns(barcode)');
 
             await this.db.runAsync(
-                'CREATE TABLE IF NOT EXISTS customer_geo_data (customer_code TEXT PRIMARY KEY, latitude REAL, longitude REAL, captured_at TEXT, is_synced INTEGER DEFAULT 0)'
+                'CREATE TABLE IF NOT EXISTS godown_stock (id INTEGER PRIMARY KEY, goddownid TEXT, product TEXT, quantity REAL, barcode TEXT, product_name TEXT, goddown_name TEXT, updated_at TEXT);'
             );
 
             console.log('[DB] ✅ All tables created/verified');
@@ -1469,6 +1469,67 @@ class DatabaseService {
         }
     }
 
+    // ==================== GODOWN STOCK ====================
+    async saveGodownStock(stockData) {
+        try {
+            if (!stockData || stockData.length === 0) return true;
+            console.log('[DB] Saving ' + stockData.length + ' godown stock records...');
+
+            await this.db.runAsync('BEGIN TRANSACTION');
+
+            try {
+                // First clear existing stock data as we get a full fresh list
+                await this.db.runAsync('DELETE FROM godown_stock');
+
+                const chunkSize = 50;
+                for (let i = 0; i < stockData.length; i += chunkSize) {
+                    const chunk = stockData.slice(i, i + chunkSize);
+                    const placeholders = chunk.map(() => '(?, ?, ?, ?, ?, ?, ?, ?)').join(',');
+                    const values = [];
+
+                    for (const item of chunk) {
+                        values.push(
+                            item.id,
+                            item.goddownid || '',
+                            item.product || '',
+                            parseFloat(item.quantity || 0),
+                            item.barcode || '',
+                            item.product_name || '',
+                            item.goddown_name || '',
+                            new Date().toISOString()
+                        );
+                    }
+
+                    await this.db.runAsync(
+                        'INSERT INTO godown_stock (id, goddownid, product, quantity, barcode, product_name, goddown_name, updated_at) VALUES ' + placeholders,
+                        values
+                    );
+                }
+
+                await this.db.runAsync('COMMIT');
+                console.log('[DB] ✅ Saved ' + stockData.length + ' godown stock records');
+                return true;
+            } catch (error) {
+                await this.db.runAsync('ROLLBACK');
+                throw error;
+            }
+        } catch (error) {
+            console.error('[DB] Error saving godown stock:', error);
+            throw error;
+        }
+    }
+
+    async getGodownStock() {
+        try {
+            if (!this.db || !this.isInitialized) await this.init();
+            const result = await this.db.getAllAsync('SELECT * FROM godown_stock ORDER BY product_name ASC');
+            return result || [];
+        } catch (error) {
+            console.error('[DB] Error getting godown stock:', error);
+            return [];
+        }
+    }
+
     // ==================== SYNC METADATA ====================
     async setSyncMetadata(key, value) {
         try {
@@ -1515,6 +1576,7 @@ class DatabaseService {
             await this.db.runAsync('DELETE FROM batches');
             await this.db.runAsync('DELETE FROM product_photos');
             await this.db.runAsync('DELETE FROM product_goddowns');
+            await this.db.runAsync('DELETE FROM godown_stock');
             console.log('[DB] ✅ Downloadable data cleared');
             return true;
         } catch (error) {
@@ -1536,6 +1598,7 @@ class DatabaseService {
             await this.db.runAsync('DELETE FROM batches');
             await this.db.runAsync('DELETE FROM product_photos');
             await this.db.runAsync('DELETE FROM product_goddowns');
+            await this.db.runAsync('DELETE FROM godown_stock');
             console.log('[DB] ✅ All data cleared');
             return true;
         } catch (error) {

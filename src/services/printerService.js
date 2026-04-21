@@ -383,6 +383,7 @@ class PrinterService {
 
             // Ensure company info is loaded
             await this.loadCompanyInfo();
+            const taxSetting = await AsyncStorage.getItem('settings_tax_code') || 'no_tax';
 
             const PrinterInterface = this.connectionType === 'ble' ? BLEPrinter : USBPrinter;
             if (!PrinterInterface) {
@@ -513,18 +514,40 @@ class PrinterService {
 
             receipt += line;
 
-            let totalAmount = 0;
+            let totalAmount = 0; // Net Total
+            let totalTaxAmount = 0;
+            let totalTaxable = 0;
+
             if (Array.isArray(order.items)) {
                 order.items.forEach(item => {
                     const price = Number(item.price) || 0;
                     const qty = Number(item.qty) || 0;
-                    const itemTotal = price * qty;
-                    totalAmount += itemTotal;
+                    const taxPercent = Number(item.gst || item.tax || item.taxcode || 0);
+
+                    let itemTaxable = 0;
+                    let itemTax = 0;
+
+                    if (taxSetting === 'plus_tax') {
+                        const baseTotal = price * qty;
+                        itemTaxable = baseTotal;
+                        itemTax = baseTotal * (taxPercent / 100);
+                    } else if (taxSetting === 'reverse_tax') {
+                        const totalInclTax = price * qty;
+                        itemTaxable = totalInclTax / (1 + (taxPercent / 100));
+                        itemTax = totalInclTax - itemTaxable;
+                    } else {
+                        itemTaxable = price * qty;
+                        itemTax = 0;
+                    }
+
+                    totalTaxable += itemTaxable;
+                    totalTaxAmount += itemTax;
+                    totalAmount += (itemTaxable + itemTax);
 
                     const name     = String(item.name || "Item").substring(0, itemLen).padEnd(itemLen, " ");
                     const qtyStr   = qty.toFixed(2).padStart(qtyLen, " ");
                     const rateStr  = price.toFixed(2).padStart(rateLen, " ");
-                    const totalStr = itemTotal.toFixed(2).padStart(totalLen, " ");
+                    const totalStr = (itemTaxable + itemTax).toFixed(2).padStart(totalLen, " ");
 
                     receipt += `${name} ${qtyStr} ${rateStr} ${totalStr}\n`;
                 });
@@ -533,10 +556,17 @@ class PrinterService {
             receipt += line;
 
             // --- TOTAL ---
-            const totalLabel = "TOTAL:";
+            const totalLabel = taxSetting === 'plus_tax' ? "NET TOTAL:" : "TOTAL:";
             const totalVal = totalAmount.toFixed(2);
             const totalPad = PRINTER_WIDTH - totalLabel.length - totalVal.length - 1;
             receipt += `${" ".repeat(Math.max(0, totalPad))}${totalLabel} ${totalVal}\n`;
+
+            // --- SGST/CGST SPLIT (NEW) ---
+            if ((taxSetting === 'plus_tax' || taxSetting === 'reverse_tax') && totalTaxAmount > 0) {
+                const halfTax = (totalTaxAmount / 2).toFixed(2);
+                receipt += `SGST: ${halfTax}\n`;
+                receipt += `CGST: ${halfTax}\n`;
+            }
 
             receipt += line;
             receipt += centerText("Thank You!");
@@ -617,6 +647,7 @@ class PrinterService {
 
             // Ensure company info is loaded (same as printOrder - do NOT call loadSettings here)
             await this.loadCompanyInfo();
+            const taxSetting = await AsyncStorage.getItem('settings_tax_code') || 'no_tax';
 
             const PrinterInterface = this.connectionType === 'ble' ? BLEPrinter : USBPrinter;
             if (!PrinterInterface) {
@@ -782,21 +813,42 @@ class PrinterService {
             receipt += LEFT_PAD + ESC_BOLD_ON + `${hdrNo} ${hdrItem} ${hdrQty} ${hdrPrice} ${hdrTotal}` + ESC_BOLD_OFF + "\n";
             receipt += line;
 
-            let totalAmount = 0;
+            let totalAmount = 0; // Net Total
+            let totalTaxAmount = 0;
+            let totalTaxable = 0;
             let rowNo = 1;
 
             if (Array.isArray(order.items)) {
                 order.items.forEach(item => {
                     const price = Number(item.price) || 0;
                     const qty = Number(item.qty) || 0;
-                    const itemTotal = price * qty;
-                    totalAmount += itemTotal;
+                    const taxPercent = Number(item.gst || item.tax || item.taxcode || 0);
+
+                    let itemTaxable = 0;
+                    let itemTax = 0;
+
+                    if (taxSetting === 'plus_tax') {
+                        const baseTotal = price * qty;
+                        itemTaxable = baseTotal;
+                        itemTax = baseTotal * (taxPercent / 100);
+                    } else if (taxSetting === 'reverse_tax') {
+                        const totalInclTax = price * qty;
+                        itemTaxable = totalInclTax / (1 + (taxPercent / 100));
+                        itemTax = totalInclTax - itemTaxable;
+                    } else {
+                        itemTaxable = price * qty;
+                        itemTax = 0;
+                    }
+
+                    totalTaxable += itemTaxable;
+                    totalTaxAmount += itemTax;
+                    totalAmount += (itemTaxable + itemTax);
 
                     const noStr = String(rowNo).padEnd(noLen, " ");
                     const name = String(item.name || "Item").substring(0, itemLen).padEnd(itemLen, " ");
                     const qtyStr = qty.toFixed(2).padStart(qtyLen, " ");
                     const priceStr = price.toFixed(2).padStart(priceLen, " ");
-                    const totalStr = itemTotal.toFixed(2).padStart(totalLen, " ");
+                    const totalStr = (itemTaxable + itemTax).toFixed(2).padStart(totalLen, " ");
 
                     receipt += LEFT_PAD + `${noStr} ${name} ` + ESC_BOLD_ON + `${qtyStr} ${priceStr} ${totalStr}` + ESC_BOLD_OFF + "\n";
 
@@ -828,12 +880,19 @@ class PrinterService {
             receipt += line;
 
             // --- TOTAL ---
-            const totalLabel = "TOTAL:";
+            const totalLabel = taxSetting === 'plus_tax' ? "NET TOTAL:" : "TOTAL:";
             const totalVal = totalAmount.toFixed(2);
             // Use CONTENT_WIDTH-LEFT_PAD.length to prevent right-edge clipping
             const totalLineWidth = CONTENT_WIDTH - LEFT_PAD.length;
             const totalPadSize = Math.max(0, totalLineWidth - totalLabel.length - totalVal.length - 1);
             receipt += LEFT_PAD + ESC_SIZE_LARGE + " ".repeat(totalPadSize) + totalLabel + " " + totalVal + ESC_SIZE_NORMAL + "\n";
+
+            // --- SGST/CGST SPLIT (NEW) ---
+            if ((taxSetting === 'plus_tax' || taxSetting === 'reverse_tax') && totalTaxAmount > 0) {
+                const halfTax = (totalTaxAmount / 2).toFixed(2);
+                receipt += `${LEFT_PAD}SGST: ${halfTax}\n`;
+                receipt += `${LEFT_PAD}CGST: ${halfTax}\n`;
+            }
 
             receipt += line;
             receipt += centerText("Thank You!");
@@ -1165,6 +1224,13 @@ class PrinterService {
                 receipt += " ".repeat(Math.max(0, CONTENT_WIDTH_F3 - taxLabel.length - taxVal.length - 1)) + `${taxLabel} ` + taxVal + "\n";
                 const netTotalPad = Math.max(0, CONTENT_WIDTH_F3 - netTotalLabel.length - netTotalVal.length - 1);
                 receipt += ESC_SIZE_LARGE + " ".repeat(netTotalPad) + netTotalLabel + " " + netTotalVal + ESC_SIZE_NORMAL + "\n";
+
+                // --- SGST/CGST SPLIT (NEW) ---
+                if (totalTaxAmount > 0) {
+                    const halfTax = (totalTaxAmount / 2).toFixed(2);
+                    receipt += `SGST: ${halfTax}\n`;
+                    receipt += `CGST: ${halfTax}\n`;
+                }
             } else {
                 // --- TOTAL only (no_tax or other) ---
                 const totalLabel = "TOTAL:";
@@ -1211,6 +1277,26 @@ class PrinterService {
             } else {
                 await PrinterInterface.printBill(receipt);
             }
+
+            // --- BANK QR (NEW UPDATE) ---
+            try {
+                const isBankQrSynced = await AsyncStorage.getItem('bank_qr_synced');
+                if (isBankQrSynced === 'true') {
+                    const bankQrUri = FileSystem.documentDirectory + 'bank_qr.png';
+                    const info = await FileSystem.getInfoAsync(bankQrUri);
+                    if (info.exists) {
+                        console.log(`[Printer] Attempting Bank QR print. Path: ${bankQrUri}`);
+                        try {
+                            await PrinterInterface.printPic(bankQrUri);
+                        } catch (e) {
+                            console.warn("[Printer] Bank QR print attempt failed:", e);
+                        }
+                        await new Promise(resolve => setTimeout(resolve, 800));
+                        console.log(`[Printer] Bank QR print attempt finished`);
+                    }
+                }
+            } catch (qrErr) { console.warn("[Printer] Bank QR print error:", qrErr); }
+
             console.log("[Printer] Form3 print done");
             return true;
 

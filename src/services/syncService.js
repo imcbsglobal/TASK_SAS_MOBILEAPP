@@ -96,7 +96,9 @@ class SyncService {
             products: false,
             batches: false,
             areas: false,
-            settings: false
+            settings: false,
+            bankQr: false,
+            godownStock: false
         };
 
         try {
@@ -109,39 +111,48 @@ class SyncService {
                 await dbService.clearDownloadableData();
             }
 
-            // OPTIMIZATION: Download customers and areas in PARALLEL (they're independent)
-            // This saves time by not waiting for each to complete sequentially
-            this.updateProgress('parallel', 'Downloading customers and areas...', 10);
-
+            // OPTIMIZATION: Download lighter assets in PARALLEL
+            this.updateProgress('parallel', 'Downloading settings and assets...', 10);
             const parallelDownloads = await Promise.allSettled([
-                this.downloadCustomers(),
-                this.downloadAreas(),
                 this.downloadSettings(),
                 this.downloadUsers(),
-                this.downloadLogo()
+                this.downloadLogo(),
+                this.downloadBankQr()
             ]);
 
-            // Process results
+            // Process Parallel Results
             if (parallelDownloads[0].status === 'fulfilled') {
-                stages.customers = true;
-                this.updateProgress('customers', 'Customers downloaded', 20, true);
-            } else {
-                console.error('Customer download failed:', parallelDownloads[0].reason);
-                this.updateProgress('customers', 'Customers failed', 20, false);
-            }
-
-            if (parallelDownloads[1].status === 'fulfilled') {
-                stages.areas = true;
-                this.updateProgress('areas', 'Areas downloaded', 25, true);
-            } else {
-                console.error('Area download failed:', parallelDownloads[1].reason);
-                this.updateProgress('areas', 'Areas failed', 25, false);
-            }
-
-            if (parallelDownloads[2].status === 'fulfilled') {
                 stages.settings = true;
-                // Settings are silent, no progress update needed explicitly or maybe small one?
-                console.log('Settings downloaded');
+                this.updateProgress('settings', 'Settings downloaded', 15, true);
+            }
+            if (parallelDownloads[2].status === 'fulfilled' && parallelDownloads[2].value === true) {
+                console.log('Logo downloaded');
+            }
+            if (parallelDownloads[3].status === 'fulfilled' && parallelDownloads[3].value === true) {
+                stages.bankQr = true;
+                console.log('Bank QR downloaded');
+            }
+
+            // SEQUENTIAL DATABASE DOWNLOADS (to avoid SQLite transaction conflicts)
+            // Areas
+            this.updateProgress('areas', 'Downloading areas...', 20);
+            if (await this.downloadAreas()) {
+                stages.areas = true;
+                this.updateProgress('areas', 'Areas downloaded', 22, true);
+            }
+
+            // Customers
+            this.updateProgress('customers', 'Downloading customers...', 24);
+            if (await this.downloadCustomers()) {
+                stages.customers = true;
+                this.updateProgress('customers', 'Customers downloaded', 30, true);
+            }
+
+            // Godown Stock
+            this.updateProgress('godownStock', 'Downloading Godown Stock...', 35);
+            if (await this.downloadGodownStock()) {
+                stages.godownStock = true;
+                console.log('Godown Stock downloaded');
             }
 
             // Stage 2: Download products WITH batches/photos/goddowns (SINGLE CALL WITH RETRY)
@@ -617,6 +628,100 @@ class SyncService {
             return false;
         } catch (error) {
             console.error('[Sync] Error downloading logo:', error);
+            return false;
+        }
+    }
+
+    async downloadBankQr() {
+        try {
+            console.log('[Sync] Checking for bank QR...');
+            const token = await this.getAuthToken();
+            
+            const response = await fetch(`${API_BASE_URL}/settings/bank-qr/`, {
+                method: 'GET',
+                headers: {
+                    'Authorization': `Bearer ${token}`,
+                    'Content-Type': 'application/json',
+                }
+            });
+
+            if (!response.ok) {
+                console.warn(`[Sync] Bank QR API returned ${response.status}`);
+                return false;
+            }
+
+            const data = await response.json();
+            if (data.bank_qr_url) {
+                console.log(`[Sync] Found Bank QR URL: ${data.bank_qr_url}`);
+                
+                const fileUri = FileSystem.documentDirectory + 'bank_qr.png';
+                
+                // Ensure fresh download by deleting existing file first
+                try {
+                    const existing = await FileSystem.getInfoAsync(fileUri);
+                    if (existing.exists) {
+                        await FileSystem.deleteAsync(fileUri, { idempotent: true });
+                    }
+                } catch (e) { console.log('[Sync] Error clearing old bank QR', e); }
+
+                // Download image
+                const downloadRes = await FileSystem.downloadAsync(
+                    data.bank_qr_url,
+                    fileUri
+                );
+
+                if (downloadRes.status === 200) {
+                    await AsyncStorage.setItem('bank_qr_synced', 'true');
+                    console.log(`[Sync] Bank QR downloaded successfully to ${fileUri}`);
+                    return true;
+                } else {
+                    console.warn(`[Sync] Failed to download bank QR image. Status: ${downloadRes.status}`);
+                }
+            } else {
+                console.log('[Sync] No Bank QR URL found in API response. Clearing status.');
+                await AsyncStorage.removeItem('bank_qr_synced');
+            }
+            return false;
+        } catch (error) {
+            console.error('[Sync] Error downloading bank QR:', error);
+            return false;
+        }
+    }
+
+    async downloadGodownStock() {
+        try {
+            console.log('[Sync] Downloading Godown Stock...');
+            const token = await this.getAuthToken();
+            
+            // 30s timeout for godown stock
+            const controller = new AbortController();
+            const timeoutId = setTimeout(() => controller.abort(), 30000);
+
+            const response = await fetch(`https://tasksas.com/api/accgoddownstock/goddown-stock/`, {
+                method: 'GET',
+                headers: {
+                    'Authorization': `Bearer ${token}`,
+                    'Content-Type': 'application/json',
+                },
+                signal: controller.signal
+            });
+
+            clearTimeout(timeoutId);
+
+            if (!response.ok) {
+                console.warn(`[Sync] Godown Stock API returned ${response.status}`);
+                return false;
+            }
+
+            const data = await response.json();
+            if (data.success && Array.isArray(data.data)) {
+                await dbService.saveGodownStock(data.data);
+                console.log(`[Sync] ✅ Downloaded ${data.data.length} godown stock records`);
+                return true;
+            }
+            return false;
+        } catch (error) {
+            console.error('[Sync] Error downloading Godown Stock:', error);
             return false;
         }
     }

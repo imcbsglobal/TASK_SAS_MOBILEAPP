@@ -65,6 +65,12 @@ export default function SalesEntryScreen() {
     { code: 'MR', name: 'MRP' },
     { code: 'CO', name: 'Cost' }
   ];
+  
+  // G STOCK State
+  const [godownStock, setGodownStock] = useState([]);
+  const [loadingStock, setLoadingStock] = useState(false);
+  const [showStockModal, setShowStockModal] = useState(false);
+  const [stockSearchQuery, setStockSearchQuery] = useState("");
 
   // Handle back press
   const handleBackPress = useCallback(() => {
@@ -170,6 +176,25 @@ export default function SalesEntryScreen() {
       console.error('[Entry] Error loading default payment method:', e);
     }
   };
+
+  const fetchGodownStock = async () => {
+    try {
+      setLoadingStock(true);
+      const stock = await dbService.getGodownStock();
+      setGodownStock(stock || []);
+    } catch (error) {
+      console.error('[Entry] Error fetching godown stock:', error);
+    } finally {
+      setLoadingStock(false);
+    }
+  };
+
+  // Refresh stock on focus
+  useFocusEffect(
+    useCallback(() => {
+      fetchGodownStock();
+    }, [])
+  );
 
   // Filter areas based on search
   useEffect(() => {
@@ -630,6 +655,29 @@ export default function SalesEntryScreen() {
             </View>
           </View>
 
+          {/* G.STOCK Button (Opens Report Modal) */}
+          <TouchableOpacity
+            style={styles.gStockButtonCard}
+            onPress={() => setShowStockModal(true)}
+            activeOpacity={0.8}
+          >
+            <LinearGradient
+              colors={['#f8fafc', '#f1f5f9']}
+              style={styles.gStockButtonGradient}
+            >
+              <View style={styles.gStockButtonContent}>
+                <View style={[styles.gStockIconContainer, { backgroundColor: Colors.success.main }]}>
+                  <Ionicons name="bar-chart" size={18} color="#FFFFFF" />
+                </View>
+                <View style={{ flex: 1, marginLeft: 12 }}>
+                  <Text style={styles.gStockButtonTitle}>View Godown Stock (G.STOCK)</Text>
+                  <Text style={styles.gStockButtonSubtitle}>Tap to view detailed inventory report</Text>
+                </View>
+                <Ionicons name="chevron-forward" size={20} color={Colors.text.tertiary} />
+              </View>
+            </LinearGradient>
+          </TouchableOpacity>
+
           {/* Proceed Button */}
           <TouchableOpacity
             style={styles.proceedButton}
@@ -816,6 +864,91 @@ export default function SalesEntryScreen() {
             </View>
           </View>
         </Modal>
+
+        {/* Stock Report Modal */}
+        <Modal
+          visible={showStockModal}
+          animationType="slide"
+          transparent={true}
+          onRequestClose={() => setShowStockModal(false)}
+        >
+          <View style={styles.stockModalOverlay}>
+            <View style={styles.stockModalContent}>
+              <View style={styles.stockModalHeader}>
+                <View>
+                  <Text style={styles.stockModalTitle}>Godown Stock</Text>
+                  <Text style={styles.stockModalSubtitle}>Real-time inventory levels</Text>
+                </View>
+                <TouchableOpacity onPress={() => setShowStockModal(false)} style={styles.closeModalButton}>
+                  <Ionicons name="close" size={24} color={Colors.text.primary} />
+                </TouchableOpacity>
+              </View>
+
+              <View style={styles.stockSearchContainer}>
+                <Ionicons name="search" size={20} color={Colors.text.tertiary} style={styles.searchIcon} />
+                <TextInput
+                  style={styles.stockSearchInput}
+                  placeholder="Search by product name or code..."
+                  value={stockSearchQuery}
+                  onChangeText={setStockSearchQuery}
+                  placeholderTextColor={Colors.text.tertiary}
+                />
+                {stockSearchQuery !== "" && (
+                  <TouchableOpacity onPress={() => setStockSearchQuery("")}>
+                    <Ionicons name="close-circle" size={18} color={Colors.text.tertiary} />
+                  </TouchableOpacity>
+                )}
+              </View>
+
+              {/* Table Header */}
+              <View style={styles.tableHeader}>
+                <Text style={[styles.tableLabel, { flex: 2 }]}>PRODUCT NAME</Text>
+                <Text style={[styles.tableLabel, { flex: 1, textAlign: 'center' }]}>GODOWN</Text>
+                <Text style={[styles.tableLabel, { flex: 0.8, textAlign: 'right' }]}>STOCK</Text>
+              </View>
+
+              <View style={{ flex: 1 }}>
+                {loadingStock ? (
+                  <View style={styles.modalCenter}>
+                    <ActivityIndicator size="large" color={Colors.success.main} />
+                    <Text style={styles.loadingStockText}>Updating report...</Text>
+                  </View>
+                ) : (
+                  <FlatList
+                    data={godownStock.filter(item =>
+                      item.product_name.toLowerCase().includes(stockSearchQuery.toLowerCase()) ||
+                      (item.godown_name && item.godown_name.toLowerCase().includes(stockSearchQuery.toLowerCase()))
+                    )}
+                    keyExtractor={(item, index) => index.toString()}
+                    renderItem={({ item, index }) => (
+                      <View style={[styles.reportRow, index % 2 === 0 && styles.reportRowEven]}>
+                        <View style={{ flex: 2 }}>
+                          <Text style={styles.reportProductName} numberOfLines={2}>{item.product_name}</Text>
+                          <Text style={styles.reportProductCode}>Ref: {item.product || 'N/A'}</Text>
+                        </View>
+                        <View style={{ flex: 1, alignItems: 'center' }}>
+                          <View style={styles.godownBadge}>
+                            <Text style={styles.godownBadgeText}>{item.godown_name || 'Main'}</Text>
+                          </View>
+                        </View>
+                        <View style={{ flex: 0.8, alignItems: 'flex-end' }}>
+                          <Text style={styles.reportStockQty}>{item.quantity}</Text>
+                          <Text style={styles.reportStockUnit}>{item.unit || 'Nos'}</Text>
+                        </View>
+                      </View>
+                    )}
+                    ListEmptyComponent={
+                      <View style={styles.modalCenter}>
+                        <Ionicons name="search-outline" size={48} color={Colors.text.tertiary} />
+                        <Text style={styles.emptyStockText}>No items match your search</Text>
+                      </View>
+                    }
+                  />
+                )}
+              </View>
+            </View>
+          </View>
+        </Modal>
       </SafeAreaView>
     </LinearGradient>
   );
@@ -854,8 +987,8 @@ const styles = StyleSheet.create({
   },
   offlineText: {
     fontSize: Typography.sizes.sm,
-    color: Colors.warning.dark,
-    fontWeight: '600',
+    color: Colors.success.main,
+    fontWeight: '700',
   },
 
   formSection: { marginBottom: Spacing.lg },
@@ -1062,5 +1195,157 @@ const styles = StyleSheet.create({
     color: '#ffffff',
     fontSize: Typography.sizes.xs,
     fontWeight: '700',
+  },
+
+  // G.STOCK Button Card
+  gStockButtonCard: {
+    backgroundColor: '#ffffff',
+    borderRadius: BorderRadius.xl,
+    marginTop: Spacing.md,
+    marginBottom: Spacing.md,
+    overflow: 'hidden',
+    borderWidth: 1,
+    borderColor: '#eef2f6',
+    ...Shadows.md,
+  },
+  gStockButtonGradient: {
+    padding: Spacing.md,
+  },
+  gStockButtonContent: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  gStockButtonTitle: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: Colors.text.primary,
+  },
+  gStockButtonSubtitle: {
+    fontSize: 11,
+    color: Colors.text.tertiary,
+    marginTop: 2,
+  },
+  gStockIconContainer: {
+    width: 36,
+    height: 36,
+    borderRadius: 10,
+    backgroundColor: Colors.success.main,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+
+  // Stock Report Modal Styles
+  stockModalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.6)',
+    justifyContent: 'flex-end',
+  },
+  stockModalContent: {
+    backgroundColor: '#ffffff',
+    borderTopLeftRadius: BorderRadius['2xl'],
+    borderTopRightRadius: BorderRadius['2xl'],
+    height: '92%',
+    padding: Spacing.lg,
+  },
+  stockModalHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'flex-start',
+    marginBottom: Spacing.lg,
+  },
+  stockModalTitle: {
+    fontSize: 20,
+    fontWeight: '800',
+    color: Colors.text.primary,
+  },
+  stockModalSubtitle: {
+    fontSize: 12,
+    color: Colors.text.tertiary,
+    marginTop: 4,
+  },
+  closeModalButton: {
+    padding: 4,
+  },
+  stockSearchContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#f1f5f9',
+    borderRadius: BorderRadius.lg,
+    paddingHorizontal: Spacing.md,
+    height: 48,
+    marginBottom: Spacing.lg,
+  },
+  stockSearchInput: {
+    flex: 1,
+    marginLeft: 8,
+    fontSize: 14,
+    color: Colors.text.primary,
+  },
+  tableHeader: {
+    flexDirection: 'row',
+    paddingVertical: 10,
+    paddingHorizontal: Spacing.sm,
+    backgroundColor: '#f8fafc',
+    borderRadius: BorderRadius.sm,
+    marginBottom: 4,
+  },
+  tableLabel: {
+    fontSize: 10,
+    fontWeight: '800',
+    color: Colors.text.tertiary,
+    letterSpacing: 1,
+  },
+  reportRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: Spacing.md,
+    paddingHorizontal: Spacing.sm,
+    borderBottomWidth: 1,
+    borderBottomColor: '#f1f5f9',
+  },
+  reportRowEven: {
+    backgroundColor: '#fafafa',
+  },
+  reportProductName: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: Colors.text.primary,
+  },
+  reportProductCode: {
+    fontSize: 10,
+    color: Colors.text.tertiary,
+    marginTop: 2,
+  },
+  godownBadge: {
+    backgroundColor: '#e2e8f0',
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+    borderRadius: 6,
+  },
+  godownBadgeText: {
+    fontSize: 10,
+    fontWeight: '700',
+    color: '#475569',
+  },
+  reportStockQty: {
+    fontSize: 16,
+    fontWeight: '800',
+    color: Colors.success.main,
+  },
+  reportStockUnit: {
+    fontSize: 9,
+    color: Colors.text.tertiary,
+    fontWeight: '600',
+  },
+  modalCenter: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingTop: 60,
+  },
+  loadingStockText: {
+    marginTop: 12,
+    color: Colors.text.secondary,
+    fontSize: 14,
   },
 });

@@ -107,7 +107,7 @@ export default function EntryScreen() {
         }
 
         // Filter based on restricted users
-        if (username && settings.protected_price_users) {
+        if (username && settings.protected_price_users && typeof settings.protected_price_users === 'object') {
           const upperUser = username.toUpperCase();
           const restrictedCodes = settings.protected_price_users[upperUser]; // Array of codes to HIDE
 
@@ -211,7 +211,7 @@ export default function EntryScreen() {
     // ---------------------------------------------------------
     // NEW LOGIC: Check read_price_category from settings
     // ---------------------------------------------------------
-    if (appSettings && appSettings.read_price_category === false) {
+    if (appSettings && (appSettings.read_price_category === false || appSettings.read_price_category === 'false')) {
       const targetDefault = appSettings.default_price_code || 'S1';
 
       // Try to find the full price object for the default code

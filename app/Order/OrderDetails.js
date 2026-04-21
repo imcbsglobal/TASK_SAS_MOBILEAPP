@@ -433,7 +433,8 @@ export default function OrderDetails() {
   // OR trigger initial load when settings first become available
   useEffect(() => {
     if (appSettings) {
-      if (allProducts.length > 0 && appSettings.barcode_based_list) {
+      const barcodeBasedList = appSettings.barcode_based_list === true || appSettings.barcode_based_list === 'true';
+      if (allProducts.length > 0 && barcodeBasedList) {
         // Settings changed after products loaded - reload with new sort
         console.log('[OrderDetails] Settings loaded with barcode_based_list=true, reloading products...');
         setPage(0);
@@ -541,7 +542,8 @@ export default function OrderDetails() {
         }
 
         // Override with Customer Price Code if enabled and available
-        if (appSettings.read_price_category && currentCustomerObj?.remarkcolumntitle) {
+        const readPriceCategory = appSettings.read_price_category === true || appSettings.read_price_category === 'true';
+        if (readPriceCategory && currentCustomerObj?.remarkcolumntitle) {
           const code = currentCustomerObj.remarkcolumntitle.trim();
 
           // Verify if it's a valid code:
@@ -560,7 +562,7 @@ export default function OrderDetails() {
       }    // 3. Determine RESTRICTED Codes for this User (Protected Price Users = Deny List)
       // Normalize username to uppercase to match settings keys (e.g. "ARUN")
       const upperUser = username ? username.toUpperCase() : '';
-      if (upperUser && appSettings.protected_price_users && appSettings.protected_price_users[upperUser]) {
+      if (upperUser && appSettings && appSettings.protected_price_users && appSettings.protected_price_users[upperUser]) {
         let restricted = [...appSettings.protected_price_users[upperUser]]; // Copy to allow modification
 
         // CRITICAL: Whitelist the Effective Price Code
@@ -676,21 +678,20 @@ export default function OrderDetails() {
       console.log('[OrderDetails] Loading first batch of products...');
       await dbService.init();
 
+      const barcodeBasedList = appSettings.barcode_based_list === true || appSettings.barcode_based_list === 'true';
       const currentFilters = {
         brands: filters.brands,
         categories: filters.categories,
         departments: filters.departments,
         search: filters.search,
-        sortBy: appSettings?.barcode_based_list ? 'barcode' : 'name'
+        sortBy: barcodeBasedList ? 'barcode' : 'name'
       };
-
-      console.log('[OrderDetails] Using filters:', currentFilters);
 
       // Load first page with LIMIT and FILTERS
       const products = await batchService.getProductBatchesOffline(PRODUCTS_PER_PAGE, 0, currentFilters);
 
       // Transform to cards (which expands batches) - pass sortBy for card-level sorting
-      const sortBy = appSettings?.barcode_based_list ? 'barcode' : 'name';
+      const sortBy = barcodeBasedList ? 'barcode' : 'name';
       console.log('[OrderDetails] Sorting by:', sortBy, '(barcode_based_list =', appSettings?.barcode_based_list, ')');
       let cards = batchService.transformBatchesToCards(products, sortBy);
 
@@ -732,12 +733,13 @@ export default function OrderDetails() {
       console.log(`[OrderDetails] Loading more products... (page: ${page})`);
 
       const offset = page * PRODUCTS_PER_PAGE;
+      const barcodeBasedList = appSettings?.barcode_based_list === true || appSettings?.barcode_based_list === 'true';
       const currentFilters = {
         brands: filters.brands,
         categories: filters.categories,
         departments: filters.departments,
         search: filters.search,
-        sortBy: appSettings?.barcode_based_list ? 'barcode' : 'name'
+        sortBy: barcodeBasedList ? 'barcode' : 'name'
       };
 
       const products = await batchService.getProductBatchesOffline(
@@ -753,7 +755,7 @@ export default function OrderDetails() {
       }
 
       // Transform to cards
-      const sortBy = appSettings?.barcode_based_list ? 'barcode' : 'name';
+      const sortBy = barcodeBasedList ? 'barcode' : 'name';
       let newCards = batchService.transformBatchesToCards(products, sortBy);
 
       // Additional Client-side filtering for In Stock
@@ -1246,8 +1248,8 @@ export default function OrderDetails() {
 
       // Handle Price Override
       let productToAdd = selectedProduct;
-      if (appSettings?.order_rate_editable) {
-        const price = parseFloat(tempPrice);
+      const price = parseFloat(tempPrice);
+      if (appSettings?.order_rate_editable === true || appSettings?.order_rate_editable === 'true') {
         if (!isNaN(price) && price >= 0) {
           productToAdd = { ...selectedProduct, price: price };
         }
@@ -1574,21 +1576,46 @@ export default function OrderDetails() {
 
       toggleSheet(false);
 
-      Alert.alert(
-        "Order Placed Successfully",
-        `Order placed for ${currentCustomer}\nTotal:  ${order.total.toFixed(2)}`,
-        [
-          
-          {
-            text: "Continue Shopping",
-            style: "cancel"
-          },
-          {
-            text: "View Orders",
-            onPress: () => router.push("/Order/PlaceOrder")
-          },
-        ]
-      );
+      // Check if 'Order to Return' setting is enabled
+      const orderToReturn = await AsyncStorage.getItem('settings_order_to_return');
+
+      if (orderToReturn === 'true') {
+        Alert.alert(
+          "Order Placed Successfully",
+          `Order placed for ${currentCustomer}\nTotal: ${order.total.toFixed(2)}\n\nDo you want to go to Sales Return?`,
+          [
+            {
+              text: "No",
+              style: "cancel"
+            },
+            {
+              text: "Yes, Go to Return",
+              onPress: () => router.push({
+                pathname: "/SalesReturn/ReturnEntry",
+                params: {
+                  preselectedCustomerCode: currentCustomerCode,
+                  preselectedCustomerName: currentCustomer,
+                }
+              })
+            }
+          ]
+        );
+      } else {
+        Alert.alert(
+          "Order Placed Successfully",
+          `Order placed for ${currentCustomer}\nTotal:  ${order.total.toFixed(2)}`,
+          [
+            {
+              text: "Continue Shopping",
+              style: "cancel"
+            },
+            {
+              text: "View Orders",
+              onPress: () => router.push("/Order/PlaceOrder")
+            },
+          ]
+        );
+      }
     } catch (error) {
       Alert.alert("Error", "Failed to place order. Please try again.");
       console.error(error);
@@ -1983,7 +2010,7 @@ export default function OrderDetails() {
                     defaultQuantity={defaultQuantity}
                     editingQty={editingQty}
                     addToCart={(product, qty) => {
-                      if (appSettings?.order_rate_editable) {
+                      if (appSettings?.order_rate_editable === true || appSettings?.order_rate_editable === 'true') {
                         openQuantityModal(product, qty);
                       } else {
                         addToCart(product, qty, null, false);
@@ -2240,7 +2267,7 @@ export default function OrderDetails() {
                     item={item}
                     changeQty={changeQty}
                     removeItem={removeItem}
-                    isEditable={appSettings?.order_rate_editable === true || String(appSettings?.order_rate_editable) === 'true'}
+                    isEditable={appSettings?.order_rate_editable === true || appSettings?.order_rate_editable === 'true'}
                     onPriceChange={handleCartItemPriceChange}
                   />
                 )}
@@ -2322,7 +2349,7 @@ export default function OrderDetails() {
                         <Text style={styles.quantityProductName} numberOfLines={2}>
                           {selectedProduct.name}
                         </Text>
-                        {(appSettings?.order_rate_editable === true || String(appSettings?.order_rate_editable) === 'true') ? (
+                        {(appSettings?.order_rate_editable === true || appSettings?.order_rate_editable === 'true') ? (
                           <View style={{ flexDirection: 'row', alignItems: 'center', marginTop: 4 }}>
                             <Text style={{ marginRight: 8 }}>Price:</Text>
                             <TextInput
@@ -2389,7 +2416,7 @@ export default function OrderDetails() {
                       <View style={styles.quantityTotalContainer}>
                         <Text style={styles.quantityTotalLabel}>Total:</Text>
                         <Text style={styles.quantityTotalValue}>
-                          {((parseFloat(tempQuantity) || 0) * (appSettings?.order_rate_editable ? (parseFloat(tempPrice) || 0) : selectedProduct.price)).toFixed(2)}
+                          {((parseFloat(tempQuantity) || 0) * ((appSettings?.order_rate_editable === true || appSettings?.order_rate_editable === 'true') ? (parseFloat(tempPrice) || 0) : selectedProduct.price)).toFixed(2)}
                         </Text>
                       </View>
 
