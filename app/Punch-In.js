@@ -485,25 +485,7 @@ export default function PunchInScreen() {
       return;
     }
 
-    if (!customer.latitude || !customer.longitude) {
-      Alert.alert(
-        "Location Data Missing",
-        "This customer does not have location coordinates. Cannot verify location.",
-        [
-          { text: "Cancel", style: "cancel" },
-          {
-            text: "Continue Anyway",
-            onPress: () => {
-              setPunchinStatusToPost("location data unavailable");
-              takeSelfie();
-            }
-          }
-        ]
-      );
-      return;
-    }
-
-    // Always fetch a FRESH location at punch time — stale cached location is the main cause of wrong distance
+    // Always fetch a FRESH location at punch time
     setPunching(true);
     let freshLocation = null;
     try {
@@ -533,48 +515,9 @@ export default function PunchInScreen() {
       return;
     }
 
-    const distance = getDistanceFromLatLonInMeters(
-      freshLocation.latitude,
-      freshLocation.longitude,
-      customer.latitude,
-      customer.longitude
-    );
-
-    const gpsAccuracy = freshLocation.accuracy || 0;
-    const effectiveThreshold = 100 + gpsAccuracy;
-
-    console.log(`Distance to ${customer.name}: ${distance.toFixed(1)}m, GPS accuracy: ±${gpsAccuracy.toFixed(1)}m, threshold: ${effectiveThreshold.toFixed(1)}m`);
-
-    if (distance <= effectiveThreshold) {
-      Alert.alert(
-        "Success",
-        "You are in correct location",
-        [
-          {
-            text: "OK",
-            onPress: () => {
-              setPunchinStatusToPost("correct location");
-              takeSelfie();
-            }
-          }
-        ]
-      );
-    } else {
-      Alert.alert(
-        "Location Mismatch",
-        `You are ${distance.toFixed(0)}m away from the shop. Do you want to continue?`,
-        [
-          { text: "No", style: "cancel" },
-          {
-            text: "Yes",
-            onPress: () => {
-              setPunchinStatusToPost("mismatch location");
-              takeSelfie();
-            }
-          }
-        ]
-      );
-    }
+    // Skip location cross-checking, directly proceed to selfie
+    setPunchinStatusToPost("location check skipped");
+    takeSelfie();
   };
 
   const takeSelfie = async () => {

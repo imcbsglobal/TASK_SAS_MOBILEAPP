@@ -66,6 +66,9 @@ export default function PlaceOrder() {
   const [connectionType, setConnectionType] = useState('ble'); // 'ble' | 'usb'
   const [selectedOrderToPrint, setSelectedOrderToPrint] = useState(null);
 
+  // Sync Loading Overlay
+  const [syncingModal, setSyncingModal] = useState({ visible: false, customer: '', total: 0 });
+
   useFocusEffect(
     useCallback(() => {
       loadUsername();
@@ -658,6 +661,7 @@ export default function PlaceOrder() {
             }
 
             setUploadingOrder(orderId);
+            setSyncingModal({ visible: true, customer: order.customer || '', total: order.total || 0 });
             try {
 
               const uploadResult = await uploadOrderToAPI(order);
@@ -731,6 +735,7 @@ export default function PlaceOrder() {
               Alert.alert('Error', error.message);
             } finally {
               setUploadingOrder(null);
+              setSyncingModal({ visible: false, customer: '', total: 0 });
             }
           }
         }
@@ -1451,6 +1456,25 @@ export default function PlaceOrder() {
           </View>
         </Modal>
 
+        {/* ── Sync Loading Overlay ── */}
+        <Modal
+          visible={syncingModal.visible}
+          transparent
+          animationType="fade"
+          statusBarTranslucent
+          onRequestClose={() => {}}
+        >
+          <View style={styles.syncOverlay}>
+            <View style={styles.syncCard}>
+              <ActivityIndicator size="large" color={Colors.primary.main} style={{ marginBottom: 18 }} />
+              <Text style={styles.syncTitle}>Syncing to Server...</Text>
+              <Text style={styles.syncSubtitle} numberOfLines={1}>{syncingModal.customer}</Text>
+              <Text style={styles.syncAmount}>₹{Number(syncingModal.total || 0).toFixed(2)}</Text>
+              <Text style={styles.syncHint}>Please wait, do not close the app</Text>
+            </View>
+          </View>
+        </Modal>
+
         {selectionMode && (
           <View style={styles.bulkActionBar}>
             <TouchableOpacity onPress={selectAllOrders} style={styles.bulkActionSelectAll}>
@@ -1783,5 +1807,51 @@ const styles = StyleSheet.create({
     borderRadius: BorderRadius.md,
     overflow: 'hidden',
     minWidth: 120,
+  },
+
+  // Sync Loading Overlay
+  syncOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.65)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  syncCard: {
+    backgroundColor: '#fff',
+    borderRadius: 20,
+    paddingVertical: 36,
+    paddingHorizontal: 32,
+    alignItems: 'center',
+    width: '80%',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.25,
+    shadowRadius: 16,
+    elevation: 12,
+  },
+  syncTitle: {
+    fontSize: 18,
+    fontWeight: '700',
+    color: Colors.text.primary,
+    marginBottom: 10,
+    textAlign: 'center',
+  },
+  syncSubtitle: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: Colors.primary.main,
+    marginBottom: 4,
+    textAlign: 'center',
+  },
+  syncAmount: {
+    fontSize: 22,
+    fontWeight: '800',
+    color: Colors.success.main,
+    marginBottom: 16,
+  },
+  syncHint: {
+    fontSize: 12,
+    color: Colors.text.tertiary,
+    textAlign: 'center',
   },
 });

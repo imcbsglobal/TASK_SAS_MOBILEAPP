@@ -555,17 +555,20 @@ class PrinterService {
 
             receipt += line;
 
-            // --- TOTAL ---
+            // --- TOTAL & TAX SPLIT ---
             const totalLabel = taxSetting === 'plus_tax' ? "NET TOTAL:" : "TOTAL:";
             const totalVal = totalAmount.toFixed(2);
-            const totalPad = PRINTER_WIDTH - totalLabel.length - totalVal.length - 1;
-            receipt += `${" ".repeat(Math.max(0, totalPad))}${totalLabel} ${totalVal}\n`;
 
-            // --- SGST/CGST SPLIT (NEW) ---
             if ((taxSetting === 'plus_tax' || taxSetting === 'reverse_tax') && totalTaxAmount > 0) {
                 const halfTax = (totalTaxAmount / 2).toFixed(2);
-                receipt += `SGST: ${halfTax}\n`;
+                const sgstText = `SGST: ${halfTax}`;
+                const totalRight = `${totalLabel} ${totalVal}`;
+                const padSize = PRINTER_WIDTH - sgstText.length - totalRight.length;
+                receipt += `${sgstText}${" ".repeat(Math.max(1, padSize))}${totalRight}\n`;
                 receipt += `CGST: ${halfTax}\n`;
+            } else {
+                const totalPad = PRINTER_WIDTH - totalLabel.length - totalVal.length - 1;
+                receipt += `${" ".repeat(Math.max(0, totalPad))}${totalLabel} ${totalVal}\n`;
             }
 
             receipt += line;
@@ -879,32 +882,29 @@ class PrinterService {
 
             receipt += line;
 
-            // --- TOTAL ---
+            // --- TOTAL & TAX SPLIT ---
             const totalLabel = taxSetting === 'plus_tax' ? "NET TOTAL:" : "TOTAL:";
             const totalVal = totalAmount.toFixed(2);
-            // Use CONTENT_WIDTH-LEFT_PAD.length to prevent right-edge clipping
             const totalLineWidth = CONTENT_WIDTH - LEFT_PAD.length;
-            const totalPadSize = Math.max(0, totalLineWidth - totalLabel.length - totalVal.length - 1);
-            receipt += LEFT_PAD + ESC_SIZE_LARGE + " ".repeat(totalPadSize) + totalLabel + " " + totalVal + ESC_SIZE_NORMAL + "\n";
 
-            // --- SGST/CGST SPLIT (NEW) ---
             if ((taxSetting === 'plus_tax' || taxSetting === 'reverse_tax') && totalTaxAmount > 0) {
                 const halfTax = (totalTaxAmount / 2).toFixed(2);
-                receipt += `${LEFT_PAD}SGST: ${halfTax}\n`;
-                receipt += `${LEFT_PAD}CGST: ${halfTax}\n`;
+                const sgstText = `SGST: ${halfTax}`;
+                const totalRight = `${totalLabel} ${totalVal}`;
+                const padSize = totalLineWidth - sgstText.length - totalRight.length;
+
+                receipt += LEFT_PAD + ESC_SIZE_LARGE + sgstText + " ".repeat(Math.max(1, padSize)) + totalRight + ESC_SIZE_NORMAL + "\n";
+                receipt += LEFT_PAD + `CGST: ${halfTax}\n`;
+            } else {
+                const totalPadSize = Math.max(0, totalLineWidth - totalLabel.length - totalVal.length - 1);
+                receipt += LEFT_PAD + ESC_SIZE_LARGE + " ".repeat(totalPadSize) + totalLabel + " " + totalVal + ESC_SIZE_NORMAL + "\n";
             }
 
             receipt += line;
             receipt += centerText("Thank You!");
             receipt += "\n";
 
-            // Previous Balance at the bottom, ONLY if not Return
-            const isReturn = (order.type === 'Return') || (receiptTitle.includes("RETURN"));
-            if (!isReturn && previousBalance !== null && previousBalance !== undefined && !isNaN(Number(previousBalance))) {
-                const balLabel = "PREVIOUS BALANCE:";
-                const balVal = Number(previousBalance).toFixed(2);
-                receipt += `${LEFT_PAD}${ESC_BOLD_ON}${balLabel} ${balVal}${ESC_BOLD_OFF}\n`;
-            }
+            // Previous Balance removed as per requirement
 
             // --- TERMS & CONDITIONS ---
             const tcText2 = await this.loadTermsAndConditions();
@@ -1075,26 +1075,11 @@ class PrinterService {
                 receipt += `${metaRight1}\n`;
             }
 
-            // Customer
-            let previousBalance = null;
+            receipt += "\n";
             if (order.customer) {
                 let customerText = String(order.customer);
                 let place = order.customerPlace || order.area;
 
-                if (order.customerCode) {
-                    try {
-                        const dbService = require('./database').default;
-                        if (dbService && dbService.db) {
-                            const customerParams = await dbService.getCustomerByCode(order.customerCode);
-                            if (customerParams) {
-                                if (!place) place = customerParams.place || customerParams.area;
-                                previousBalance = customerParams.balance;
-                            }
-                        }
-                    } catch (e) { console.log('[Printer] Error fetching customer info', e); }
-                }
-
-                receipt += "\n";
                 // Force single line for customer name
                 const maxCustLenF3 = PRINTER_WIDTH - 10;
                 receipt += "Customer: " + ESC_BOLD_ON + customerText.substring(0, Math.max(0, maxCustLenF3)) + ESC_BOLD_OFF + "\n";
@@ -1220,17 +1205,22 @@ class PrinterService {
                 const taxLabel = "TAX:";
                 const netTotalLabel = taxSetting === 'plus_tax' ? "NET TOTAL:" : "TOTAL:";
 
-                receipt += " ".repeat(Math.max(0, CONTENT_WIDTH_F3 - taxableLabel.length - taxableVal.length - 1)) + `${taxableLabel} ` + taxableVal + "\n";
-                receipt += " ".repeat(Math.max(0, CONTENT_WIDTH_F3 - taxLabel.length - taxVal.length - 1)) + `${taxLabel} ` + taxVal + "\n";
-                const netTotalPad = Math.max(0, CONTENT_WIDTH_F3 - netTotalLabel.length - netTotalVal.length - 1);
-                receipt += ESC_SIZE_LARGE + " ".repeat(netTotalPad) + netTotalLabel + " " + netTotalVal + ESC_SIZE_NORMAL + "\n";
-
-                // --- SGST/CGST SPLIT (NEW) ---
                 if (totalTaxAmount > 0) {
                     const halfTax = (totalTaxAmount / 2).toFixed(2);
-                    receipt += `SGST: ${halfTax}\n`;
-                    receipt += `CGST: ${halfTax}\n`;
+                    const sgstPart = `SGST: ${halfTax}`;
+                    const taxRight = `${taxableLabel} ${taxableVal}`;
+                    receipt += sgstPart + " ".repeat(Math.max(1, CONTENT_WIDTH_F3 - sgstPart.length - taxRight.length)) + taxRight + "\n";
+
+                    const cgstPart = `CGST: ${halfTax}`;
+                    const taxAmtRight = `${taxLabel} ${taxVal}`;
+                    receipt += cgstPart + " ".repeat(Math.max(1, CONTENT_WIDTH_F3 - cgstPart.length - taxAmtRight.length)) + taxAmtRight + "\n";
+                } else {
+                    receipt += " ".repeat(Math.max(0, CONTENT_WIDTH_F3 - taxableLabel.length - taxableVal.length - 1)) + `${taxableLabel} ` + taxableVal + "\n";
+                    receipt += " ".repeat(Math.max(0, CONTENT_WIDTH_F3 - taxLabel.length - taxVal.length - 1)) + `${taxLabel} ` + taxVal + "\n";
                 }
+
+                const netTotalPad = Math.max(0, CONTENT_WIDTH_F3 - netTotalLabel.length - netTotalVal.length - 1);
+                receipt += ESC_SIZE_LARGE + " ".repeat(netTotalPad) + netTotalLabel + " " + netTotalVal + ESC_SIZE_NORMAL + "\n";
             } else {
                 // --- TOTAL only (no_tax or other) ---
                 const totalLabel = "TOTAL:";
@@ -1238,25 +1228,9 @@ class PrinterService {
                 const totalPad_F3 = Math.max(0, CONTENT_WIDTH_F3 - totalLabel.length - totalVal.length - 1);
                 receipt += ESC_SIZE_LARGE + " ".repeat(totalPad_F3) + totalLabel + " " + totalVal + ESC_SIZE_NORMAL + "\n";
             }
-
-            receipt += line;
-            receipt += centerText("Thank You!");
-            receipt += "\n";
-
-            // Previous Balance at the bottom, ONLY if not Return
-            const isReturn = (order.type === 'Return') || (receiptTitle.includes("RETURN"));
-            if (!isReturn && previousBalance !== null && previousBalance !== undefined && !isNaN(Number(previousBalance))) {
-                const balLabel = "PREVIOUS BALANCE:";
-                const balVal = Number(previousBalance).toFixed(2);
-                receipt += `${ESC_BOLD_ON}${balLabel} ${balVal}${ESC_BOLD_OFF}\n`;
-            }
-
-
-
             // --- TERMS & CONDITIONS ---
             const tcText3 = await this.loadTermsAndConditions();
             if (tcText3) {
-                receipt += line;
                 const words3 = tcText3.split(' ');
                 let currentLine3 = '';
                 words3.forEach(word => {
@@ -1268,14 +1242,16 @@ class PrinterService {
                     }
                 });
                 if (currentLine3.trim()) receipt += currentLine3.trim() + '\n';
-                receipt += '\n';
             }
 
+            // --- PRINT MAIN BILL ---
             console.log("[Printer] Form3 sending to printer, receipt length:", receipt.length);
+            // Use trim() to remove any trailing blank lines so Bank QR prints immediately after total
+            const printableReceipt = receipt.trimEnd() + "\n";
             if (PrinterInterface.printText) {
-                await PrinterInterface.printText(receipt);
+                await PrinterInterface.printText(printableReceipt, { tailingLine: 0, cut: 0, beep: 0 });
             } else {
-                await PrinterInterface.printBill(receipt);
+                await PrinterInterface.printBill(printableReceipt, { tailingLine: 0, cut: 0, beep: 0 });
             }
 
             // --- BANK QR (NEW UPDATE) ---
@@ -1296,6 +1272,17 @@ class PrinterService {
                     }
                 }
             } catch (qrErr) { console.warn("[Printer] Bank QR print error:", qrErr); }
+
+            // --- FINAL FOOTER (After QR) ---
+            let footer = line;
+            footer += centerText("Thank You!");
+            footer += "\n";
+
+            if (PrinterInterface.printText) {
+                await PrinterInterface.printText(footer);
+            } else {
+                await PrinterInterface.printBill(footer);
+            }
 
             console.log("[Printer] Form3 print done");
             return true;
