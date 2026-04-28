@@ -39,6 +39,7 @@ export default function PlaceOrder() {
   const [orders, setOrders] = useState([]); // Local orders (Pending/Failed)
   const [uploadedOrders, setUploadedOrders] = useState([]); // API orders
   const [loadingUploaded, setLoadingUploaded] = useState(false);
+  const [isBulkUploading, setIsBulkUploading] = useState(false);
 
   const [expandedOrder, setExpandedOrder] = useState(null);
   const [editingQty, setEditingQty] = useState({});
@@ -386,78 +387,88 @@ export default function PlaceOrder() {
         {
           text: "Upload",
           onPress: async () => {
-            setLoadingUploaded(true);
-            let successCount = 0;
-            let failCount = 0;
-            const contextUsername = currentUsername;
+            setIsBulkUploading(true);
+            try {
+              let successCount = 0;
+              let failCount = 0;
+              const contextUsername = currentUsername;
 
-            // Get fresh copy of orders from reference or rely on state (using state for simplicity)
-            // We need to keep track of results to update state ONCE at the end or incrementally
-            let processedOrders = [...orders];
-
-            for (const orderId of selectedOrders) {
-              // ✅ Re-check orders every step to catch dynamic status updates during loop
-              const orderIndex = processedOrders.findIndex(o => o.id === orderId);
-              if (orderIndex === -1) continue;
-
-              const order = processedOrders[orderIndex];
-
-              // Skip if already uploaded
-              if (order.uploadStatus === 'uploaded' || order.uploadStatus === 'uploaded to server') {
-                console.log(`[Sync] Skipping already uploaded order: ${orderId}`);
-                continue;
+              if (!contextUsername) {
+                Alert.alert("Error", "User context not found. Please refresh or login again.");
+                return;
               }
 
-              try {
-                const result = await uploadOrderToAPI(order);
+              // Get fresh copy of orders from reference or rely on state (using state for simplicity)
+              // We need to keep track of results to update state ONCE at the end or incrementally
+              let processedOrders = [...orders];
 
-                if (result.success) {
-                  successCount++;
-                  // Save locally for 2 days
-                  await savedOrdersDbService.saveTransactionLocally(orderId, 'Order', order);
+              for (const orderId of selectedOrders) {
+                // ✅ Re-check orders every step to catch dynamic status updates during loop
+                const orderIndex = processedOrders.findIndex(o => o.id === orderId);
+                if (orderIndex === -1) continue;
 
-                  // Update local processed array (will be filtered out from pending)
-                  const itemsWithStatus = order.items.map(item => ({ ...item, uploadStatus: 'uploaded to server' }));
-                  processedOrders[orderIndex] = {
-                    ...order,
-                    status: 'uploaded to server',
-                    uploadStatus: 'uploaded to server',
-                    items: itemsWithStatus,
-                    uploadedAt: new Date().toISOString()
-                  };
-                } else {
-                  failCount++;
-                  // You could mark specific failure status here if needed
-                  const itemsWithStatus = order.items.map(item => ({ ...item, uploadStatus: 'failed' }));
-                  processedOrders[orderIndex] = {
-                    ...order,
-                    status: 'failed',
-                    uploadStatus: 'failed',
-                    items: itemsWithStatus
-                  };
+                const order = processedOrders[orderIndex];
+
+                // Skip if already uploaded
+                if (order.uploadStatus === 'uploaded' || order.uploadStatus === 'uploaded to server') {
+                  console.log(`[Sync] Skipping already uploaded order: ${orderId}`);
+                  continue;
                 }
-              } catch (e) {
-                failCount++;
-                console.error(e);
+
+                try {
+                  const result = await uploadOrderToAPI(order);
+
+                  if (result.success) {
+                    successCount++;
+                    // Save locally for 2 days
+                    await savedOrdersDbService.saveTransactionLocally(orderId, 'Order', order);
+
+                    // Update local processed array (will be filtered out from pending)
+                    const itemsWithStatus = order.items.map(item => ({ ...item, uploadStatus: 'uploaded to server' }));
+                    processedOrders[orderIndex] = {
+                      ...order,
+                      status: 'uploaded to server',
+                      uploadStatus: 'uploaded to server',
+                      items: itemsWithStatus,
+                      uploadedAt: new Date().toISOString()
+                    };
+                  } else {
+                    failCount++;
+                    // You could mark specific failure status here if needed
+                    const itemsWithStatus = order.items.map(item => ({ ...item, uploadStatus: 'failed' }));
+                    processedOrders[orderIndex] = {
+                      ...order,
+                      status: 'failed',
+                      uploadStatus: 'failed',
+                      items: itemsWithStatus
+                    };
+                  }
+                } catch (e) {
+                  failCount++;
+                  console.error(e);
+                }
               }
+
+              // Update state and storage once
+              setOrders(processedOrders);
+              const storageKey = `placed_orders_${contextUsername}`;
+              await AsyncStorage.setItem(storageKey, JSON.stringify(processedOrders));
+
+              // Reload saved orders to show newly uploaded one if needed
+              await loadSavedOrders();
+
+              Alert.alert(
+                "Bulk Upload Completed",
+                `Successfully uploaded: ${successCount}\nFailed: ${failCount}`
+              );
+            } catch (error) {
+              console.error("[BulkUpload] Critical Error:", error);
+              Alert.alert("Error", "A critical error occurred during bulk upload.");
+            } finally {
+              setIsBulkUploading(false);
+              setSelectionMode(false);
+              setSelectedOrders([]);
             }
-
-            // Update state and storage once
-            setOrders(processedOrders);
-            const storageKey = `placed_orders_${contextUsername}`;
-            await AsyncStorage.setItem(storageKey, JSON.stringify(processedOrders));
-
-            // Reload saved orders to show newly uploaded one if needed
-            await loadSavedOrders();
-
-            setLoadingUploaded(false);
-            setSelectionMode(false);
-            setSelectedOrders([]);
-
-            Alert.alert(
-              "Bulk Upload Completed",
-              `Successfully uploaded: ${successCount}\nFailed: ${failCount}`
-            );
           }
         }
       ]
@@ -643,8 +654,8 @@ export default function PlaceOrder() {
   }
 
   async function confirmOrder(orderId) {
-    // ✅ Check BOTH single and bulk upload states
-    if (uploadingOrder || loadingUploaded) {
+    // ✅ Check BOTH single and bulk upload states (do NOT block on loadingUploaded which is for fetching list)
+    if (uploadingOrder || isBulkUploading) {
       console.log('[Sync] Already syncing - blocking individual sync');
       return;
     }
@@ -692,7 +703,7 @@ export default function PlaceOrder() {
                 return o;
               });
 
-              const storageKey = `placed_orders_${currentUsername}`;
+              const storageKey = `placed_orders_${currentUsername || 'unknown'}`;
               await AsyncStorage.setItem(storageKey, JSON.stringify(updatedOrders));
               setOrders(updatedOrders);
 
@@ -1335,7 +1346,7 @@ export default function PlaceOrder() {
                   onPress={() => confirmOrder(order.id)}
                   disabled={!!uploadingOrder}
                 >
-                  <LinearGradient colors={uploadingOrder ? [Colors.neutral[300], Colors.neutral[300]] : Gradients.success} style={styles.actionButtonGradient}>
+                  <LinearGradient colors={uploadingOrder ? [Colors.neutral[300], Colors.neutral[300]] : Gradients.warning} style={styles.actionButtonGradient}>
                     {uploadingOrder === order.id ? (
                       <ActivityIndicator size="small" color="#fff" />
                     ) : (
@@ -1457,7 +1468,7 @@ export default function PlaceOrder() {
                 </LinearGradient>
               </TouchableOpacity>
               <TouchableOpacity onPress={handleBulkUpload} style={styles.bulkActionButton}>
-                <LinearGradient colors={Gradients.success} style={styles.actionButtonGradient}>
+                <LinearGradient colors={Gradients.warning} style={styles.actionButtonGradient}>
                   <Ionicons name="cloud-upload" size={18} color="#fff" />
                   <Text style={styles.actionButtonText}>Upload</Text>
                 </LinearGradient>

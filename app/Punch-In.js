@@ -1015,16 +1015,6 @@ export default function PunchInScreen() {
               <Text style={styles.customerNameBig}>{customer.name}</Text>
               <Text style={styles.customerCode}>{customer.code}</Text>
             </View>
-            <View style={[styles.distanceBadge, canPunch ? styles.badgeSuccess : styles.badgeError]}>
-              <Ionicons
-                name={canPunch ? "checkmark-circle" : "warning"}
-                size={12}
-                color={canPunch ? Colors.success.main : Colors.error.main}
-              />
-              <Text style={[styles.distanceText, { color: canPunch ? Colors.success.main : Colors.error.main }]}>
-                {distanceText}
-              </Text>
-            </View>
           </View>
 
           <View style={styles.divider} />
