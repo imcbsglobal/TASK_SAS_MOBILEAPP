@@ -355,6 +355,7 @@ class SyncService {
     async downloadCustomers() {
         try {
             const token = await this.getAuthToken();
+            const clientId = await AsyncStorage.getItem('clientId');
 
             // Create timeout controller for customers (2 minutes)
             const controller = new AbortController();
@@ -385,6 +386,15 @@ class SyncService {
                 customers = data.data;
             } else if (data.debtors && Array.isArray(data.debtors)) {
                 customers = data.debtors;
+            }
+
+            // Tag customers with current client_id for shop isolation
+            if (clientId) {
+                customers = customers.map(c => ({
+                    ...c,
+                    client_id: clientId
+                }));
+                console.log(`[Sync] Tagged ${customers.length} customers with client_id: ${clientId}`);
             }
 
             // Save to database

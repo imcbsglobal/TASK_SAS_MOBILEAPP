@@ -3,6 +3,7 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 import * as Application from "expo-application";
 import * as Device from "expo-device";
 import { LinearGradient } from "expo-linear-gradient";
+import { useRouter } from "expo-router";
 import { useEffect, useState } from "react";
 import {
   ActivityIndicator,
@@ -16,12 +17,38 @@ import {
   View,
 } from "react-native";
 
+// Helper function to manage licenses array
+const addLicenseToStorage = async (licenseData) => {
+  try {
+    const existingLicensesStr = await AsyncStorage.getItem("activatedLicenses");
+    let licenses = existingLicensesStr ? JSON.parse(existingLicensesStr) : [];
+    
+    // Check if license already exists (by client_id)
+    const existingIndex = licenses.findIndex(l => l.client_id === licenseData.client_id);
+    
+    if (existingIndex >= 0) {
+      // Update existing license
+      licenses[existingIndex] = { ...licenses[existingIndex], ...licenseData };
+    } else {
+      // Add new license
+      licenses.push(licenseData);
+    }
+    
+    await AsyncStorage.setItem("activatedLicenses", JSON.stringify(licenses));
+    console.log("✅ License added/updated in storage:", licenseData.shop_name);
+  } catch (error) {
+    console.error("Error managing licenses:", error);
+  }
+};
+
 export default function LicenseActivationScreen({ onActivationSuccess }) {
+  const router = useRouter();
   const [licenseKey, setLicenseKey] = useState("");
   const [loading, setLoading] = useState(false);
   const [deviceId, setDeviceId] = useState("");
   const [deviceName, setDeviceName] = useState("");
   const [checking, setChecking] = useState(true);
+  const [isAddingLicense, setIsAddingLicense] = useState(false);
 
   useEffect(() => {
     initializeApp();
@@ -208,6 +235,19 @@ export default function LicenseActivationScreen({ onActivationSuccess }) {
     try {
       setChecking(true);
 
+      // FIRST: Check if we're in adding mode (check if licenses already exist)
+      const existingLicenses = await AsyncStorage.getItem('activatedLicenses');
+      let hasExistingLicenses = false;
+      
+      if (existingLicenses) {
+        const licenses = JSON.parse(existingLicenses);
+        if (licenses.length > 0) {
+          hasExistingLicenses = true;
+          console.log("✅ Adding mode detected - user has", licenses.length, "existing license(s)");
+          setIsAddingLicense(true);
+        }
+      }
+
       // Get device ID
       const id = await getDeviceId();
       setDeviceId(id);
@@ -221,14 +261,26 @@ export default function LicenseActivationScreen({ onActivationSuccess }) {
       console.log("Device ID:", id);
       console.log("Device Name:", name);
       console.log("Is Physical Device:", Device.isDevice);
+      console.log("Has Existing Licenses:", hasExistingLicenses);
       console.log("===================");
 
-      // Check if device is already registered in the API
+      // If adding license, skip registration check and show form immediately
+      if (hasExistingLicenses) {
+        console.log("✅ Showing license form for adding new license");
+        setChecking(false);
+        return;
+      }
+
+      // First time - check if device is already registered in the API
       const isRegistered = await checkDeviceRegistration(id);
 
       if (isRegistered) {
         console.log("✅ Device already registered, skipping license screen");
-        onActivationSuccess();
+        if (onActivationSuccess) {
+          onActivationSuccess();
+        } else {
+          router.replace('/LoginScreen');
+        }
       } else {
         console.log("❌ Device not registered, showing license screen");
         setChecking(false);
@@ -276,45 +328,43 @@ export default function LicenseActivationScreen({ onActivationSuccess }) {
             if (deviceFound) {
               console.log("✅ Device found in customer:", customer.customer_name);
 
-              // Store customer info for later use
+              // Store customer info and add to licenses array
               await AsyncStorage.setItem("licenseActivated", "true");
-              await AsyncStorage.setItem("licenseKey", customer.license_key);
               await AsyncStorage.setItem("deviceId", deviceIdToCheck);
-              await AsyncStorage.setItem("customerName", customer.customer_name);
               await AsyncStorage.setItem("projectName", data.project_name);
-              await AsyncStorage.setItem("clientId", customer.client_id);
 
-              // Save Modules
-              if (customer.modules) {
-                await AsyncStorage.setItem("activatedModules", JSON.stringify(customer.modules));
-                console.log("✅ Saved modules:", customer.modules.length);
-              } else {
-                await AsyncStorage.removeItem("activatedModules");
+              // Add to licenses array
+              await addLicenseToStorage({
+                license_key: customer.license_key,
+                client_id: customer.client_id,
+                shop_name: customer.customer_name,
+                customer_name: customer.customer_name,
+                modules: customer.modules || [],
+                isDemo: false
+              });
+
+              // Set as current license ONLY if no current license exists
+              const currentClientId = await AsyncStorage.getItem("clientId");
+              if (!currentClientId) {
+                await AsyncStorage.setItem("licenseKey", customer.license_key);
+                await AsyncStorage.setItem("clientId", customer.client_id);
+                await AsyncStorage.setItem("customerName", customer.customer_name);
+                if (customer.modules) {
+                  await AsyncStorage.setItem("activatedModules", JSON.stringify(customer.modules));
+                }
+                await AsyncStorage.removeItem("isDemo");
               }
 
-              await AsyncStorage.removeItem("isDemo"); // Clear demo flag if found in normal customers
-
               console.log("✅ Stored client_id:", customer.client_id);
-
               return true;
             }
           }
         }
       }
 
-      // Check if device is registered in demo licenses (Logic: Demo licenses might just be keyed by Client ID/License Key)
-      // Since demo license logic usually implies a temporary state, we might not have a 'registered_devices' array in the same way,
-      // OR the user might just be re-activating a demo. 
-      // Based on the user request: "if the user is enter the demo license it need to show a alert"
-      // This implies checking registration might fail for demo initially if we don't track it, 
-      // but let's assume if they are already active as demo we should let them in.
-      // For now, simpler to just return false here and let them re-activate via handleActivate if not found in standard list,
-      // UNLESS we want silently auto-login for demo too.
-      // Let's check stored 'isDemo' to confirm.
-
+      // Check if device is registered in demo licenses
       const storedIsDemo = await AsyncStorage.getItem("isDemo");
       if (storedIsDemo === "true") {
-        // Re-validate against demo list
         if (data.demo_licenses) {
           const storedKey = await AsyncStorage.getItem("licenseKey");
           const demoMatch = data.demo_licenses.find(d => d.demo_license === storedKey);
@@ -442,29 +492,41 @@ export default function LicenseActivationScreen({ onActivationSuccess }) {
       );
 
       if (isAlreadyRegistered) {
-        // Device already registered, just save and continue
+        // Device already registered, add to licenses array
         await AsyncStorage.setItem("licenseActivated", "true");
-        await AsyncStorage.setItem("licenseKey", licenseKey.trim());
         await AsyncStorage.setItem("deviceId", deviceId);
-        await AsyncStorage.setItem("customerName", customer.customer_name);
         await AsyncStorage.setItem("projectName", checkData.project_name);
-        await AsyncStorage.setItem("projectName", checkData.project_name);
-        await AsyncStorage.setItem("clientId", customer.client_id);
 
-        // Save Modules
-        if (customer.modules) {
-          await AsyncStorage.setItem("activatedModules", JSON.stringify(customer.modules));
-          console.log("✅ Saved modules:", customer.modules.length);
-        } else {
-          await AsyncStorage.removeItem("activatedModules");
-        }
+        // Add to licenses array
+        await addLicenseToStorage({
+          license_key: licenseKey.trim(),
+          client_id: customer.client_id,
+          shop_name: customer.customer_name,
+          customer_name: customer.customer_name,
+          modules: customer.modules || [],
+          isDemo: isDemo,
+          expires_at: isDemo ? customer.expires_at : null
+        });
 
-        if (isDemo) {
-          await AsyncStorage.setItem("isDemo", "true");
-          await AsyncStorage.setItem("demoExpiresAt", customer.expires_at);
+        // Set as current license ONLY if in adding mode (don't overwrite existing)
+        if (isAddingLicense) {
+          // Don't change current license, just add to array
+          console.log("✅ License added to array, keeping current license active");
         } else {
-          await AsyncStorage.removeItem("isDemo");
-          await AsyncStorage.removeItem("demoExpiresAt");
+          // First license, set as current
+          await AsyncStorage.setItem("licenseKey", licenseKey.trim());
+          await AsyncStorage.setItem("clientId", customer.client_id);
+          await AsyncStorage.setItem("customerName", customer.customer_name);
+          if (customer.modules) {
+            await AsyncStorage.setItem("activatedModules", JSON.stringify(customer.modules));
+          }
+          if (isDemo) {
+            await AsyncStorage.setItem("isDemo", "true");
+            await AsyncStorage.setItem("demoExpiresAt", customer.expires_at);
+          } else {
+            await AsyncStorage.removeItem("isDemo");
+            await AsyncStorage.removeItem("demoExpiresAt");
+          }
         }
 
         console.log("✅ Device already registered");
@@ -472,11 +534,15 @@ export default function LicenseActivationScreen({ onActivationSuccess }) {
 
         Alert.alert(
           "Already Registered",
-          `Welcome back ${customer.customer_name}!\nThis device is already registered.`,
+          `${customer.customer_name} license has been added successfully!`,
           [
             {
               text: "Continue",
-              onPress: () => onActivationSuccess(),
+              onPress: () => {
+                if (onActivationSuccess) {
+                  onActivationSuccess();
+                }
+              },
             },
           ]
         );
@@ -541,29 +607,41 @@ export default function LicenseActivationScreen({ onActivationSuccess }) {
       console.log("Device registration response:", deviceData);
 
       if (deviceResponse.ok && deviceData.success) {
-        // Success - store activation status
+        // Success - store activation status and add to licenses array
         await AsyncStorage.setItem("licenseActivated", "true");
-        await AsyncStorage.setItem("licenseKey", licenseKey.trim());
         await AsyncStorage.setItem("deviceId", deviceId);
-        await AsyncStorage.setItem("customerName", customer.customer_name);
         await AsyncStorage.setItem("projectName", checkData.project_name);
-        await AsyncStorage.setItem("projectName", checkData.project_name);
-        await AsyncStorage.setItem("clientId", customer.client_id);
 
-        // Save Modules
-        if (customer.modules) {
-          await AsyncStorage.setItem("activatedModules", JSON.stringify(customer.modules));
-          console.log("✅ Saved modules:", customer.modules.length);
-        } else {
-          await AsyncStorage.removeItem("activatedModules");
-        }
+        // Add to licenses array
+        await addLicenseToStorage({
+          license_key: licenseKey.trim(),
+          client_id: customer.client_id,
+          shop_name: customer.customer_name,
+          customer_name: customer.customer_name,
+          modules: customer.modules || [],
+          isDemo: isDemo,
+          expires_at: isDemo ? customer.expires_at : null
+        });
 
-        if (isDemo) {
-          await AsyncStorage.setItem("isDemo", "true");
-          await AsyncStorage.setItem("demoExpiresAt", customer.expires_at || "");
+        // Set as current license ONLY if in adding mode (don't overwrite existing)
+        if (isAddingLicense) {
+          // Don't change current license, just add to array
+          console.log("✅ License added to array, keeping current license active");
         } else {
-          await AsyncStorage.removeItem("isDemo");
-          await AsyncStorage.removeItem("demoExpiresAt");
+          // First license, set as current
+          await AsyncStorage.setItem("licenseKey", licenseKey.trim());
+          await AsyncStorage.setItem("clientId", customer.client_id);
+          await AsyncStorage.setItem("customerName", customer.customer_name);
+          if (customer.modules) {
+            await AsyncStorage.setItem("activatedModules", JSON.stringify(customer.modules));
+          }
+          if (isDemo) {
+            await AsyncStorage.setItem("isDemo", "true");
+            await AsyncStorage.setItem("demoExpiresAt", customer.expires_at || "");
+          } else {
+            await AsyncStorage.removeItem("isDemo");
+            await AsyncStorage.removeItem("demoExpiresAt");
+          }
         }
 
         console.log("✅ Device registered successfully!");
@@ -572,11 +650,15 @@ export default function LicenseActivationScreen({ onActivationSuccess }) {
 
         Alert.alert(
           "Success",
-          `Welcome ${customer.customer_name}!\nDevice registered successfully.`,
+          `${customer.customer_name} license has been added successfully!`,
           [
             {
               text: "Continue",
-              onPress: () => onActivationSuccess(),
+              onPress: () => {
+                if (onActivationSuccess) {
+                  onActivationSuccess();
+                }
+              },
             },
           ]
         );
@@ -638,6 +720,14 @@ export default function LicenseActivationScreen({ onActivationSuccess }) {
       style={styles.container}
     >
       <View style={styles.content}>
+        {isAddingLicense && onActivationSuccess && (
+          <TouchableOpacity
+            style={styles.backButton}
+            onPress={() => onActivationSuccess()}
+          >
+            <Text style={styles.backButtonText}>← Back</Text>
+          </TouchableOpacity>
+        )}
         <Text style={styles.title}>Activate License</Text>
         <Text style={styles.subtitle}>Enter your license key to continue</Text>
 
@@ -819,5 +909,15 @@ const styles = StyleSheet.create({
     fontSize: 12,
     color: "#bbb",
     textAlign: "center",
+  },
+  backButton: {
+    alignSelf: 'flex-start',
+    marginBottom: 20,
+    padding: 10,
+  },
+  backButtonText: {
+    color: '#fff',
+    fontSize: 16,
+    fontWeight: '600',
   },
 });

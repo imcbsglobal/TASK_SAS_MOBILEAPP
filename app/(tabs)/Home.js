@@ -43,19 +43,23 @@ const Home = ({ navigation }) => {
   // Remote Punch-In Restriction
   const [isRemotePunchRestricted, setIsRemotePunchRestricted] = useState(false);
 
+
+
   // Godown Stock State
   const [godownStock, setGodownStock] = useState([]);
   const [loadingStock, setLoadingStock] = useState(true);
 
 
   useEffect(() => {
-    // Load username from storage
+    // Load username and available licenses
     const loadUsername = async () => {
       try {
         const storedUsername = await AsyncStorage.getItem('username');
         if (storedUsername) {
           setUsername(storedUsername);
         }
+
+
       } catch (error) {
         console.error('Error loading username:', error);
       }
@@ -184,6 +188,8 @@ const Home = ({ navigation }) => {
     );
   };
 
+
+
   const allQuickActions = [
     {
       icon: 'wallet-outline',
@@ -305,8 +311,9 @@ const Home = ({ navigation }) => {
                   <Text style={[styles.date, { color: '#FF9800', fontWeight: 'bold' }]}>DEMO LICENSE</Text>
                 )}
                 <Text style={styles.date}>{getCurrentDate()}</Text>
+
               </View>
-              <View>
+              <View style={styles.headerRight}>
                 <OfflineIndicator />
               </View>
             </View>
@@ -396,9 +403,9 @@ const Home = ({ navigation }) => {
             <Text style={styles.footerText}>© 2026 All rights reserved. IMCB Solutions LLP</Text>
           </View>
         </ScrollView>
-
-
       </SafeAreaView>
+
+
     </LinearGradient >
   );
 };
@@ -435,6 +442,11 @@ const styles = StyleSheet.create({
   headerLeft: {
     flex: 1,
   },
+  headerRight: {
+    alignItems: 'flex-end',
+    gap: Spacing.sm,
+  },
+
   greeting: {
     fontSize: Typography.sizes['2xl'],
     fontWeight: '700',
@@ -556,6 +568,8 @@ const styles = StyleSheet.create({
     color: 'rgba(255,255,255,0.6)',
     fontStyle: 'italic',
   },
+
+
 });
 
 export default Home;

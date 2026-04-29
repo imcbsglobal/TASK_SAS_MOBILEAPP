@@ -2,7 +2,7 @@
 import * as SQLite from 'expo-sqlite';
 
 const DB_NAME = 'taskprime_v2.db';
-const DB_VERSION = 14; // Bumped to 14 for Godown Stock support
+const DB_VERSION = 15; // Bumped to 15 for client_id field
 const CURRENT_VERSION = DB_VERSION;
 class DatabaseService {
     constructor() {
@@ -200,6 +200,36 @@ class DatabaseService {
                     }
                 }
 
+                // Migration for v14 (Add client_id to customers for shop isolation)
+                if (currentVersion < 14) {
+                    try {
+                        console.log('[DB] Migrating to v14 - Adding client_id to customers...');
+                        try {
+                            await this.db.runAsync('ALTER TABLE customers ADD COLUMN client_id TEXT');
+                            console.log('[DB] Added client_id to customers');
+                        } catch (e) { /* ignore */ }
+                    } catch (e) {
+                        console.log('[DB] Migration v14 minor error:', e);
+                    }
+                }
+
+                // Migration for v15 (Ensure client_id exists)
+                if (currentVersion < 15) {
+                    try {
+                        console.log('[DB] Migrating to v15 - Ensuring client_id exists...');
+                        try {
+                            await this.db.runAsync('ALTER TABLE customers ADD COLUMN client_id TEXT');
+                            console.log('[DB] Added client_id to customers in v15');
+                        } catch (e) {
+                            if (e.message && e.message.includes('duplicate column')) {
+                                console.log('[DB] client_id column already exists');
+                            }
+                        }
+                    } catch (e) {
+                        console.log('[DB] Migration v15 minor error:', e);
+                    }
+                }
+
                 // Update version after ALL migrations
                 await this.db.runAsync('INSERT OR REPLACE INTO db_version (id, version) VALUES (1, ?)', [DB_VERSION]);
                 console.log('[DB] ✅ Migration complete to version ' + DB_VERSION);
@@ -219,7 +249,7 @@ class DatabaseService {
             console.log('[DB] Creating/verifying tables...');
 
             await this.db.runAsync(
-                'CREATE TABLE IF NOT EXISTS customers (code TEXT PRIMARY KEY, name TEXT NOT NULL, place TEXT, area TEXT, phone TEXT, phone2 TEXT, super_code TEXT, balance REAL DEFAULT 0, master_debit REAL DEFAULT 0, master_credit REAL DEFAULT 0, remarkcolumntitle TEXT, created_at TEXT, updated_at TEXT);'
+                'CREATE TABLE IF NOT EXISTS customers (code TEXT PRIMARY KEY, name TEXT NOT NULL, place TEXT, area TEXT, phone TEXT, phone2 TEXT, super_code TEXT, balance REAL DEFAULT 0, master_debit REAL DEFAULT 0, master_credit REAL DEFAULT 0, remarkcolumntitle TEXT, client_id TEXT, created_at TEXT, updated_at TEXT);'
             );
 
             await this.db.runAsync(
@@ -352,7 +382,7 @@ class DatabaseService {
                 for (let i = 0; i < customers.length; i += chunkSize) {
                     const chunk = customers.slice(i, i + chunkSize);
 
-                    const placeholders = chunk.map(() => '(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)').join(',');
+                    const placeholders = chunk.map(() => '(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)').join(',');
                     const values = [];
 
                     for (const customer of chunk) {
@@ -367,13 +397,14 @@ class DatabaseService {
                             customer.balance || 0,
                             customer.master_debit || 0,
                             customer.master_credit || 0,
-                            customer.remarkcolumntitle || '', // New field
+                            customer.remarkcolumntitle || '',
+                            customer.client_id || '',
                             new Date().toISOString()
                         );
                     }
 
                     await this.db.runAsync(
-                        'INSERT OR REPLACE INTO customers (code, name, place, area, phone, phone2, super_code, balance, master_debit, master_credit, remarkcolumntitle, updated_at) VALUES ' + placeholders,
+                        'INSERT OR REPLACE INTO customers (code, name, place, area, phone, phone2, super_code, balance, master_debit, master_credit, remarkcolumntitle, client_id, updated_at) VALUES ' + placeholders,
                         values
                     );
 
@@ -387,6 +418,21 @@ class DatabaseService {
             } catch (error) {
                 console.error('[DB] Error executing customer batch:', error);
                 await this.db.runAsync('ROLLBACK');
+                
+                // Self-healing: Check for missing client_id column
+                if (error && error.message && error.message.includes('no column named client_id')) {
+                    console.log('[DB] Detected missing client_id column - attempting to fix...');
+                    try {
+                        await this.db.runAsync('ALTER TABLE customers ADD COLUMN client_id TEXT');
+                        console.log('[DB] ✅ Successfully added missing client_id column. Retrying save...');
+                        // Retry the save
+                        return await this.saveCustomers(customers);
+                    } catch (alterError) {
+                        console.error('[DB] Failed to auto-fix missing column:', alterError);
+                        throw error;
+                    }
+                }
+                
                 throw error;
             }
         } catch (error) {

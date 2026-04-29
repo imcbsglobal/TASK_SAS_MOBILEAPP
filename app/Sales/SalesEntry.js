@@ -20,7 +20,7 @@ import {
   View
 } from "react-native";
 import { BorderRadius, Colors, Gradients, Shadows, Spacing, Typography } from "../../constants/theme";
-import dbService from "../../src/services/database";
+import dbService from "../../src/services/shopAwareDatabase";
 
 export default function SalesEntryScreen() {
   const router = useRouter();

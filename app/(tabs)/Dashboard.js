@@ -7,6 +7,7 @@ import { useEffect, useState } from "react";
 import {
   ActivityIndicator,
   Alert,
+  Modal,
   RefreshControl,
   SafeAreaView,
   ScrollView,
@@ -31,6 +32,8 @@ export default function DashboardScreen() {
   const [remainingDays, setRemainingDays] = useState(null);
   const [isExpired, setIsExpired] = useState(false);
 
+
+
   useEffect(() => {
     loadStoredData();
   }, []);
@@ -53,6 +56,8 @@ export default function DashboardScreen() {
       setLicenseKey(storedLicenseKey || "");
       setDeviceId(storedDeviceId || "");
       setCustomerName(storedCustomerName || "");
+
+
 
       // Override for Demo
       if (demoStatus === "true" && demoExpiry) {
@@ -165,6 +170,8 @@ export default function DashboardScreen() {
       Alert.alert("Error", "Failed to logout.");
     }
   };
+
+
 
   const removeLicense = async () => {
     if (!licenseKey || !deviceId) {
@@ -422,6 +429,8 @@ export default function DashboardScreen() {
           </View>
         </ScrollView>
       </SafeAreaView>
+
+
     </LinearGradient>
   );
 }
@@ -694,4 +703,7 @@ const styles = StyleSheet.create({
     elevation: 6,
     marginBottom: Spacing.md,
   },
+
+
+
 });

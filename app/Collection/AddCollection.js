@@ -19,7 +19,7 @@ import {
   View
 } from "react-native";
 import { BorderRadius, Colors, Gradients, Shadows, Spacing, Typography } from "../../constants/theme";
-import dbService from "../../src/services/database";
+import dbService from "../../src/services/shopAwareDatabase";
 
 const API_CUSTOMERS = "https://tasksas.com/api/debtors/get-debtors/";
 
