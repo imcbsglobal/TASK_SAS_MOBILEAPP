@@ -99,6 +99,7 @@ export default function PunchInScreen() {
   const [punching, setPunching] = useState(false);
   const [loggedInUser, setLoggedInUser] = useState("");
   const [punchinStatusToPost, setPunchinStatusToPost] = useState("");
+  const [showDistanceSetting, setShowDistanceSetting] = useState(false);
 
   // Transaction Management State
   const [expandedSection, setExpandedSection] = useState(null); // 'pending' | 'uploaded'
@@ -109,6 +110,7 @@ export default function PunchInScreen() {
       loadData();
       getCurrentLocation();
       checkPunchStatus();
+      loadShowDistanceSetting();
     }, [])
   );
 
@@ -213,6 +215,16 @@ export default function PunchInScreen() {
       }
     } catch (error) {
       console.error('[PunchIn] Error checking status:', error);
+    }
+  };
+
+  const loadShowDistanceSetting = async () => {
+    try {
+      const val = await AsyncStorage.getItem('settings_show_distance');
+      setShowDistanceSetting(val === 'true');
+      console.log('[PunchIn] Show Distance Setting:', val === 'true');
+    } catch (error) {
+      console.error('[PunchIn] Error loading show distance setting:', error);
     }
   };
 
@@ -515,9 +527,37 @@ export default function PunchInScreen() {
       return;
     }
 
-    // Skip location cross-checking, directly proceed to selfie
-    setPunchinStatusToPost("location check skipped");
-    takeSelfie();
+    // Check distance if Show Distance setting is enabled
+    if (showDistanceSetting && customer.latitude && customer.longitude) {
+      const distance = getDistanceFromLatLonInMeters(
+        freshLocation.latitude,
+        freshLocation.longitude,
+        customer.latitude,
+        customer.longitude
+      );
+
+      console.log(`[PunchIn] Distance to shop: ${distance.toFixed(1)}m`);
+
+      if (distance <= 100) {
+        setPunchinStatusToPost("correct location");
+        Alert.alert(
+          "Correct Location",
+          `You are ${distance.toFixed(0)}m from the shop. Proceeding with punch in.`,
+          [{ text: "OK", onPress: () => takeSelfie() }]
+        );
+      } else {
+        setPunchinStatusToPost("mismatch location");
+        Alert.alert(
+          "Mismatch Location",
+          `You are ${distance >= 1000 ? (distance / 1000).toFixed(1) + 'km' : distance.toFixed(0) + 'm'} from the shop. You are outside the 100m range.`,
+          [{ text: "OK", onPress: () => takeSelfie() }]
+        );
+      }
+    } else {
+      // Skip location cross-checking if setting is disabled
+      setPunchinStatusToPost("location check skipped");
+      takeSelfie();
+    }
   };
 
   const takeSelfie = async () => {

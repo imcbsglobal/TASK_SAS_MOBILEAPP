@@ -697,7 +697,12 @@ export default function SalesDetails() {
 
       // Additional Client-side filtering for In Stock
       if (filters.inStock) {
-        cards = cards.filter(card => card.stock > 0);
+        cards = cards.filter(card => {
+          const regularStock = parseFloat(card.stock) || 0;
+          const godownStock = card.goddowns ? card.goddowns.reduce((sum, g) => sum + (parseFloat(g.quantity) || 0), 0) : 0;
+          const totalStock = regularStock + godownStock;
+          return totalStock > 0;
+        });
       }
 
       // Apply Dynamic Pricing
@@ -759,7 +764,12 @@ export default function SalesDetails() {
 
       // Additional Client-side filtering for In Stock
       if (filters.inStock) {
-        newCards = newCards.filter(card => card.stock > 0);
+        newCards = newCards.filter(card => {
+          const regularStock = parseFloat(card.stock) || 0;
+          const godownStock = card.goddowns ? card.goddowns.reduce((sum, g) => sum + (parseFloat(g.quantity) || 0), 0) : 0;
+          const totalStock = regularStock + godownStock;
+          return totalStock > 0;
+        });
       }
 
       // Apply Dynamic Pricing

@@ -30,6 +30,7 @@ const Company = () => {
   const [isPaymentSettingsOpen, setIsPaymentSettingsOpen] = useState(false);
   const [isPrintFormSettingsOpen, setIsPrintFormSettingsOpen] = useState(false);
   const [isTaxSettingsOpen, setIsTaxSettingsOpen] = useState(false);
+  const [isPunchInSettingsOpen, setIsPunchInSettingsOpen] = useState(false);
   const [paperSize, setPaperSize] = useState(58); // Default 58mm
   const [showStockOnly, setShowStockOnly] = useState(false);
   const [defaultPaymentMethod, setDefaultPaymentMethod] = useState('Cash');
@@ -40,6 +41,7 @@ const Company = () => {
   const [termsAndConditions, setTermsAndConditions] = useState(''); // T&C text for print footer
   const [termsInput, setTermsInput] = useState(''); // Editing buffer for T&C
   const [tcModalVisible, setTcModalVisible] = useState(false); // Modal for editing T&C
+  const [showDistance, setShowDistance] = useState(false); // Punch In distance validation
 
 
   useEffect(() => {
@@ -49,6 +51,7 @@ const Company = () => {
     loadPaymentSettings();
     loadPrintFormSettings();
     loadTaxSettings();
+    loadPunchInSettings();
   }, []);
 
   const loadPrinterSettings = async () => {
@@ -211,6 +214,26 @@ const Company = () => {
     }
   };
 
+  const loadPunchInSettings = async () => {
+    try {
+      const val = await AsyncStorage.getItem('settings_show_distance');
+      if (val === 'true') setShowDistance(true);
+      else setShowDistance(false);
+    } catch (e) {
+      console.log("Error loading punch in settings", e);
+    }
+  };
+
+  const toggleShowDistance = async () => {
+    const newValue = !showDistance;
+    setShowDistance(newValue);
+    try {
+      await AsyncStorage.setItem('settings_show_distance', String(newValue));
+    } catch (e) {
+      console.log("Error saving show distance setting", e);
+    }
+  };
+
 
   const loadCustomerCount = async () => {
     try {
@@ -297,11 +320,13 @@ const Company = () => {
         loadPaymentSettings();
         loadPrintFormSettings();
         loadTaxSettings();
+        loadPunchInSettings();
         setIsPrinterSettingsOpen(false);
         setIsProductSettingsOpen(false);
         setIsPaymentSettingsOpen(false);
         setIsPrintFormSettingsOpen(false);
         setIsTaxSettingsOpen(false);
+        setIsPunchInSettingsOpen(false);
         setSettingsModalVisible(true);
       },
       color: Colors.text.primary,
@@ -407,13 +432,14 @@ const Company = () => {
 
               {/* Header */}
               <View style={styles.modalHeader}>
-                {isPrinterSettingsOpen || isProductSettingsOpen || isPaymentSettingsOpen || isPrintFormSettingsOpen || isTaxSettingsOpen ? (
+                {isPrinterSettingsOpen || isProductSettingsOpen || isPaymentSettingsOpen || isPrintFormSettingsOpen || isTaxSettingsOpen || isPunchInSettingsOpen ? (
                   <TouchableOpacity onPress={() => {
                     setIsPrinterSettingsOpen(false);
                     setIsProductSettingsOpen(false);
                     setIsPaymentSettingsOpen(false);
                     setIsPrintFormSettingsOpen(false);
                     setIsTaxSettingsOpen(false);
+                    setIsPunchInSettingsOpen(false);
                   }} style={styles.backButton}>
                     <Ionicons name="arrow-back" size={24} color={Colors.text.primary} />
                   </TouchableOpacity>
@@ -424,7 +450,8 @@ const Company = () => {
                     (isProductSettingsOpen ? "Product Settings" :
                       (isPaymentSettingsOpen ? "Payment Settings" :
                         (isPrintFormSettingsOpen ? "Print Form" :
-                          (isTaxSettingsOpen ? "Tax Settings" : "Settings"))))}
+                          (isTaxSettingsOpen ? "Tax Settings" :
+                            (isPunchInSettingsOpen ? "Punch In Settings" : "Settings")))))}
                 </Text>
 
                 <TouchableOpacity onPress={() => setSettingsModalVisible(false)}>
@@ -433,7 +460,7 @@ const Company = () => {
               </View>
 
               {/* Content Logic */}
-              {!isPrinterSettingsOpen && !isProductSettingsOpen && !isPaymentSettingsOpen && !isPrintFormSettingsOpen && !isTaxSettingsOpen ? (
+              {!isPrinterSettingsOpen && !isProductSettingsOpen && !isPaymentSettingsOpen && !isPrintFormSettingsOpen && !isTaxSettingsOpen && !isPunchInSettingsOpen ? (
                 /* Main Settings Menu */
                 <View>
                   <TouchableOpacity
@@ -521,6 +548,24 @@ const Company = () => {
                       <View>
                         <Text style={styles.menuItemTitle}>Payment Method</Text>
                         <Text style={styles.menuItemSubtitle}>Set default for new orders</Text>
+                      </View>
+                    </View>
+                    <Ionicons name="chevron-forward" size={24} color={Colors.text.tertiary} />
+                  </TouchableOpacity>
+
+                  {/* Punch In Settings */}
+                  <TouchableOpacity
+                    style={styles.menuItem}
+                    onPress={() => setIsPunchInSettingsOpen(true)}
+                    activeOpacity={0.7}
+                  >
+                    <View style={styles.menuItemLeft}>
+                      <View style={[styles.menuIconContainer, { backgroundColor: 'rgba(33, 150, 243, 0.1)' }]}>
+                        <Ionicons name="location-outline" size={24} color="#2196F3" />
+                      </View>
+                      <View>
+                        <Text style={styles.menuItemTitle}>Punch In</Text>
+                        <Text style={styles.menuItemSubtitle}>Location validation settings</Text>
                       </View>
                     </View>
                     <Ionicons name="chevron-forward" size={24} color={Colors.text.tertiary} />
@@ -679,6 +724,36 @@ const Company = () => {
                       </View>
                     </TouchableOpacity>
                   </View>
+                </View>
+              ) : isPunchInSettingsOpen ? (
+                /* Inner Punch In Settings View */
+                <View style={styles.settingItem}>
+                  <TouchableOpacity
+                    style={[styles.menuItem, { borderBottomWidth: 0 }]}
+                    onPress={toggleShowDistance}
+                    activeOpacity={0.8}
+                  >
+                    <View style={styles.menuItemLeft}>
+                      <View style={[styles.menuIconContainer, { backgroundColor: showDistance ? 'rgba(33, 150, 243, 0.1)' : 'rgba(158, 158, 158, 0.1)' }]}>
+                        <Ionicons name={showDistance ? "navigate" : "navigate-outline"} size={24} color={showDistance ? '#2196F3' : Colors.text.tertiary} />
+                      </View>
+                      <View style={{ flex: 1 }}>
+                        <Text style={styles.menuItemTitle}>Show Distance</Text>
+                        <Text style={styles.menuItemSubtitle} numberOfLines={2}>
+                          {showDistance ? "Validate location within 100m radius" : "No distance validation"}
+                        </Text>
+                      </View>
+                    </View>
+                    <Ionicons
+                      name={showDistance ? "toggle" : "toggle-outline"}
+                      size={32}
+                      color={showDistance ? '#2196F3' : Colors.text.tertiary}
+                    />
+                  </TouchableOpacity>
+
+                  <Text style={[styles.helperText, { marginTop: 16, textAlign: 'left', paddingHorizontal: 4 }]}>
+                    When enabled, users will see "Correct Location" if within 100m of shop, or "Mismatch Location" if outside this range during punch in.
+                  </Text>
                 </View>
               ) : isTaxSettingsOpen ? (
                 /* Inner Tax Settings View */

@@ -696,8 +696,14 @@ export default function OrderDetails() {
       let cards = batchService.transformBatchesToCards(products, sortBy);
 
       // Additional Client-side filtering for In Stock
+      // Check BOTH regular stock AND godown stock
       if (filters.inStock) {
-        cards = cards.filter(card => card.stock > 0);
+        cards = cards.filter(card => {
+          const regularStock = card.stock || 0;
+          const godownStock = card.goddowns ? card.goddowns.reduce((sum, g) => sum + (parseFloat(g.quantity) || 0), 0) : 0;
+          const totalStock = regularStock + godownStock;
+          return totalStock > 0;
+        });
       }
 
       // Apply Dynamic Pricing
@@ -759,8 +765,14 @@ export default function OrderDetails() {
       let newCards = batchService.transformBatchesToCards(products, sortBy);
 
       // Additional Client-side filtering for In Stock
+      // Check BOTH regular stock AND godown stock
       if (filters.inStock) {
-        newCards = newCards.filter(card => card.stock > 0);
+        newCards = newCards.filter(card => {
+          const regularStock = card.stock || 0;
+          const godownStock = card.goddowns ? card.goddowns.reduce((sum, g) => sum + (parseFloat(g.quantity) || 0), 0) : 0;
+          const totalStock = regularStock + godownStock;
+          return totalStock > 0;
+        });
       }
 
       // Apply Dynamic Pricing
