@@ -13,15 +13,21 @@ module.exports = {
       resizeMode: "contain",
       backgroundColor: "#ffffff"
     },
-    ios: {
-      supportsTablet: true,
-      backgroundColor: "#ffffff",
-      bundleIdentifier: "imcbs.TaskSAS",
-      infoPlist: {
-        UIViewControllerBasedStatusBarAppearance: true,
-        UIStatusBarStyle: "UIStatusBarStyleLightContent"
-      }
-    },
+   ios: {
+  supportsTablet: true,
+  backgroundColor: "#ffffff",
+  bundleIdentifier: "imcbs.TaskSAS",
+  infoPlist: {
+    UIViewControllerBasedStatusBarAppearance: true,
+    UIStatusBarStyle: "UIStatusBarStyleLightContent",
+
+    NSBluetoothAlwaysUsageDescription:
+      "This app uses Bluetooth to connect to nearby printers and print receipts.",
+
+    NSBluetoothPeripheralUsageDescription:
+      "This app uses Bluetooth to communicate with external printer devices."
+  }
+},
     android: {
       package: "com.imcbs.TaskSAS",
       adaptiveIcon: {
