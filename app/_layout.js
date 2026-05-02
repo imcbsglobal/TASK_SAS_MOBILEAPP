@@ -1,6 +1,6 @@
 // app/_layout.js (ROOT LAYOUT)
 import AsyncStorage from "@react-native-async-storage/async-storage";
-import { Stack, usePathname } from "expo-router";
+import { Stack, usePathname, useRouter } from "expo-router";
 import { StatusBar } from "expo-status-bar";
 import { useEffect, useState } from "react";
 import { SafeAreaView, StyleSheet, Text, View } from "react-native";
@@ -9,7 +9,7 @@ import ErrorBoundary from "./components/ErrorBoundary"; // Import ErrorBoundary
 
 export default function RootLayout() {
   const pathname = usePathname();
-  // const router = useRouter(); 
+  const router = useRouter();
   const [isDemo, setIsDemo] = useState(false);
   const [expiresAt, setExpiresAt] = useState("");
   const [daysRemaining, setDaysRemaining] = useState(0);

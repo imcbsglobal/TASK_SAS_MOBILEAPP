@@ -140,6 +140,7 @@ export const Colors = {
     offline: '#F59E0B',
     syncing: '#06B6D4',
     error: '#EF4444',
+    info: '#06B6D4',
   },
 
   // Legacy support (for backward compatibility)
@@ -175,6 +176,7 @@ export const Gradients = {
   warning: ['#F59E0B', '#FBBF24'],
   danger: ['#EF4444', '#F87171'],
   error: ['#EF4444', '#F87171'], // Alias for danger
+  info: ['#06B6D4', '#3B82F6'],
   surface: ['#FFFFFF', '#F9FAFB'],
 };
 

@@ -40,6 +40,7 @@ export default function PlaceOrder() {
   const [uploadedOrders, setUploadedOrders] = useState([]); // API orders
   const [loadingUploaded, setLoadingUploaded] = useState(false);
   const [isBulkUploading, setIsBulkUploading] = useState(false);
+  const [openMenus, setOpenMenus] = useState({}); // Track expanded action menus
 
   const [expandedOrder, setExpandedOrder] = useState(null);
   const [editingQty, setEditingQty] = useState({});
@@ -1285,58 +1286,30 @@ export default function PlaceOrder() {
               </View>
             ))}
 
-            <View style={{ marginTop: 15, flexDirection: 'row', gap: 8, flexWrap: 'wrap' }}>
+            <View style={{ marginTop: 15, flexDirection: 'row', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
+              <TouchableOpacity
+                style={{
+                  width: 44,
+                  height: 44,
+                  borderRadius: 22,
+                  backgroundColor: openMenus[order.id] ? Colors.primary.main : Colors.neutral[100],
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  borderWidth: 1,
+                  borderColor: openMenus[order.id] ? Colors.primary.main : Colors.border.light,
+                  ...Shadows.sm
+                }}
+                onPress={() => setOpenMenus(prev => ({ ...prev, [order.id]: !prev[order.id] }))}
+              >
+                <Ionicons name="share-social-outline" size={22} color={openMenus[order.id] ? "#fff" : Colors.primary.main} />
+              </TouchableOpacity>
+
               {!isApi && filterStatus === 'pending' && (
                 <TouchableOpacity style={styles.actionButton} onPress={() => deleteOrder(order.id)}>
                   <LinearGradient colors={Gradients.danger} style={styles.actionButtonGradient}>
                     <Ionicons name="trash" size={18} color="#fff" />
                     <Text style={styles.actionButtonText}>Delete</Text>
                   </LinearGradient>
-                </TouchableOpacity>
-              )}
-
-              <TouchableOpacity style={styles.actionButton} onPress={() => handleSharePDF(order)}>
-                <LinearGradient colors={[Colors.secondary.main, Colors.secondary[700]]} style={styles.actionButtonGradient}>
-                  <Ionicons name="share-social" size={18} color="#fff" />
-                  <Text style={styles.actionButtonText}>PDF</Text>
-                </LinearGradient>
-              </TouchableOpacity>
-
-              <TouchableOpacity style={styles.actionButton} onPress={() => handlePrint(order)}>
-                <LinearGradient colors={[Colors.primary.main, Colors.primary[700]]} style={styles.actionButtonGradient}>
-                  <Ionicons name="print" size={18} color="#fff" />
-                  <Text style={styles.actionButtonText}>Print</Text>
-                </LinearGradient>
-              </TouchableOpacity>
-
-              <TouchableOpacity style={styles.actionButton} onPress={() => handleDownloadJSON(order)}>
-                <LinearGradient colors={[Colors.neutral[600], Colors.neutral[800]]} style={styles.actionButtonGradient}>
-                  <Ionicons name="code-working" size={18} color="#fff" />
-                  <Text style={styles.actionButtonText}>JSON</Text>
-                </LinearGradient>
-              </TouchableOpacity>
-
-              {/* {!isApi && filterStatus !== 'saved' && filterStatus !== 'uploaded' && (
-                <TouchableOpacity style={styles.actionButton} onPress={() => handleEditOrder(order)}>
-                  <LinearGradient colors={[Colors.primary.main, Colors.primary[700]]} style={styles.actionButtonGradient}>
-                    <Ionicons name="pencil" size={18} color="#fff" />
-                    <Text style={styles.actionButtonText}>Edit</Text>
-                  </LinearGradient>
-                </TouchableOpacity>
-              )} */}
-
-
-              {filterStatus === 'saved' && (
-                <TouchableOpacity
-                  style={[styles.actionButton, { borderColor: Colors.warning.main, borderWidth: 1 }]}
-                  onPress={() => handleRevert(order)}
-                >
-                  <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center', paddingVertical: 10, gap: 6 }}>
-                    <Ionicons name="refresh-circle-outline" size={20} color={Colors.warning.main} />
-                    <Text style={{ color: Colors.warning.main, fontWeight: '700', fontSize: 13 }}>
-                      Revert {revertClicks[order.id] > 0 ? `(${revertClicks[order.id]})` : ''}
-                    </Text>
-                  </View>
                 </TouchableOpacity>
               )}
 
@@ -1359,6 +1332,44 @@ export default function PlaceOrder() {
                 </TouchableOpacity>
               )}
 
+              {openMenus[order.id] && (
+                <View style={{ flexDirection: 'row', gap: 8, width: '100%', marginTop: 10, flexWrap: 'wrap' }}>
+                  <TouchableOpacity style={styles.actionButton} onPress={() => handleSharePDF(order)}>
+                    <LinearGradient colors={[Colors.secondary.main, Colors.secondary[700]]} style={styles.actionButtonGradient}>
+                      <Ionicons name="share-social" size={18} color="#fff" />
+                      <Text style={styles.actionButtonText}>PDF</Text>
+                    </LinearGradient>
+                  </TouchableOpacity>
+
+                  <TouchableOpacity style={styles.actionButton} onPress={() => handlePrint(order)}>
+                    <LinearGradient colors={[Colors.primary.main, Colors.primary[700]]} style={styles.actionButtonGradient}>
+                      <Ionicons name="print" size={18} color="#fff" />
+                      <Text style={styles.actionButtonText}>Print</Text>
+                    </LinearGradient>
+                  </TouchableOpacity>
+
+                  <TouchableOpacity style={styles.actionButton} onPress={() => handleDownloadJSON(order)}>
+                    <LinearGradient colors={[Colors.neutral[600], Colors.neutral[800]]} style={styles.actionButtonGradient}>
+                      <Ionicons name="code-working" size={18} color="#fff" />
+                      <Text style={styles.actionButtonText}>JSON</Text>
+                    </LinearGradient>
+                  </TouchableOpacity>
+                </View>
+              )}
+
+              {filterStatus === 'saved' && (
+                <TouchableOpacity
+                  style={[styles.actionButton, { borderColor: Colors.warning.main, borderWidth: 1 }]}
+                  onPress={() => handleRevert(order)}
+                >
+                  <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center', paddingVertical: 10, gap: 6 }}>
+                    <Ionicons name="refresh-circle-outline" size={20} color={Colors.warning.main} />
+                    <Text style={{ color: Colors.warning.main, fontWeight: '700', fontSize: 13 }}>
+                      Revert {revertClicks[order.id] > 0 ? `(${revertClicks[order.id]})` : ''}
+                    </Text>
+                  </View>
+                </TouchableOpacity>
+              )}
             </View>
           </View>
         )

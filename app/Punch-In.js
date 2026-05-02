@@ -675,6 +675,29 @@ export default function PunchInScreen() {
       console.log('[PunchIn] Response:', result);
 
       if (response.ok && result.success) {
+        // --- ADDED: Save to Punch History ---
+        try {
+          const username = await AsyncStorage.getItem("username");
+          const historyKey = `punch_history_${username}`;
+          const existingHistoryRaw = await AsyncStorage.getItem(historyKey);
+          let history = existingHistoryRaw ? JSON.parse(existingHistoryRaw) : [];
+          
+          const newRecord = {
+            id: result.data.punchin_id || result.data.id,
+            firm_name: result.data.firm_name,
+            punchin_time: result.data.punchin_time,
+            punchout_time: null,
+            duration: null
+          };
+          
+          // Prepend and keep last 50
+          history = [newRecord, ...history].slice(0, 50);
+          await AsyncStorage.setItem(historyKey, JSON.stringify(history));
+        } catch (histErr) {
+          console.error('[PunchIn] History save error:', histErr);
+        }
+        // ------------------------------------
+
         // Immediately update punch status from the response — no second API call needed.
         // This avoids a timing issue where checkPunchStatus() might not yet see the new punch-in.
         setPunchStatus({
@@ -841,6 +864,27 @@ export default function PunchInScreen() {
               }
 
               if (response.ok && (result.success || result.status === 'success')) {
+                // --- ADDED: Update Punch History ---
+                try {
+                  const username = await AsyncStorage.getItem("username");
+                  const historyKey = `punch_history_${username}`;
+                  const existingHistoryRaw = await AsyncStorage.getItem(historyKey);
+                  if (existingHistoryRaw) {
+                    let history = JSON.parse(existingHistoryRaw);
+                    const punchId = punchStatus.punchin_id;
+                    const recordIndex = history.findIndex(r => r.id === punchId);
+                    
+                    if (recordIndex !== -1) {
+                      history[recordIndex].punchout_time = new Date().toISOString();
+                      history[recordIndex].duration = result.data?.work_duration_hours || result.data?.duration || workHours;
+                      await AsyncStorage.setItem(historyKey, JSON.stringify(history));
+                    }
+                  }
+                } catch (histErr) {
+                  console.error('[PunchOut] History update error:', histErr);
+                }
+                // ------------------------------------
+
                 Alert.alert(
                   "Punch Out Successful",
                   `Work Duration: ${result.data?.work_duration_hours?.toFixed(2) || 0} hours`,

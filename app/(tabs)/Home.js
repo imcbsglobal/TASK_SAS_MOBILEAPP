@@ -161,21 +161,20 @@ const Home = ({ navigation }) => {
     }, [])
   );
 
+  const fetchGodownStock = async () => {
+    try {
+      setLoadingStock(true);
+      const data = await dbService.getGodownStock();
+      setGodownStock(data);
+    } catch (error) {
+      console.error('Error fetching godown stock:', error);
+    } finally {
+      setLoadingStock(false);
+    }
+  };
+
   useFocusEffect(
     useCallback(() => {
-      const fetchGodownStock = async () => {
-        try {
-          setLoadingStock(true);
-          const data = await dbService.getGodownStock();
-          // Sort or filter if needed, here we just take the first 5 for the preview
-          setGodownStock(data);
-        } catch (error) {
-          console.error('Error fetching godown stock:', error);
-        } finally {
-          setLoadingStock(false);
-        }
-      };
-
       fetchGodownStock();
     }, [])
   );
@@ -262,6 +261,14 @@ const Home = ({ navigation }) => {
       gradient: [Colors.warning[400], Colors.warning[600]],
       shadowColor: Colors.warning.main,
       moduleCode: 'MOD011',
+    },
+    {
+      icon: 'bar-chart-outline',
+      title: 'REPORTS',
+      description: 'Daily activity summary',
+      onPress: () => router.push("/Reports/DailyReport"),
+      gradient: [Colors.primary[600], Colors.primary[800]],
+      shadowColor: Colors.primary.main,
     },
   ];
 
@@ -422,9 +429,6 @@ const styles = StyleSheet.create({
   scrollView: {
     flex: 1,
   },
-  scrollView: {
-    flex: 1,
-  },
   scrollContent: {
     paddingHorizontal: Spacing.lg,
     paddingTop: Spacing.md,
@@ -568,8 +572,6 @@ const styles = StyleSheet.create({
     color: 'rgba(255,255,255,0.6)',
     fontStyle: 'italic',
   },
-
-
 });
 
 export default Home;
