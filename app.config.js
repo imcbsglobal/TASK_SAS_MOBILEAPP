@@ -29,7 +29,7 @@ module.exports = {
   }
 },
     android: {
-      package: "com.imcbs.TaskSAS",
+      package: "com.imcbs.TASKSAS",
       adaptiveIcon: {
         foregroundImage: "./assets/images/adaptive-icon.png",
         backgroundColor: "#ffffff"
