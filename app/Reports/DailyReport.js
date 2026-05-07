@@ -34,6 +34,7 @@ export default function DailyReportScreen() {
     collections: { count: 0, amount: 0, customers: {} },
     punchIn: { is_punched_in: false, firm_name: '', punchin_time: '' }
   });
+  const [punchLogCount, setPunchLogCount] = useState({ total: 0, success: 0, failed: 0 });
 
   const fetchDailyReport = async () => {
     try {
@@ -165,6 +166,23 @@ export default function DailyReportScreen() {
         }
       } catch (e) { console.log('[Reports] Punch status fetch error:', e); }
 
+      // Fetch Punch Attempt Logs count for today
+      try {
+        const logKey = `punch_attempt_logs_${username}`;
+        const logsRaw = await AsyncStorage.getItem(logKey);
+        if (logsRaw) {
+          const allLogs = JSON.parse(logsRaw);
+          const todayLogs = allLogs.filter(l => l.time?.split('T')[0] === today);
+          setPunchLogCount({
+            total: todayLogs.length,
+            success: todayLogs.filter(l => l.status === 'success').length,
+            failed: todayLogs.filter(l => l.status === 'failed').length,
+          });
+        } else {
+          setPunchLogCount({ total: 0, success: 0, failed: 0 });
+        }
+      } catch (e) { console.log('[Reports] Punch logs fetch error:', e); }
+
       setReportData({
         orders: orderRes,
         sales: salesRes,
@@ -267,6 +285,44 @@ export default function DailyReportScreen() {
         {renderCard('Returns', reportData.returns, 'return-up-back-outline', Colors.primary.main, 'ReturnReport')}
         {renderCard('Collection', reportData.collections, 'wallet-outline', Colors.warning.main, 'CollectionReport')}
         {renderCard('Punch In', reportData.punchIn, 'finger-print', Colors.status.info || '#00BCD4', 'PunchReport')}
+
+        {/* Punch Logs Card */}
+        <TouchableOpacity
+          style={styles.card}
+          onPress={() => router.push('/Reports/PunchLogsReport')}
+          activeOpacity={0.7}
+        >
+          <LinearGradient
+            colors={['#7c3aed15', '#7c3aed08']}
+            style={styles.cardHeader}
+          >
+            <View style={styles.headerLeft}>
+              <View style={[styles.iconContainer, { backgroundColor: '#7c3aed20' }]}>
+                <Ionicons name="list-circle-outline" size={24} color="#7c3aed" />
+              </View>
+              <Text style={[styles.cardTitle, { color: '#7c3aed' }]}>PUNCH LOGS</Text>
+            </View>
+            <Ionicons name="chevron-forward" size={20} color="#7c3aed" />
+          </LinearGradient>
+          <View style={styles.cardContent}>
+            <View style={styles.statsRow}>
+              <View style={styles.statBox}>
+                <Text style={styles.statLabel}>Today's Attempts</Text>
+                <Text style={styles.statValue}>{punchLogCount.total}</Text>
+              </View>
+              <View style={styles.statDivider} />
+              <View style={styles.statBox}>
+                <Text style={styles.statLabel}>Success</Text>
+                <Text style={[styles.statValue, { color: '#16a34a' }]}>{punchLogCount.success}</Text>
+              </View>
+              <View style={styles.statDivider} />
+              <View style={styles.statBox}>
+                <Text style={styles.statLabel}>Failed</Text>
+                <Text style={[styles.statValue, { color: '#dc2626' }]}>{punchLogCount.failed}</Text>
+              </View>
+            </View>
+          </View>
+        </TouchableOpacity>
 
         <View style={styles.footer}>
           <Text style={styles.footerText}>Click on any card to view detailed reports</Text>

@@ -494,6 +494,12 @@ export default function PunchInScreen() {
 
     if (punchStatus?.is_punched_in) {
       Alert.alert("Already Punched In", `You are currently punched in at ${punchStatus.firm_name}. Please punch out first.`);
+      await savePunchAttemptLog({
+        status: 'failed',
+        time: new Date().toISOString(),
+        firm_name: customer?.name || '',
+        message: `Already punched in at ${punchStatus.firm_name}`,
+      });
       return;
     }
 
@@ -524,6 +530,12 @@ export default function PunchInScreen() {
 
     if (!freshLocation) {
       Alert.alert("Location Missing", "Could not get your current location. Please enable GPS and try again.");
+      await savePunchAttemptLog({
+        status: 'failed',
+        time: new Date().toISOString(),
+        firm_name: customer?.name || '',
+        message: 'Location unavailable — GPS could not be acquired',
+      });
       return;
     }
 
@@ -572,26 +584,64 @@ export default function PunchInScreen() {
       const { status } = await ImagePicker.requestCameraPermissionsAsync();
       if (status !== 'granted') {
         Alert.alert("Permission denied", "Camera permission is required for selfie verification.");
+        const _cust = getSelectedCustomerDetails();
+        await savePunchAttemptLog({
+          status: 'failed',
+          time: new Date().toISOString(),
+          firm_name: _cust?.name || '',
+          message: 'Camera permission denied',
+        });
         return;
       }
 
       const result = await ImagePicker.launchCameraAsync({
-        cameraType: 'front',
+        cameraType: ImagePicker.CameraType.front,
         allowsEditing: false,
         quality: 0.3,
-        base64: false,
       });
 
       if (!result.canceled && result.assets && result.assets.length > 0) {
         const uri = result.assets[0].uri;
         setSelfieUri(uri);
         setShowConfirmModal(true);
+      } else if (result.canceled) {
+        const _cust = getSelectedCustomerDetails();
+        await savePunchAttemptLog({
+          status: 'failed',
+          time: new Date().toISOString(),
+          firm_name: _cust?.name || '',
+          message: 'User cancelled camera without taking selfie',
+        });
       }
     } catch (error) {
       console.error("[PunchIn] Camera error:", error);
       Alert.alert("Error", "Failed to open camera. Please try again.");
+      try {
+        const _cust = getSelectedCustomerDetails();
+        await savePunchAttemptLog({
+          status: 'failed',
+          time: new Date().toISOString(),
+          firm_name: _cust?.name || '',
+          message: `Camera error: ${error?.message || 'Unknown error'}`,
+        });
+      } catch (_) {}
     }
   };
+
+  // ---- Punch Attempt Log Helper ----
+  const savePunchAttemptLog = async ({ status, time, firm_name, message }) => {
+    try {
+      const username = await AsyncStorage.getItem("username");
+      const logKey = `punch_attempt_logs_${username}`;
+      const existingRaw = await AsyncStorage.getItem(logKey);
+      let logs = existingRaw ? JSON.parse(existingRaw) : [];
+      logs = [{ status, time, firm_name: firm_name || '', message: message || '' }, ...logs].slice(0, 100);
+      await AsyncStorage.setItem(logKey, JSON.stringify(logs));
+    } catch (e) {
+      console.error('[PunchIn] Log save error:', e);
+    }
+  };
+  // ------------------------------------
 
   const confirmPunchIn = async () => {
     console.log('[PunchIn] ===== confirmPunchIn CALLED =====');
@@ -603,6 +653,12 @@ export default function PunchInScreen() {
 
     if (!selfieUri || !customer || !currentLocation) {
       console.log('[PunchIn] Missing required data, returning');
+      await savePunchAttemptLog({
+        status: 'failed',
+        time: new Date().toISOString(),
+        firm_name: customer?.name || '',
+        message: `Missing required data — selfie: ${!!selfieUri}, customer: ${!!customer}, location: ${!!currentLocation}`,
+      });
       return;
     }
 
@@ -698,6 +754,15 @@ export default function PunchInScreen() {
         }
         // ------------------------------------
 
+        // --- Save Punch Attempt Log (Success) ---
+        await savePunchAttemptLog({
+          status: 'success',
+          time: new Date().toISOString(),
+          firm_name: result.data.firm_name,
+          message: `Punched in at ${result.data.firm_name}`
+        });
+        // ----------------------------------------
+
         // Immediately update punch status from the response — no second API call needed.
         // This avoids a timing issue where checkPunchStatus() might not yet see the new punch-in.
         setPunchStatus({
@@ -725,9 +790,27 @@ export default function PunchInScreen() {
           ]
         );
       } else {
+        // --- Save Punch Attempt Log (Failed - API rejection) ---
+        await savePunchAttemptLog({
+          status: 'failed',
+          time: new Date().toISOString(),
+          firm_name: customer?.name || '',
+          message: result.message || 'API rejected punch-in'
+        });
+        // -------------------------------------------------------
         Alert.alert("Error", result.message || "Failed to punch in");
       }
     } catch (error) {
+      // --- Save Punch Attempt Log (Failed - Network/Exception) ---
+      try {
+        await savePunchAttemptLog({
+          status: 'failed',
+          time: new Date().toISOString(),
+          firm_name: getSelectedCustomerDetails()?.name || '',
+          message: error?.message || 'Network or unexpected error'
+        });
+      } catch (_) {}
+      // -----------------------------------------------------------
       console.error("[PunchIn] Error:", error);
       Alert.alert("Error", "Failed to punch in. Please try again.");
     } finally {
