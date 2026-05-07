@@ -1,4 +1,4 @@
-# TaskPrimeSAS - Offline-First Mobile App
+# TaskPrimeSAS - Offline-First Mobile AppP
 
 React Native mobile application with comprehensive offline functionality using SQLite database.
 
