@@ -635,7 +635,7 @@ export default function PunchInScreen() {
       const logKey = `punch_attempt_logs_${username}`;
       const existingRaw = await AsyncStorage.getItem(logKey);
       let logs = existingRaw ? JSON.parse(existingRaw) : [];
-      logs = [{ status, time, firm_name: firm_name || '', message: message || '' }, ...logs].slice(0, 100);
+      logs = [{ status, time, firm_name: firm_name || '', message: message || '' }, ...logs];
       await AsyncStorage.setItem(logKey, JSON.stringify(logs));
     } catch (e) {
       console.error('[PunchIn] Log save error:', e);
@@ -746,8 +746,8 @@ export default function PunchInScreen() {
             duration: null
           };
           
-          // Prepend and keep last 50
-          history = [newRecord, ...history].slice(0, 50);
+          // Prepend and keep all
+          history = [newRecord, ...history];
           await AsyncStorage.setItem(historyKey, JSON.stringify(history));
         } catch (histErr) {
           console.error('[PunchIn] History save error:', histErr);
