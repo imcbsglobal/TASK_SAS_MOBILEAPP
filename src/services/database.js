@@ -375,8 +375,8 @@ class DatabaseService {
                 // Determine existing customer count for optimization decision if needed, 
                 // but for now we just use REPLACE to handle updates/inserts efficiently
 
-                // Chunk size of 50 is safe for parameters (50 * 11 params = 550 < 999 limit)
-                const chunkSize = 50;
+                // Reduced chunk size for iOS stability (30 * 13 = 390 params)
+                const chunkSize = 30;
                 let insertedCount = 0;
 
                 for (let i = 0; i < customers.length; i += chunkSize) {
@@ -537,8 +537,8 @@ class DatabaseService {
             await this.db.runAsync('BEGIN TRANSACTION');
 
             try {
-                // Chunk size of 50 (50 * 12 = 600 params, safe under 999/2000 limit)
-                const chunkSize = 50;
+                // Reduced chunk size for iOS stability (25 * 14 = 350 params)
+                const chunkSize = 25;
                 let insertedCount = 0;
 
                 for (let i = 0; i < products.length; i += chunkSize) {
@@ -907,9 +907,8 @@ class DatabaseService {
                 // Clear all existing batches first
                 await this.db.runAsync('DELETE FROM batches');
 
-                // Insert in chunks of 50 for maximum safety with parameters (SQLite has ~999 param limit usually)
-                // 50 items * 16 params = 800 params, which is safe
-                const chunkSize = 50;
+                // Reduced chunk size for iOS stability (20 * 21 = 420 params)
+                const chunkSize = 20;
                 let insertedCount = 0;
 
                 for (let i = 0; i < batchesWithProductCode.length; i += chunkSize) {
@@ -981,7 +980,7 @@ class DatabaseService {
                     }
 
                     await this.db.runAsync(
-                        'INSERT INTO batches (product_code, batch_id, barcode, mrp, retail, dp, cb, cost, quantity, expiry_date, second_price, third_price, net_rate, pk_shop, sales, fourth_price, nlc1, bmrp, prices, created_at, updated_at) VALUES ' + placeholders,
+                        'INSERT OR REPLACE INTO batches (product_code, batch_id, barcode, mrp, retail, dp, cb, cost, quantity, expiry_date, second_price, third_price, net_rate, pk_shop, sales, fourth_price, nlc1, bmrp, prices, created_at, updated_at) VALUES ' + placeholders,
                         values
                     );
 
@@ -1073,7 +1072,8 @@ class DatabaseService {
             try {
                 await this.db.runAsync('DELETE FROM product_photos');
 
-                const chunkSize = 100; // Safe for 4 params * 100 = 400
+                // Further reduced chunk size for iOS stability (25 * 21 = 525 params)
+                const chunkSize = 25;
                 let insertedCount = 0;
 
                 for (let i = 0; i < photosWithProductCode.length; i += chunkSize) {
@@ -1093,7 +1093,7 @@ class DatabaseService {
                     }
 
                     await this.db.runAsync(
-                        'INSERT INTO product_photos (product_code, url, order_index, created_at) VALUES ' + placeholders,
+                        'INSERT OR REPLACE INTO product_photos (product_code, url, order_index, created_at) VALUES ' + placeholders,
                         values
                     );
 
@@ -1309,7 +1309,7 @@ class DatabaseService {
                     }
 
                     await this.db.runAsync(
-                        'INSERT INTO product_goddowns (product_code, barcode, name, quantity, created_at) VALUES ' + placeholders,
+                        'INSERT OR REPLACE INTO product_goddowns (product_code, barcode, name, quantity, created_at) VALUES ' + placeholders,
                         values
                     );
 

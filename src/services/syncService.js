@@ -201,7 +201,7 @@ class SyncService {
             const token = await this.getAuthToken();
 
             // Primary endpoint (returns products with batches, photos, goddowns)
-            const primaryEndpoint = `${API_BASE_URL}/product/get-product-details`;
+            const primaryEndpoint = `${API_BASE_URL}/product/get-product-details/`;
 
             console.log(`[Sync] Fetching products with batches from: ${primaryEndpoint}`);
 
@@ -221,6 +221,7 @@ class SyncService {
                         'Content-Type': 'application/json',
                         'Accept': 'application/json',
                     },
+                    cache: 'no-store',
                     signal: controller.signal
                 });
                 clearTimeout(timeoutId);
@@ -237,7 +238,7 @@ class SyncService {
             }
 
             const data = await response.json();
-            console.log(`[Sync] Product API response type:`, typeof data);
+            console.log(`[Sync] Product API response type: ${typeof data}, products count: ${Array.isArray(data) ? data.length : (data.products?.length || data.data?.length || 0)}`);
 
             // Parse response
             let products = [];

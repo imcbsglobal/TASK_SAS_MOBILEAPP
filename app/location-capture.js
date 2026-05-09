@@ -55,6 +55,7 @@ export default function LocationCaptureScreen() {
     const [currentRegion, setCurrentRegion] = useState(null);
     const [markerCoordinate, setMarkerCoordinate] = useState(null);
     const [capturedAddress, setCapturedAddress] = useState(null); // Added state for address
+    const [showAreaPicker, setShowAreaPicker] = useState(false); // iOS Area Picker
 
     useEffect(() => {
         loadData();
@@ -424,23 +425,33 @@ export default function LocationCaptureScreen() {
                 {/* Area Selection */}
                 <View style={styles.inputGroup}>
                     <Text style={styles.label}>Area (Optional)</Text>
-                    <View style={styles.pickerWrapper}>
-                        <Picker
-                            selectedValue={selectedArea}
-                            onValueChange={(itemValue) => setSelectedArea(itemValue)}
-                            style={styles.picker}
-                            dropdownIconColor={Colors.text.primary}
+                    {Platform.OS === 'ios' ? (
+                        <TouchableOpacity 
+                            style={styles.searchablePickerTrigger}
+                            onPress={() => setShowAreaPicker(true)}
                         >
-                            {areas.map((area, index) => (
-                                <Picker.Item
-                                    key={index}
-                                    label={area}
-                                    value={area}
-                                    style={styles.pickerItem}
-                                />
-                            ))}
-                        </Picker>
-                    </View>
+                            <Text style={styles.searchablePickerText}>{selectedArea || "All"}</Text>
+                            <Ionicons name="chevron-down" size={20} color={Colors.text.tertiary} />
+                        </TouchableOpacity>
+                    ) : (
+                        <View style={styles.pickerWrapper}>
+                            <Picker
+                                selectedValue={selectedArea}
+                                onValueChange={(itemValue) => setSelectedArea(itemValue)}
+                                style={styles.picker}
+                                dropdownIconColor={Colors.text.primary}
+                            >
+                                {areas.map((area, index) => (
+                                    <Picker.Item
+                                        key={index}
+                                        label={area}
+                                        value={area}
+                                        style={styles.pickerItem}
+                                    />
+                                ))}
+                            </Picker>
+                        </View>
+                    )}
                 </View>
 
                 {/* Customer Selection - Searchable */}
@@ -636,6 +647,48 @@ export default function LocationCaptureScreen() {
                                 ListEmptyComponent={
                                     <Text style={styles.pickerEmptyText}>No customers found</Text>
                                 }
+                            />
+                        </View>
+                    </View>
+                </Modal>
+
+                {/* Area Picker Modal (iOS Only) */}
+                <Modal
+                    visible={showAreaPicker}
+                    animationType="fade"
+                    transparent={true}
+                    onRequestClose={() => setShowAreaPicker(false)}
+                >
+                    <View style={styles.modalOverlay}>
+                        <View style={[styles.pickerModalContent, { height: 'auto', maxHeight: '60%' }]}>
+                            <View style={styles.pickerModalHeader}>
+                                <Text style={styles.pickerModalTitle}>Select Area</Text>
+                                <TouchableOpacity onPress={() => setShowAreaPicker(false)}>
+                                    <Ionicons name="close-circle" size={24} color={Colors.text.tertiary} />
+                                </TouchableOpacity>
+                            </View>
+                            <FlatList
+                                data={areas}
+                                keyExtractor={(item, index) => index.toString()}
+                                renderItem={({ item }) => (
+                                    <TouchableOpacity 
+                                        style={styles.pickerListItem}
+                                        onPress={() => {
+                                            setSelectedArea(item);
+                                            setShowAreaPicker(false);
+                                        }}
+                                    >
+                                        <Text style={[
+                                            styles.pickerListItemText,
+                                            selectedArea === item && { color: Colors.primary.main, fontWeight: '700' }
+                                        ]}>
+                                            {item}
+                                        </Text>
+                                        {selectedArea === item && (
+                                            <Ionicons name="checkmark-circle" size={20} color={Colors.primary.main} />
+                                        )}
+                                    </TouchableOpacity>
+                                )}
                             />
                         </View>
                     </View>

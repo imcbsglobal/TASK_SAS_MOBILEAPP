@@ -9,6 +9,8 @@ import {
   Alert,
   BackHandler,
   FlatList,
+  Modal,
+  Platform,
   SafeAreaView,
   StyleSheet,
   Text,
@@ -29,6 +31,7 @@ export default function DebtorsScreen() {
   const [selectedArea, setSelectedArea] = useState("All");
   const [totalStores, setTotalStores] = useState(0);
   const [totalBalance, setTotalBalance] = useState(0);
+  const [showAreaPicker, setShowAreaPicker] = useState(false); // iOS Area Picker
   const router = useRouter();
 
   // back handler
@@ -243,23 +246,36 @@ export default function DebtorsScreen() {
 
         {/* Area Filter */}
         <View style={styles.areaFilterContainer}>
-          <View style={styles.pickerWrapper}>
-            <Picker
-              selectedValue={selectedArea}
-              onValueChange={(itemValue) => setSelectedArea(itemValue)}
-              style={styles.picker}
-              dropdownIconColor={Colors.text.primary}
+          {Platform.OS === 'ios' ? (
+            <TouchableOpacity 
+              style={styles.searchablePickerTrigger}
+              onPress={() => setShowAreaPicker(true)}
             >
-              {areas.map((area, index) => (
-                <Picker.Item
-                  key={index}
-                  label={area}
-                  value={area}
-                  style={{ fontSize: 14, color: Colors.text.primary }}
-                />
-              ))}
-            </Picker>
-          </View>
+              <View style={styles.areaPickerContent}>
+                <Ionicons name="location" size={18} color={Colors.primary.main} />
+                <Text style={styles.searchablePickerText}>{selectedArea || "All Areas"}</Text>
+              </View>
+              <Ionicons name="chevron-down" size={20} color={Colors.text.tertiary} />
+            </TouchableOpacity>
+          ) : (
+            <View style={styles.pickerWrapper}>
+              <Picker
+                selectedValue={selectedArea}
+                onValueChange={(itemValue) => setSelectedArea(itemValue)}
+                style={styles.picker}
+                dropdownIconColor={Colors.text.primary}
+              >
+                {areas.map((area, index) => (
+                  <Picker.Item
+                    key={index}
+                    label={area}
+                    value={area}
+                    style={{ fontSize: 14, color: Colors.text.primary }}
+                  />
+                ))}
+              </Picker>
+            </View>
+          )}
         </View>
 
         {/* Search */}
@@ -296,6 +312,48 @@ export default function DebtorsScreen() {
           }
         />
       </SafeAreaView>
+
+      {/* Area Picker Modal (iOS Only) */}
+      <Modal
+        visible={showAreaPicker}
+        animationType="fade"
+        transparent={true}
+        onRequestClose={() => setShowAreaPicker(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={[styles.pickerModalContent, { height: 'auto', maxHeight: '60%' }]}>
+            <View style={styles.pickerModalHeader}>
+              <Text style={styles.pickerModalTitle}>Select Area</Text>
+              <TouchableOpacity onPress={() => setShowAreaPicker(false)}>
+                <Ionicons name="close-circle" size={24} color={Colors.text.tertiary} />
+              </TouchableOpacity>
+            </View>
+            <FlatList
+              data={areas}
+              keyExtractor={(item, index) => index.toString()}
+              renderItem={({ item }) => (
+                <TouchableOpacity 
+                  style={styles.pickerListItem}
+                  onPress={() => {
+                    setSelectedArea(item);
+                    setShowAreaPicker(false);
+                  }}
+                >
+                  <Text style={[
+                    styles.pickerListItemText,
+                    selectedArea === item && { color: Colors.primary.main, fontWeight: '700' }
+                  ]}>
+                    {item}
+                  </Text>
+                  {selectedArea === item && (
+                    <Ionicons name="checkmark-circle" size={20} color={Colors.primary.main} />
+                  )}
+                </TouchableOpacity>
+              )}
+            />
+          </View>
+        </View>
+      </Modal>
     </LinearGradient>
   );
 }
@@ -496,4 +554,67 @@ const styles = StyleSheet.create({
     // height: 50, // Android sometimes needs explicit height, but usually auto works
     color: Colors.text.primary,
   },
-});
+  // iOS Picker Styles
+  searchablePickerTrigger: {
+    backgroundColor: '#ffffff',
+    borderRadius: BorderRadius.lg,
+    borderWidth: 1,
+    borderColor: Colors.border.light,
+    padding: Spacing.md,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    ...Shadows.sm,
+  },
+  areaPickerContent: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.sm,
+  },
+  searchablePickerText: {
+    fontSize: Typography.sizes.base,
+    color: Colors.text.primary,
+    fontWeight: '600',
+  },
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.5)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: Spacing.lg,
+  },
+  pickerModalContent: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: BorderRadius.xl,
+    padding: Spacing.md,
+    width: '100%',
+    maxWidth: 400,
+    ...Shadows.xl,
+  },
+  pickerModalHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: Spacing.md,
+    paddingHorizontal: Spacing.xs
+  },
+  pickerModalTitle: {
+    fontSize: Typography.sizes.lg,
+    fontWeight: '700',
+    color: Colors.text.primary,
+  },
+  pickerListItem: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingVertical: Spacing.md,
+    paddingHorizontal: Spacing.xs,
+    borderBottomWidth: 1,
+    borderBottomColor: Colors.border.light,
+  },
+  pickerListItemText: {
+    fontSize: Typography.sizes.base,
+    color: Colors.text.primary,
+    fontWeight: '500',
+  },
+});
