@@ -178,6 +178,7 @@ export const Gradients = {
   error: ['#EF4444', '#F87171'], // Alias for danger
   info: ['#06B6D4', '#3B82F6'],
   surface: ['#FFFFFF', '#F9FAFB'],
+  dark: ['#1F2937', '#111827'],
 };
 
 // Spacing Scale

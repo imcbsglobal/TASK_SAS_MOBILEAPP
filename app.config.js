@@ -2,7 +2,7 @@ module.exports = {
   expo: {
     name: "TaskSAS",
     slug: "TaskSAS1",
-    version: "1.0.0",
+    version: "1.0.1",
     orientation: "portrait",
     icon: "./assets/images/app-icon.png",
     scheme: "tasksas",
@@ -30,6 +30,7 @@ module.exports = {
 },
     android: {
       package: "com.imcbs.TASKSAS",
+      versionCode: 6,
       adaptiveIcon: {
         foregroundImage: "./assets/images/adaptive-icon.png",
         backgroundColor: "#ffffff"

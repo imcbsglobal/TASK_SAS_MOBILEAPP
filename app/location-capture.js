@@ -10,16 +10,8 @@ import {
     ActivityIndicator,
     Alert,
     Dimensions, // Added TextInput
-    FlatList // Added FlatList for searchable modal
-    ,
-
-
-
-
-
-
-
-
+    FlatList,
+    Platform,
     Modal,
     SafeAreaView,
     ScrollView,
@@ -462,13 +454,16 @@ export default function LocationCaptureScreen() {
                             setShowCustomerPicker(true);
                         }}
                     >
-                        <Text style={[
-                            styles.searchablePickerText,
-                            !selectedCustomerCode && styles.placeholderText
-                        ]}>
+                        <Text 
+                            style={[
+                                styles.searchablePickerText,
+                                !selectedCustomerCode && styles.placeholderText
+                            ]}
+                            allowFontScaling={false}
+                        >
                             {selectedCustomer ? selectedCustomer.name : "Select a customer..."}
                         </Text>
-                        <Ionicons name="caret-down" size={12} color={Colors.text.tertiary} />
+                        <Ionicons name="caret-down" size={12} color={Colors.text.primary} />
                     </TouchableOpacity>
                     <Text style={styles.helperText}>
                         {filteredCustomers.length} customers in selected area
@@ -498,41 +493,43 @@ export default function LocationCaptureScreen() {
 
         return (
             <View style={styles.actionContainer}>
-                {/* Customer Card */}
-                <View style={styles.customerCard}>
-                    <View style={styles.customerHeader}>
-                        <View style={styles.avatar}>
-                            <Text style={styles.avatarText}>{customer.name.charAt(0)}</Text>
+                {/* Customer Card with iOS shadow fix */}
+                <View style={styles.customerCardWrapper}>
+                    <View style={styles.customerCard}>
+                        <View style={styles.customerHeader}>
+                            <View style={styles.avatar}>
+                                <Text style={styles.avatarText}>{customer.name.charAt(0)}</Text>
+                            </View>
+                            <View style={styles.customerInfo}>
+                                <Text style={styles.customerNameBig}>{customer.name}</Text>
+                                <Text style={styles.customerCode}>{customer.code}</Text>
+                            </View>
                         </View>
-                        <View style={styles.customerInfo}>
-                            <Text style={styles.customerNameBig}>{customer.name}</Text>
-                            <Text style={styles.customerCode}>{customer.code}</Text>
+
+                        <View style={styles.divider} />
+
+                        <View style={styles.detailsGrid}>
+                            <View style={styles.detailItem}>
+                                <Ionicons name="location-outline" size={16} color={Colors.text.secondary} />
+                                <Text style={styles.detailText}>{customer.place || "N/A"}</Text>
+                            </View>
+                            <View style={styles.detailItem}>
+                                <Ionicons name="call-outline" size={16} color={Colors.text.secondary} />
+                                <Text style={styles.detailText}>{customer.phone || "N/A"}</Text>
+                            </View>
+                            <View style={styles.detailItem}>
+                                <Ionicons name="map-outline" size={16} color={Colors.text.secondary} />
+                                <Text style={styles.detailText}>{customer.area || "N/A"}</Text>
+                            </View>
                         </View>
+
+                        {isCaptured && (
+                            <View style={styles.statusBadge}>
+                                <Ionicons name="checkmark-circle" size={16} color={Colors.success.main} />
+                                <Text style={styles.statusText}>Location Captured</Text>
+                            </View>
+                        )}
                     </View>
-
-                    <View style={styles.divider} />
-
-                    <View style={styles.detailsGrid}>
-                        <View style={styles.detailItem}>
-                            <Ionicons name="location-outline" size={16} color={Colors.text.secondary} />
-                            <Text style={styles.detailText}>{customer.place || "N/A"}</Text>
-                        </View>
-                        <View style={styles.detailItem}>
-                            <Ionicons name="call-outline" size={16} color={Colors.text.secondary} />
-                            <Text style={styles.detailText}>{customer.phone || "N/A"}</Text>
-                        </View>
-                        <View style={styles.detailItem}>
-                            <Ionicons name="map-outline" size={16} color={Colors.text.secondary} />
-                            <Text style={styles.detailText}>{customer.area || "N/A"}</Text>
-                        </View>
-                    </View>
-
-                    {isCaptured && (
-                        <View style={styles.statusBadge}>
-                            <Ionicons name="checkmark-circle" size={16} color={Colors.success.main} />
-                            <Text style={styles.statusText}>Location Captured</Text>
-                        </View>
-                    )}
                 </View>
 
                 {/* Actions */}
@@ -726,7 +723,6 @@ const styles = StyleSheet.create({
     },
     safeArea: {
         flex: 1,
-        marginTop: 35,
     },
     header: {
         flexDirection: 'row',
@@ -787,8 +783,8 @@ const styles = StyleSheet.create({
         overflow: 'hidden',
     },
     picker: {
-        // height: 50,
         color: Colors.text.primary,
+        height: Platform.OS === 'ios' ? 150 : 50,
     },
     pickerItem: {
         fontSize: Typography.sizes.base,
@@ -808,6 +804,7 @@ const styles = StyleSheet.create({
     searchablePickerText: {
         fontSize: Typography.sizes.base,
         color: Colors.text.primary,
+        fontWeight: '500',
     },
     placeholderText: {
         color: Colors.text.tertiary,
@@ -924,11 +921,16 @@ const styles = StyleSheet.create({
     actionContainer: {
         gap: Spacing.xl,
     },
+    customerCardWrapper: {
+        marginBottom: Spacing.xl,
+        backgroundColor: 'transparent',
+        ...Shadows.lg,
+    },
     customerCard: {
         backgroundColor: '#FFFFFF',
         borderRadius: BorderRadius.xl,
         padding: Spacing.xl,
-        ...Shadows.lg,
+        overflow: 'hidden',
     },
     customerHeader: {
         flexDirection: 'row',

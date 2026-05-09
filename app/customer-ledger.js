@@ -249,9 +249,10 @@ export default function CustomerLedgerScreen() {
       <SafeAreaView style={styles.safeArea}>
         <StatusBar barStyle="dark-content" />
 
-        {/* Header Card */}
+        {/* Header Card with iOS shadow fix */}
         <View style={styles.headerContainer}>
-          <LinearGradient colors={Gradients.primary} style={styles.headerCard}>
+          <View style={styles.headerShadowWrapper}>
+            <LinearGradient colors={Gradients.primary} style={styles.headerCard}>
             <View style={styles.headerTop}>
               <TouchableOpacity onPress={() => router.back()} style={styles.backBtn}>
                 <Ionicons name="arrow-back" size={24} color="#FFF" />
@@ -296,6 +297,7 @@ export default function CustomerLedgerScreen() {
             </View>
           </LinearGradient>
         </View>
+      </View>
 
         {showDatePicker && (
           <DateTimePicker
@@ -382,11 +384,14 @@ const styles = StyleSheet.create({
   },
 
   headerContainer: { paddingHorizontal: Spacing.lg, paddingTop: Spacing.sm },
+  headerShadowWrapper: {
+    backgroundColor: 'transparent',
+    ...Shadows.md,
+  },
   headerCard: {
     borderRadius: BorderRadius.xl,
     padding: Spacing.md,
-    marginBottom: Spacing.md,
-    ...Shadows.md,
+    overflow: 'hidden',
   },
   headerTop: { flexDirection: 'row', alignItems: 'center', marginBottom: Spacing.md },
   backBtn: { paddingRight: Spacing.md },

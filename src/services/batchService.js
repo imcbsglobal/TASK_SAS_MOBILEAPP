@@ -186,6 +186,11 @@ class BatchService {
 
             await dbService.init();
 
+            // Check total products count for debugging
+            const totalProductsCount = await dbService.db.getFirstAsync('SELECT COUNT(*) as count FROM products');
+            console.log(`[BatchService] Database current state: ${totalProductsCount?.count || 0} total products`);
+
+
             // Get products with optional pagination and filters
             let query = 'SELECT * FROM products WHERE 1=1';
             const params = [];

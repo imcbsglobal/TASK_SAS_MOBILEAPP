@@ -14,9 +14,10 @@ import {
   Text,
   TouchableOpacity,
   View,
+  Platform,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { BorderRadius, Colors, Spacing, Typography } from '../../constants/theme';
+import { BorderRadius, Colors, Spacing, Typography, Gradients, Shadows } from '../../constants/theme';
 
 const getDateStrings = () => {
   const now = new Date();
@@ -104,126 +105,433 @@ export default function ReturnReportScreen() {
     : new Date(yesterday).toLocaleDateString('en-IN', { weekday: 'long', day: '2-digit', month: 'long', year: 'numeric' });
 
   return (
-    <SafeAreaView style={styles.container}>
-      <StatusBar barStyle="dark-content" />
-      <View style={[styles.header, { paddingTop: insets.top }]}>
-        <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
-          <Ionicons name="chevron-back" size={28} color={Colors.text.primary} />
-        </TouchableOpacity>
-        <Text style={styles.headerTitle}>Return Report</Text>
-        <TouchableOpacity onPress={fetchReport} style={styles.backButton}>
-          {loading
-            ? <ActivityIndicator size="small" color={Colors.primary.main} />
-            : <Ionicons name="refresh" size={24} color={Colors.primary.main} />}
-        </TouchableOpacity>
-      </View>
+    <View style={styles.container}>
+      <StatusBar barStyle="light-content" />
+      
+      <View style={styles.headerShadowWrapper}>
+        <LinearGradient
+          colors={Gradients.error}
+          style={[styles.header, { paddingTop: insets.top + 10 }]}
+        >
+          <View style={styles.headerContent}>
+            <TouchableOpacity onPress={() => router.back()} style={styles.headerAction}>
+              <Ionicons name="chevron-back" size={24} color="#FFFFFF" />
+            </TouchableOpacity>
+            <View style={styles.headerTitleContainer}>
+              <Text style={styles.headerTitle}>Return Report</Text>
+              <Text style={styles.headerSubtitle}>{selectedDateLabel}</Text>
+            </View>
+            <TouchableOpacity onPress={fetchReport} style={styles.headerAction}>
+              {loading ? (
+                <ActivityIndicator size="small" color="#FFFFFF" />
+              ) : (
+                <Ionicons name="refresh" size={22} color="#FFFFFF" />
+              )}
+            </TouchableOpacity>
+          </View>
 
-      <View style={styles.tabRow}>
-        {['today', 'yesterday'].map(day => (
-          <TouchableOpacity
-            key={day}
-            style={[styles.tab, selectedDay === day && styles.tabActive]}
-            onPress={() => setSelectedDay(day)}
-            activeOpacity={0.8}
-          >
-            <Text style={[styles.tabText, selectedDay === day && styles.tabTextActive]}>
-              {day === 'today' ? 'Today' : 'Yesterday'}
-            </Text>
-            {(day === 'today' ? todayCount : yesterdayCount) > 0 && (
-              <View style={[styles.tabBadge, selectedDay === day && styles.tabBadgeActive]}>
-                <Text style={[styles.tabBadgeText, selectedDay === day && styles.tabBadgeTextActive]}>
-                  {day === 'today' ? todayCount : yesterdayCount}
-                </Text>
-              </View>
-            )}
-          </TouchableOpacity>
-        ))}
+          <View style={styles.tabContainer}>
+            <View style={styles.tabBackground}>
+              <TouchableOpacity
+                style={[styles.tab, selectedDay === 'today' && styles.activeTab]}
+                onPress={() => setSelectedDay('today')}
+              >
+                <Text style={[styles.tabText, selectedDay === 'today' && styles.activeTabText]}>Today</Text>
+                {todayCount > 0 && (
+                  <View style={[styles.badge, selectedDay === 'today' ? styles.activeBadge : styles.inactiveBadge]}>
+                    <Text style={[styles.badgeText, selectedDay === 'today' && styles.activeBadgeText]}>{todayCount}</Text>
+                  </View>
+                )}
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.tab, selectedDay === 'yesterday' && styles.activeTab]}
+                onPress={() => setSelectedDay('yesterday')}
+              >
+                <Text style={[styles.tabText, selectedDay === 'yesterday' && styles.activeTabText]}>Yesterday</Text>
+                {yesterdayCount > 0 && (
+                  <View style={[styles.badge, selectedDay === 'yesterday' ? styles.activeBadge : styles.inactiveBadge]}>
+                    <Text style={[styles.badgeText, selectedDay === 'yesterday' && styles.activeBadgeText]}>{yesterdayCount}</Text>
+                  </View>
+                )}
+              </TouchableOpacity>
+            </View>
+          </View>
+        </LinearGradient>
       </View>
 
       <ScrollView
         contentContainerStyle={styles.scrollContent}
         showsVerticalScrollIndicator={false}
-        refreshControl={<RefreshControl refreshing={loading} onRefresh={fetchReport} colors={[Colors.primary.main]} />}
+        refreshControl={
+          <RefreshControl 
+            refreshing={loading} 
+            onRefresh={fetchReport} 
+            tintColor={Colors.error.main}
+          />
+        }
       >
-        <LinearGradient colors={[Colors.primary.main, Colors.primary[700] || '#1e40af']} style={styles.summaryCard}>
-          <Text style={styles.bannerDate}>{selectedDateLabel}</Text>
-          <View style={styles.statRow}>
-            <View style={styles.statBox}>
-              <Text style={styles.statLabel}>Returns Count</Text>
-              <Text style={styles.statValue}>{data.count}</Text>
-            </View>
-            <View style={styles.divider} />
-            <View style={styles.statBox}>
-              <Text style={styles.statLabel}>Returned Amount</Text>
-              <Text style={styles.statValue}>₹{data.amount.toLocaleString()}</Text>
+        <View style={styles.statsContainer}>
+          <View style={styles.statWrapper}>
+            <View style={[styles.statCard, { borderLeftColor: Colors.error.main }]}>
+              <View style={[styles.statIconContainer, { backgroundColor: Colors.error[50] }]}>
+                <Ionicons name="arrow-undo" size={20} color={Colors.error.main} />
+              </View>
+              <View>
+                <Text style={styles.statLabel}>Total Returns</Text>
+                <Text style={styles.statValue}>{data.count}</Text>
+              </View>
             </View>
           </View>
-        </LinearGradient>
-
-        <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Customer Breakdown</Text>
-          {Object.keys(data.customers).length > 0 ? (
-            Object.entries(data.customers).map(([name, stats], index) => (
-              <View key={index} style={styles.customerItem}>
-                <View style={styles.customerInfo}>
-                  <View style={styles.avatar}>
-                    <Text style={styles.avatarText}>{name.charAt(0).toUpperCase()}</Text>
-                  </View>
-                  <View style={{ flex: 1 }}>
-                    <Text style={styles.customerName} numberOfLines={1}>{name}</Text>
-                    <Text style={styles.customerAmount}>₹{stats.amount.toLocaleString()}</Text>
-                  </View>
-                </View>
-                <View style={styles.badge}>
-                  <Text style={styles.badgeText}>{stats.count} Returns</Text>
-                </View>
+          <View style={styles.statWrapper}>
+            <View style={[styles.statCard, { borderLeftColor: Colors.error.main }]}>
+              <View style={[styles.statIconContainer, { backgroundColor: Colors.error[50] }]}>
+                <Ionicons name="wallet-outline" size={20} color={Colors.error.main} />
               </View>
-            ))
-          ) : (
-            <View style={styles.emptyState}>
-              <Ionicons name="return-up-back-outline" size={48} color={Colors.neutral?.[300] || '#CBD5E1'} />
-              <Text style={styles.emptyText}>No returns for {selectedDay === 'today' ? 'today' : 'yesterday'}</Text>
+              <View>
+                <Text style={styles.statLabel}>Total Amount</Text>
+                <Text style={[styles.statValue, { color: Colors.error.main }]}>
+                  ₹{data.amount.toLocaleString('en-IN')}
+                </Text>
+              </View>
             </View>
-          )}
+          </View>
         </View>
+
+        <View style={styles.sectionHeader}>
+          <Text style={styles.sectionTitle}>Customer Breakdown</Text>
+          <View style={styles.sectionBadge}>
+            <Text style={styles.sectionBadgeText}>{Object.keys(data.customers).length} Customers</Text>
+          </View>
+        </View>
+
+        {Object.keys(data.customers).length > 0 ? (
+          Object.entries(data.customers).map(([name, stats], index) => (
+            <View key={index} style={styles.customerCardWrapper}>
+              <TouchableOpacity style={styles.customerCard}>
+                <View style={styles.customerHeader}>
+                  <View style={styles.avatarContainer}>
+                    <LinearGradient
+                      colors={[Colors.error[50], Colors.error[100]]}
+                      style={styles.avatar}
+                    >
+                      <Text style={styles.avatarText}>{name.charAt(0).toUpperCase()}</Text>
+                    </LinearGradient>
+                  </View>
+                  <View style={styles.customerInfo}>
+                    <Text style={styles.customerName} numberOfLines={1}>{name}</Text>
+                    <Text style={styles.orderCount}>{stats.count} {stats.count === 1 ? 'Return' : 'Returns'}</Text>
+                  </View>
+                  <View style={styles.amountContainer}>
+                    <Text style={styles.amountLabel}>Total Value</Text>
+                    <Text style={styles.amountValue}>₹{stats.amount.toLocaleString('en-IN')}</Text>
+                  </View>
+                </View>
+                <View style={styles.cardFooter}>
+                  <View style={styles.progressBarBg}>
+                    <View 
+                      style={[
+                        styles.progressBarFill, 
+                        { width: `${Math.min((stats.amount / (data.amount || 1)) * 100, 100)}%` }
+                      ]} 
+                    />
+                  </View>
+                  <Text style={styles.percentageText}>
+                    {((stats.amount / (data.amount || 1)) * 100).toFixed(1)}% share
+                  </Text>
+                </View>
+              </TouchableOpacity>
+            </View>
+          ))
+        ) : (
+          <View style={styles.emptyContainer}>
+            <View style={styles.emptyIconCircle}>
+              <Ionicons name="refresh-circle-outline" size={40} color={Colors.text.tertiary} />
+            </View>
+            <Text style={styles.emptyTitle}>No Returns Found</Text>
+            <Text style={styles.emptySubtitle}>
+              There are no sales return records for {selectedDay === 'today' ? 'today' : 'yesterday'}.
+            </Text>
+          </View>
+        )}
+        
+        <View style={{ height: 40 }} />
       </ScrollView>
-    </SafeAreaView>
+    </View>
   );
 }
 
-const ACCENT = Colors.primary.main;
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#F8F9FA' },
-  header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: Spacing.lg, paddingBottom: Spacing.md, backgroundColor: '#FFFFFF', borderBottomWidth: 1, borderBottomColor: Colors.neutral?.[200] || '#E2E8F0' },
-  backButton: { padding: 4 },
-  headerTitle: { fontSize: Typography.sizes.lg, fontWeight: '800', color: Colors.text.primary },
-  tabRow: { flexDirection: 'row', backgroundColor: '#FFFFFF', paddingHorizontal: Spacing.lg, paddingBottom: Spacing.sm, borderBottomWidth: 1, borderBottomColor: Colors.neutral?.[200] || '#E2E8F0', gap: Spacing.sm },
-  tab: { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', paddingVertical: 10, borderRadius: BorderRadius.lg, backgroundColor: '#F1F5F9', gap: 6 },
-  tabActive: { backgroundColor: ACCENT },
-  tabText: { fontSize: 14, fontWeight: '700', color: Colors.text?.secondary || '#64748b' },
-  tabTextActive: { color: '#FFFFFF' },
-  tabBadge: { backgroundColor: '#CBD5E1', borderRadius: 10, paddingHorizontal: 7, paddingVertical: 2, minWidth: 22, alignItems: 'center' },
-  tabBadgeActive: { backgroundColor: 'rgba(255,255,255,0.3)' },
-  tabBadgeText: { fontSize: 11, fontWeight: '800', color: '#475569' },
-  tabBadgeTextActive: { color: '#FFFFFF' },
-  scrollContent: { padding: Spacing.lg },
-  summaryCard: { borderRadius: BorderRadius.xl, padding: Spacing.xl, marginBottom: Spacing.xl, elevation: 8, shadowColor: ACCENT, shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.3, shadowRadius: 10 },
-  bannerDate: { fontSize: 11, color: 'rgba(255,255,255,0.75)', fontWeight: '600', textTransform: 'uppercase', letterSpacing: 0.5, textAlign: 'center', marginBottom: Spacing.md },
-  statRow: { flexDirection: 'row', alignItems: 'center' },
-  statBox: { flex: 1, alignItems: 'center' },
-  statLabel: { fontSize: 12, color: 'rgba(255,255,255,0.8)', marginBottom: 4, fontWeight: '600' },
-  statValue: { fontSize: 24, color: '#FFFFFF', fontWeight: '800' },
-  divider: { width: 1, height: 40, backgroundColor: 'rgba(255,255,255,0.3)' },
-  section: { backgroundColor: '#FFFFFF', borderRadius: BorderRadius.xl, padding: Spacing.lg, elevation: 2 },
-  sectionTitle: { fontSize: 14, fontWeight: '700', color: Colors.text.secondary, marginBottom: Spacing.lg, textTransform: 'uppercase', letterSpacing: 0.5 },
-  customerItem: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: Spacing.md, paddingBottom: Spacing.md, borderBottomWidth: 1, borderBottomColor: Colors.neutral?.[100] || '#F1F5F9' },
-  customerInfo: { flexDirection: 'row', alignItems: 'center', flex: 1 },
-  avatar: { width: 36, height: 36, borderRadius: 18, backgroundColor: Colors.primary?.[50] || '#eff6ff', justifyContent: 'center', alignItems: 'center', marginRight: 12 },
-  avatarText: { color: ACCENT, fontWeight: '700', fontSize: 14 },
-  customerName: { fontSize: 15, fontWeight: '600', color: Colors.text.primary },
-  customerAmount: { fontSize: 13, color: Colors.text.tertiary, fontWeight: '500', marginTop: 2 },
-  badge: { backgroundColor: Colors.primary?.[50] || '#eff6ff', paddingHorizontal: 10, paddingVertical: 4, borderRadius: BorderRadius.full },
-  badgeText: { color: ACCENT, fontSize: 12, fontWeight: '700' },
-  emptyState: { alignItems: 'center', paddingVertical: Spacing['3xl'], gap: Spacing.md },
-  emptyText: { color: Colors.text.tertiary, fontSize: 16, fontWeight: '500' },
+  container: {
+    flex: 1,
+    backgroundColor: '#F8FAFC',
+  },
+  headerShadowWrapper: {
+    backgroundColor: 'transparent',
+    ...Shadows.lg,
+    zIndex: 10,
+  },
+  header: {
+    paddingHorizontal: Spacing.xl,
+    paddingBottom: Spacing.xl,
+    borderBottomLeftRadius: 30,
+    borderBottomRightRadius: 30,
+    overflow: 'hidden',
+  },
+  headerContent: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: Spacing.xl,
+  },
+  headerAction: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: 'rgba(255,255,255,0.15)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  headerTitleContainer: {
+    alignItems: 'center',
+  },
+  headerTitle: {
+    fontSize: 20,
+    fontWeight: '800',
+    color: '#FFFFFF',
+    letterSpacing: 0.5,
+  },
+  headerSubtitle: {
+    fontSize: 12,
+    color: 'rgba(255,255,255,0.8)',
+    marginTop: 2,
+    fontWeight: '500',
+  },
+  tabContainer: {
+    marginTop: 5,
+  },
+  tabBackground: {
+    flexDirection: 'row',
+    backgroundColor: 'rgba(0,0,0,0.1)',
+    borderRadius: 15,
+    padding: 4,
+  },
+  tab: {
+    flex: 1,
+    flexDirection: 'row',
+    height: 40,
+    borderRadius: 12,
+    justifyContent: 'center',
+    alignItems: 'center',
+    gap: 8,
+  },
+  activeTab: {
+    backgroundColor: '#FFFFFF',
+    ...Shadows.sm,
+  },
+  tabText: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: 'rgba(255,255,255,0.9)',
+  },
+  activeTabText: {
+    color: Colors.error.main,
+  },
+  badge: {
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 8,
+    minWidth: 20,
+    alignItems: 'center',
+  },
+  activeBadge: {
+    backgroundColor: Colors.error[50],
+  },
+  inactiveBadge: {
+    backgroundColor: 'rgba(255,255,255,0.2)',
+  },
+  badgeText: {
+    fontSize: 10,
+    fontWeight: '800',
+  },
+  activeBadgeText: {
+    color: Colors.error.main,
+  },
+  scrollContent: {
+    padding: Spacing.xl,
+  },
+  statsContainer: {
+    flexDirection: 'row',
+    gap: Spacing.md,
+    marginBottom: Spacing.xl,
+  },
+  statWrapper: {
+    flex: 1,
+    backgroundColor: 'transparent',
+    ...Shadows.md,
+  },
+  statCard: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 16,
+    padding: Spacing.lg,
+    borderLeftWidth: 4,
+    overflow: 'hidden',
+  },
+  statIconContainer: {
+    width: 36,
+    height: 36,
+    borderRadius: 10,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginBottom: Spacing.sm,
+  },
+  statLabel: {
+    fontSize: 11,
+    color: Colors.text.tertiary,
+    fontWeight: '600',
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
+  },
+  statValue: {
+    fontSize: 18,
+    fontWeight: '800',
+    color: Colors.text.primary,
+    marginTop: 2,
+  },
+  sectionHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: Spacing.lg,
+    paddingHorizontal: 4,
+  },
+  sectionTitle: {
+    fontSize: 16,
+    fontWeight: '700',
+    color: Colors.text.primary,
+  },
+  sectionBadge: {
+    backgroundColor: Colors.neutral[100],
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: BorderRadius.full,
+  },
+  sectionBadgeText: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: Colors.text.secondary,
+  },
+  customerCardWrapper: {
+    marginBottom: Spacing.md,
+    backgroundColor: 'transparent',
+    ...Shadows.sm,
+  },
+  customerCard: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 20,
+    padding: Spacing.lg,
+    borderWidth: 1,
+    borderColor: '#F1F5F9',
+    overflow: 'hidden',
+  },
+  customerHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  avatarContainer: {
+    marginRight: Spacing.md,
+  },
+  avatar: {
+    width: 44,
+    height: 44,
+    borderRadius: 14,
+    justifyContent: 'center',
+    alignItems: 'center',
+    overflow: 'hidden',
+  },
+  avatarText: {
+    fontSize: 18,
+    fontWeight: '800',
+    color: Colors.error.main,
+  },
+  customerInfo: {
+    flex: 1,
+  },
+  customerName: {
+    fontSize: 15,
+    fontWeight: '700',
+    color: Colors.text.primary,
+  },
+  orderCount: {
+    fontSize: 12,
+    color: Colors.text.tertiary,
+    marginTop: 2,
+    fontWeight: '500',
+  },
+  amountContainer: {
+    alignItems: 'flex-end',
+  },
+  amountLabel: {
+    fontSize: 10,
+    color: Colors.text.tertiary,
+    textTransform: 'uppercase',
+    fontWeight: '600',
+  },
+  amountValue: {
+    fontSize: 15,
+    fontWeight: '800',
+    color: Colors.text.primary,
+    marginTop: 1,
+  },
+  cardFooter: {
+    marginTop: Spacing.md,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.sm,
+  },
+  progressBarBg: {
+    flex: 1,
+    height: 4,
+    backgroundColor: '#F1F5F9',
+    borderRadius: 2,
+    overflow: 'hidden',
+  },
+  progressBarFill: {
+    height: '100%',
+    backgroundColor: Colors.error.main,
+    borderRadius: 2,
+  },
+  percentageText: {
+    fontSize: 10,
+    fontWeight: '700',
+    color: Colors.text.tertiary,
+    width: 55,
+    textAlign: 'right',
+  },
+  emptyContainer: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 60,
+  },
+  emptyIconCircle: {
+    width: 80,
+    height: 80,
+    borderRadius: 40,
+    backgroundColor: '#F1F5F9',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginBottom: Spacing.lg,
+  },
+  emptyTitle: {
+    fontSize: 18,
+    fontWeight: '700',
+    color: Colors.text.primary,
+    marginBottom: Spacing.xs,
+  },
+  emptySubtitle: {
+    fontSize: 14,
+    color: Colors.text.tertiary,
+    textAlign: 'center',
+    paddingHorizontal: 40,
+    lineHeight: 20,
+  },
 });

@@ -501,10 +501,9 @@ const styles = StyleSheet.create({
     width: 48,
     height: 48,
     borderRadius: BorderRadius.full,
-    backgroundColor: 'rgba(255,255,255,0.2)',
+    backgroundColor: 'rgba(255,255,255,0.25)',
     justifyContent: 'center',
     alignItems: 'center',
-    backdropFilter: 'blur(10px)', // works on some versions, ignored on others
   },
   cardContent: {
     marginTop: Spacing.sm,

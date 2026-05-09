@@ -1108,13 +1108,16 @@ export default function PunchInScreen() {
               setShowCustomerPicker(true);
             }}
           >
-            <Text style={[
-              styles.searchablePickerText,
-              !selectedCustomerCode && styles.placeholderText
-            ]}>
+            <Text 
+              style={[
+                styles.searchablePickerText,
+                !selectedCustomerCode && styles.placeholderText
+              ]}
+              allowFontScaling={false}
+            >
               {selectedCustomer ? selectedCustomer.name : "Select a customer..."}
             </Text>
-            <Ionicons name="caret-down" size={12} color={Colors.text.tertiary} />
+            <Ionicons name="caret-down" size={12} color={Colors.text.primary} />
           </TouchableOpacity>
           <Text style={styles.helperText}>
             {filteredCustomers.length} total customers
@@ -1703,6 +1706,7 @@ const styles = StyleSheet.create({
   },
   picker: {
     color: Colors.text.primary,
+    height: Platform.OS === 'ios' ? 150 : 50,
   },
   pickerItem: {
     fontSize: Typography.sizes.base,
@@ -1722,6 +1726,7 @@ const styles = StyleSheet.create({
   searchablePickerText: {
     fontSize: Typography.sizes.base,
     color: Colors.text.primary,
+    fontWeight: '500',
   },
   placeholderText: {
     color: Colors.text.tertiary,

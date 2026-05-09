@@ -14,18 +14,24 @@ import {
   Text,
   TouchableOpacity,
   View,
+  Platform,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { BorderRadius, Colors, Spacing, Typography } from '../../constants/theme';
+import { BorderRadius, Colors, Spacing, Typography, Gradients, Shadows } from '../../constants/theme';
 
-// Returns YYYY-MM-DD for today and yesterday
 const getDateStrings = () => {
   const now = new Date();
   const today = now.toISOString().split('T')[0];
   const yest = new Date(now);
   yest.setDate(yest.getDate() - 1);
-  const yesterday = yest.toISOString().split('T')[0];
-  return { today, yesterday };
+  return { today, yesterday: yest.toISOString().split('T')[0] };
+};
+
+const formatTime = (isoString) => {
+  try {
+    const d = new Date(isoString);
+    return d.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: true });
+  } catch { return '—'; }
 };
 
 export default function PunchLogsReportScreen() {
@@ -33,7 +39,7 @@ export default function PunchLogsReportScreen() {
   const insets = useSafeAreaInsets();
   const [allLogs, setAllLogs] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [selectedDay, setSelectedDay] = useState('today'); // 'today' | 'yesterday'
+  const [selectedDay, setSelectedDay] = useState('today');
 
   const { today, yesterday } = getDateStrings();
 
@@ -43,16 +49,9 @@ export default function PunchLogsReportScreen() {
       const username = await AsyncStorage.getItem('username');
       const logKey = `punch_attempt_logs_${username}`;
       const raw = await AsyncStorage.getItem(logKey);
-      // Keep only last 2 days
-      const parsed = raw ? JSON.parse(raw) : [];
-      const filtered = parsed.filter(l => {
-        const d = l.time?.split('T')[0];
-        return d === today || d === yesterday;
-      });
-      setAllLogs(filtered);
+      setAllLogs(raw ? JSON.parse(raw) : []);
     } catch (e) {
-      console.error('[PunchLogsReport] Fetch error:', e);
-      setAllLogs([]);
+      console.error('[PunchLogs] Error:', e);
     } finally {
       setLoading(false);
     }
@@ -60,392 +59,314 @@ export default function PunchLogsReportScreen() {
 
   useFocusEffect(useCallback(() => { fetchLogs(); }, []));
 
-  // Logs filtered to selected day
-  const displayedLogs = useMemo(() => {
-    const dateStr = selectedDay === 'today' ? today : yesterday;
-    return allLogs.filter(l => l.time?.split('T')[0] === dateStr);
-  }, [allLogs, selectedDay, today, yesterday]);
+  const filteredLogs = useMemo(() => {
+    const target = selectedDay === 'today' ? today : yesterday;
+    return allLogs.filter(l => l.time?.split('T')[0] === target).reverse();
+  }, [allLogs, selectedDay]);
 
-  // Counts for selected day
-  const successCount = displayedLogs.filter(l => l.status === 'success').length;
-  const failedCount = displayedLogs.filter(l => l.status === 'failed').length;
-  const totalCount = displayedLogs.length;
-
-  // Count for tabs (badge)
-  const todayCount = allLogs.filter(l => l.time?.split('T')[0] === today).length;
-  const yesterdayCount = allLogs.filter(l => l.time?.split('T')[0] === yesterday).length;
-
-  const formatTime = (isoString) => {
-    try {
-      const d = new Date(isoString);
-      return d.toLocaleTimeString('en-IN', {
-        hour: '2-digit',
-        minute: '2-digit',
-        second: '2-digit',
-        hour12: true,
-      });
-    } catch {
-      return '—';
-    }
-  };
+  const stats = useMemo(() => {
+    const s = filteredLogs.filter(l => l.status === 'success').length;
+    const f = filteredLogs.filter(l => l.status === 'failed').length;
+    return { success: s, failed: f, total: filteredLogs.length };
+  }, [filteredLogs]);
 
   const selectedDateLabel = selectedDay === 'today'
     ? new Date(today).toLocaleDateString('en-IN', { weekday: 'long', day: '2-digit', month: 'long', year: 'numeric' })
     : new Date(yesterday).toLocaleDateString('en-IN', { weekday: 'long', day: '2-digit', month: 'long', year: 'numeric' });
 
   return (
-    <SafeAreaView style={styles.container}>
-      <StatusBar barStyle="dark-content" />
-
-      {/* Header */}
-      <View style={[styles.header, { paddingTop: insets.top }]}>
-        <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
-          <Ionicons name="chevron-back" size={28} color={Colors.text.primary} />
-        </TouchableOpacity>
-        <Text style={styles.headerTitle}>Punch Logs</Text>
-        <TouchableOpacity onPress={fetchLogs} style={styles.refreshButton}>
-          {loading
-            ? <ActivityIndicator size="small" color={Colors.primary.main} />
-            : <Ionicons name="refresh" size={24} color={Colors.primary.main} />}
-        </TouchableOpacity>
-      </View>
-
-      {/* Day Filter Tabs */}
-      <View style={styles.tabRow}>
-        <TouchableOpacity
-          style={[styles.tab, selectedDay === 'today' && styles.tabActive]}
-          onPress={() => setSelectedDay('today')}
-          activeOpacity={0.8}
+    <View style={styles.container}>
+      <StatusBar barStyle="light-content" />
+      
+      <View style={styles.headerShadowWrapper}>
+        <LinearGradient
+          colors={Gradients.dark}
+          style={[styles.header, { paddingTop: insets.top + 10 }]}
         >
-          <Text style={[styles.tabText, selectedDay === 'today' && styles.tabTextActive]}>
-            Today
-          </Text>
-          {todayCount > 0 && (
-            <View style={[styles.tabBadge, selectedDay === 'today' && styles.tabBadgeActive]}>
-              <Text style={[styles.tabBadgeText, selectedDay === 'today' && styles.tabBadgeTextActive]}>
-                {todayCount}
-              </Text>
+          <View style={styles.headerContent}>
+            <TouchableOpacity onPress={() => router.back()} style={styles.headerAction}>
+              <Ionicons name="chevron-back" size={24} color="#FFFFFF" />
+            </TouchableOpacity>
+            <View style={styles.headerTitleContainer}>
+              <Text style={styles.headerTitle}>Punch Logs</Text>
+              <Text style={styles.headerSubtitle}>{selectedDateLabel}</Text>
             </View>
-          )}
-        </TouchableOpacity>
+            <TouchableOpacity onPress={fetchLogs} style={styles.headerAction}>
+              {loading ? <ActivityIndicator size="small" color="#FFFFFF" /> : <Ionicons name="refresh" size={22} color="#FFFFFF" />}
+            </TouchableOpacity>
+          </View>
 
-        <TouchableOpacity
-          style={[styles.tab, selectedDay === 'yesterday' && styles.tabActive]}
-          onPress={() => setSelectedDay('yesterday')}
-          activeOpacity={0.8}
-        >
-          <Text style={[styles.tabText, selectedDay === 'yesterday' && styles.tabTextActive]}>
-            Yesterday
-          </Text>
-          {yesterdayCount > 0 && (
-            <View style={[styles.tabBadge, selectedDay === 'yesterday' && styles.tabBadgeActive]}>
-              <Text style={[styles.tabBadgeText, selectedDay === 'yesterday' && styles.tabBadgeTextActive]}>
-                {yesterdayCount}
-              </Text>
+          <View style={styles.tabContainer}>
+            <View style={styles.tabBackground}>
+              <TouchableOpacity
+                style={[styles.tab, selectedDay === 'today' && styles.activeTab]}
+                onPress={() => setSelectedDay('today')}
+              >
+                <Text style={[styles.tabText, selectedDay === 'today' && styles.activeTabText]}>Today</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.tab, selectedDay === 'yesterday' && styles.activeTab]}
+                onPress={() => setSelectedDay('yesterday')}
+              >
+                <Text style={[styles.tabText, selectedDay === 'yesterday' && styles.activeTabText]}>Yesterday</Text>
+              </TouchableOpacity>
             </View>
-          )}
-        </TouchableOpacity>
+          </View>
+        </LinearGradient>
       </View>
-
-      {/* Summary Banner */}
-      <LinearGradient colors={['#1e3a8a', '#2563eb']} style={styles.banner}>
-        <Text style={styles.bannerDate}>{selectedDateLabel}</Text>
-        <View style={styles.bannerRow}>
-          <View style={styles.bannerStat}>
-            <Text style={styles.bannerValue}>{totalCount}</Text>
-            <Text style={styles.bannerLabel}>Total Attempts</Text>
-          </View>
-          <View style={styles.bannerDivider} />
-          <View style={styles.bannerStat}>
-            <Text style={[styles.bannerValue, { color: '#4ade80' }]}>{successCount}</Text>
-            <Text style={styles.bannerLabel}>Successful</Text>
-          </View>
-          <View style={styles.bannerDivider} />
-          <View style={styles.bannerStat}>
-            <Text style={[styles.bannerValue, { color: '#f87171' }]}>{failedCount}</Text>
-            <Text style={styles.bannerLabel}>Failed</Text>
-          </View>
-        </View>
-      </LinearGradient>
 
       <ScrollView
         contentContainerStyle={styles.scrollContent}
         showsVerticalScrollIndicator={false}
-        refreshControl={
-          <RefreshControl refreshing={loading} onRefresh={fetchLogs} colors={[Colors.primary.main]} />
-        }
+        refreshControl={<RefreshControl refreshing={loading} onRefresh={fetchLogs} tintColor={Colors.neutral[800]} />}
       >
-        {loading ? (
-          <ActivityIndicator size="large" color={Colors.primary.main} style={{ marginTop: 60 }} />
-        ) : displayedLogs.length === 0 ? (
-          <View style={styles.emptyCard}>
-            <Ionicons name="document-text-outline" size={48} color={Colors.neutral?.[300] || '#CBD5E1'} />
-            <Text style={styles.emptyTitle}>No Logs for {selectedDay === 'today' ? 'Today' : 'Yesterday'}</Text>
-            <Text style={styles.emptySubtitle}>
-              {selectedDay === 'today'
-                ? 'Punch-in attempts today will appear here.'
-                : 'No punch-in attempts were recorded yesterday.'}
-            </Text>
+        <View style={styles.statsRow}>
+          <View style={styles.statBoxWrapper}>
+            <View style={[styles.statBox, { borderBottomColor: Colors.success.main }]}>
+              <Text style={styles.statValue}>{stats.success}</Text>
+              <Text style={styles.statLabel}>Success</Text>
+            </View>
           </View>
-        ) : (
-          displayedLogs.map((log, index) => {
-            const isSuccess = log.status === 'success';
-            const time = formatTime(log.time);
-            return (
-              <View
-                key={index}
-                style={[styles.logCard, isSuccess ? styles.successCard : styles.failedCard]}
-              >
-                {/* Top Row: Badge + Time */}
-                <View style={styles.cardTopRow}>
-                  <View style={[styles.badge, isSuccess ? styles.successBadge : styles.failedBadge]}>
-                    <Ionicons
-                      name={isSuccess ? 'checkmark-circle' : 'close-circle'}
-                      size={14}
-                      color={isSuccess ? '#16a34a' : '#dc2626'}
-                    />
-                    <Text style={[styles.badgeText, { color: isSuccess ? '#16a34a' : '#dc2626' }]}>
-                      {isSuccess ? 'SUCCESS' : 'FAILED'}
+          <View style={styles.statBoxWrapper}>
+            <View style={[styles.statBox, { borderBottomColor: Colors.error.main }]}>
+              <Text style={styles.statValue}>{stats.failed}</Text>
+              <Text style={styles.statLabel}>Failed</Text>
+            </View>
+          </View>
+          <View style={styles.statBoxWrapper}>
+            <View style={[styles.statBox, { borderBottomColor: Colors.primary.main }]}>
+              <Text style={styles.statValue}>{stats.total}</Text>
+              <Text style={styles.statLabel}>Total</Text>
+            </View>
+          </View>
+        </View>
+
+        {filteredLogs.length > 0 ? (
+          filteredLogs.map((log, index) => (
+            <View key={index} style={styles.logCardWrapper}>
+              <View style={styles.logCard}>
+                <View style={styles.logHeader}>
+                  <View style={[styles.statusIndicator, { backgroundColor: log.status === 'success' ? Colors.success.main : Colors.error.main }]} />
+                  <Text style={styles.logTime}>{formatTime(log.time)}</Text>
+                  <View style={[styles.statusBadge, { backgroundColor: log.status === 'success' ? Colors.success[50] : Colors.error[50] }]}>
+                    <Text style={[styles.statusText, { color: log.status === 'success' ? Colors.success.main : Colors.error.main }]}>
+                      {log.status.toUpperCase()}
                     </Text>
                   </View>
-                  <View style={styles.timeBlock}>
-                    <Ionicons name="time-outline" size={13} color={Colors.text?.tertiary || '#94a3b8'} />
-                    <Text style={styles.timeText}>{time}</Text>
-                  </View>
                 </View>
-
-                {/* Firm Name */}
-                {!!log.firm_name && (
-                  <View style={styles.infoRow}>
-                    <Ionicons name="business-outline" size={15} color={Colors.text?.secondary || '#475569'} />
-                    <Text style={styles.firmName} numberOfLines={1}>{log.firm_name}</Text>
-                  </View>
-                )}
-
-                {/* Message */}
-                {!!log.message && (
-                  <View style={styles.infoRow}>
-                    <Ionicons name="information-circle-outline" size={15} color={Colors.text?.tertiary || '#94a3b8'} />
-                    <Text style={styles.messageText} numberOfLines={2}>{log.message}</Text>
-                  </View>
-                )}
+                <Text style={styles.logFirmName} numberOfLines={1}>{log.firm_name || 'System Sync'}</Text>
+                <View style={styles.logDetails}>
+                  <Ionicons 
+                    name={log.status === 'success' ? "checkmark-circle-outline" : "alert-circle-outline"} 
+                    size={14} 
+                    color={Colors.text.tertiary} 
+                  />
+                  <Text style={styles.logMessage} numberOfLines={2}>{log.message}</Text>
+                </View>
               </View>
-            );
-          })
+            </View>
+          ))
+        ) : (
+          <View style={styles.emptyContainer}>
+            <View style={styles.emptyIconCircle}>
+              <Ionicons name="terminal-outline" size={40} color={Colors.text.tertiary} />
+            </View>
+            <Text style={styles.emptyTitle}>No Logs Found</Text>
+            <Text style={styles.emptySubtitle}>No synchronization attempts recorded.</Text>
+          </View>
         )}
+        
         <View style={{ height: 40 }} />
       </ScrollView>
-    </SafeAreaView>
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#F8F9FA' },
-
-  // Header
+  container: {
+    flex: 1,
+    backgroundColor: '#F8FAFC',
+  },
+  headerShadowWrapper: {
+    backgroundColor: 'transparent',
+    ...Shadows.lg,
+    zIndex: 10,
+  },
   header: {
+    paddingHorizontal: Spacing.xl,
+    paddingBottom: Spacing.xl,
+    borderBottomLeftRadius: 30,
+    borderBottomRightRadius: 30,
+    overflow: 'hidden',
+  },
+  headerContent: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    paddingHorizontal: Spacing.lg,
-    paddingBottom: Spacing.md,
-    backgroundColor: '#FFFFFF',
-    borderBottomWidth: 1,
-    borderBottomColor: Colors.neutral?.[200] || '#E2E8F0',
+    marginBottom: Spacing.xl,
   },
-  backButton: { padding: 4 },
-  refreshButton: { padding: 4 },
+  headerAction: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: 'rgba(255,255,255,0.15)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  headerTitleContainer: {
+    alignItems: 'center',
+  },
   headerTitle: {
-    fontSize: Typography.sizes.lg,
+    fontSize: 20,
     fontWeight: '800',
-    color: Colors.text.primary,
+    color: '#FFFFFF',
+    letterSpacing: 0.5,
   },
-
-  // Tabs
-  tabRow: {
+  headerSubtitle: {
+    fontSize: 12,
+    color: 'rgba(255,255,255,0.8)',
+    marginTop: 2,
+    fontWeight: '500',
+  },
+  tabContainer: {
+    marginTop: 5,
+  },
+  tabBackground: {
     flexDirection: 'row',
-    backgroundColor: '#FFFFFF',
-    paddingHorizontal: Spacing.lg,
-    paddingBottom: Spacing.sm,
-    borderBottomWidth: 1,
-    borderBottomColor: Colors.neutral?.[200] || '#E2E8F0',
-    gap: Spacing.sm,
+    backgroundColor: 'rgba(0,0,0,0.2)',
+    borderRadius: 15,
+    padding: 4,
   },
   tab: {
     flex: 1,
-    flexDirection: 'row',
-    alignItems: 'center',
+    height: 36,
+    borderRadius: 12,
     justifyContent: 'center',
-    paddingVertical: 10,
-    borderRadius: BorderRadius.lg,
-    backgroundColor: '#F1F5F9',
-    gap: 6,
+    alignItems: 'center',
   },
-  tabActive: {
-    backgroundColor: '#1e3a8a',
+  activeTab: {
+    backgroundColor: '#FFFFFF',
+    ...Shadows.sm,
   },
   tabText: {
     fontSize: 14,
-    fontWeight: '700',
-    color: Colors.text?.secondary || '#64748b',
-  },
-  tabTextActive: {
-    color: '#FFFFFF',
-  },
-  tabBadge: {
-    backgroundColor: '#CBD5E1',
-    borderRadius: 10,
-    paddingHorizontal: 7,
-    paddingVertical: 2,
-    minWidth: 22,
-    alignItems: 'center',
-  },
-  tabBadgeActive: {
-    backgroundColor: 'rgba(255,255,255,0.25)',
-  },
-  tabBadgeText: {
-    fontSize: 11,
-    fontWeight: '800',
-    color: '#475569',
-  },
-  tabBadgeTextActive: {
-    color: '#FFFFFF',
-  },
-
-  // Banner
-  banner: {
-    paddingVertical: Spacing.lg,
-    paddingHorizontal: Spacing.xl,
-  },
-  bannerDate: {
-    fontSize: 11,
-    color: 'rgba(255,255,255,0.7)',
     fontWeight: '600',
-    textTransform: 'uppercase',
-    letterSpacing: 0.5,
-    textAlign: 'center',
-    marginBottom: Spacing.sm,
+    color: 'rgba(255,255,255,0.9)',
   },
-  bannerRow: {
+  activeTabText: {
+    color: Colors.neutral[900],
+  },
+  scrollContent: {
+    padding: Spacing.xl,
+  },
+  statsRow: {
     flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-around',
+    gap: Spacing.md,
+    marginBottom: Spacing.xl,
   },
-  bannerStat: {
-    alignItems: 'center',
+  statBoxWrapper: {
     flex: 1,
+    backgroundColor: 'transparent',
+    ...Shadows.sm,
   },
-  bannerValue: {
-    fontSize: 30,
-    fontWeight: '900',
-    color: '#FFFFFF',
+  statBox: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 16,
+    padding: Spacing.md,
+    alignItems: 'center',
+    borderBottomWidth: 3,
+    overflow: 'hidden',
   },
-  bannerLabel: {
+  statValue: {
+    fontSize: 18,
+    fontWeight: '800',
+    color: Colors.text.primary,
+  },
+  statLabel: {
     fontSize: 10,
-    color: 'rgba(255,255,255,0.75)',
-    fontWeight: '600',
+    color: Colors.text.tertiary,
+    fontWeight: '700',
     textTransform: 'uppercase',
-    letterSpacing: 0.5,
     marginTop: 2,
   },
-  bannerDivider: {
-    width: 1,
-    height: 40,
-    backgroundColor: 'rgba(255,255,255,0.25)',
+  logCardWrapper: {
+    backgroundColor: 'transparent',
+    ...Shadows.sm,
+    marginBottom: Spacing.md,
   },
-
-  // Scroll
-  scrollContent: {
-    padding: Spacing.lg,
-    paddingTop: Spacing.xl,
-  },
-
-  // Empty
-  emptyCard: {
-    backgroundColor: '#FFFFFF',
-    borderRadius: BorderRadius.xl,
-    padding: Spacing.xl * 2,
-    alignItems: 'center',
-    gap: Spacing.md,
-    marginTop: Spacing.xl,
-    borderStyle: 'dashed',
-    borderWidth: 2,
-    borderColor: Colors.neutral?.[200] || '#E2E8F0',
-  },
-  emptyTitle: {
-    fontSize: Typography.sizes.lg,
-    fontWeight: '800',
-    color: Colors.text.primary,
-  },
-  emptySubtitle: {
-    fontSize: Typography.sizes.sm,
-    color: Colors.text?.tertiary || '#94a3b8',
-    textAlign: 'center',
-  },
-
-  // Log Card
   logCard: {
     backgroundColor: '#FFFFFF',
-    borderRadius: BorderRadius.lg,
-    padding: Spacing.md,
-    marginBottom: Spacing.md,
-    borderLeftWidth: 4,
-    elevation: 2,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.07,
-    shadowRadius: 6,
+    borderRadius: 20,
+    padding: Spacing.lg,
+    borderWidth: 1,
+    borderColor: '#F1F5F9',
+    overflow: 'hidden',
   },
-  successCard: { borderLeftColor: '#16a34a' },
-  failedCard: { borderLeftColor: '#dc2626' },
-
-  cardTopRow: {
+  logHeader: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'space-between',
     marginBottom: 8,
   },
-  badge: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: 10,
-    paddingVertical: 4,
-    borderRadius: 20,
-    gap: 4,
+  statusIndicator: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+    marginRight: 8,
   },
-  successBadge: { backgroundColor: '#dcfce7' },
-  failedBadge: { backgroundColor: '#fee2e2' },
-  badgeText: {
-    fontSize: 11,
-    fontWeight: '800',
-    letterSpacing: 0.5,
-  },
-  timeBlock: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
-  },
-  timeText: {
+  logTime: {
     fontSize: 12,
-    fontWeight: '600',
-    color: Colors.text?.secondary || '#475569',
+    fontWeight: '700',
+    color: Colors.text.secondary,
+    flex: 1,
   },
-  infoRow: {
-    flexDirection: 'row',
-    alignItems: 'flex-start',
-    gap: 6,
-    marginTop: 4,
+  statusBadge: {
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+    borderRadius: 6,
   },
-  firmName: {
-    fontSize: 14,
+  statusText: {
+    fontSize: 10,
+    fontWeight: '800',
+  },
+  logFirmName: {
+    fontSize: 15,
     fontWeight: '700',
     color: Colors.text.primary,
+    marginBottom: 4,
+  },
+  logDetails: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
+  logMessage: {
+    fontSize: 12,
+    color: Colors.text.tertiary,
+    lineHeight: 16,
     flex: 1,
   },
-  messageText: {
-    fontSize: 12,
-    color: Colors.text?.secondary || '#475569',
-    flex: 1,
-    lineHeight: 18,
+  emptyContainer: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 60,
+  },
+  emptyIconCircle: {
+    width: 80,
+    height: 80,
+    borderRadius: 40,
+    backgroundColor: '#F1F5F9',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginBottom: Spacing.lg,
+  },
+  emptyTitle: {
+    fontSize: 18,
+    fontWeight: '700',
+    color: Colors.text.primary,
+    marginBottom: Spacing.xs,
+  },
+  emptySubtitle: {
+    fontSize: 14,
+    color: Colors.text.tertiary,
   },
 });

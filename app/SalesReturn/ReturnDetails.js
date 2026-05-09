@@ -695,18 +695,26 @@ export default function ReturnDetails() {
       console.log('[ReturnDetails] Loading first batch of products...');
       await dbService.init();
 
+      const barcodeBasedList = appSettings?.barcode_based_list === true || appSettings?.barcode_based_list === 'true';
       const currentFilters = {
-        brands: filters.brands,
-        categories: filters.categories,
-        departments: filters.departments,
-        search: filters.search,
-        sortBy: appSettings?.barcode_based_list ? 'barcode' : 'name'
+        brands: filters.brands || [],
+        categories: filters.categories || [],
+        departments: filters.departments || [],
+        search: filters.search || '',
+        sortBy: barcodeBasedList ? 'barcode' : 'name'
       };
 
-      console.log('[ReturnDetails] Using filters:', currentFilters);
+      console.log('[ReturnDetails] Fetching products with filters:', JSON.stringify(currentFilters));
 
       // Load first page with LIMIT and FILTERS
-      const products = await batchService.getProductBatchesOffline(PRODUCTS_PER_PAGE, 0, currentFilters);
+      let products = await batchService.getProductBatchesOffline(PRODUCTS_PER_PAGE, 0, currentFilters);
+
+      // FALLBACK: If no products found with filters, but search is empty, try loading ALL products
+      if (products.length === 0 && !currentFilters.search && currentFilters.brands.length === 0 && currentFilters.categories.length === 0 && currentFilters.departments.length === 0) {
+        console.warn('[ReturnDetails] No products found with filters, attempting raw fallback load...');
+        products = await batchService.getProductBatchesOffline(PRODUCTS_PER_PAGE, 0, { sortBy: currentFilters.sortBy });
+      }
+
 
       // Transform to cards (which expands batches) - pass sortBy for card-level sorting
       const sortBy = appSettings?.barcode_based_list ? 'barcode' : 'name';

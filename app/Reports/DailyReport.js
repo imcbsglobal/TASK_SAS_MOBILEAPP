@@ -14,10 +14,11 @@ import {
   Text,
   TouchableOpacity,
   View,
-  RefreshControl
+  RefreshControl,
+  Platform,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { BorderRadius, Colors, Gradients, Spacing, Typography } from '../../constants/theme';
+import { BorderRadius, Colors, Gradients, Spacing, Typography, Shadows } from '../../constants/theme';
 import dbService from '../../src/services/database';
 import savedOrdersDbService from '../../src/services/savedOrdersDb';
 
@@ -52,7 +53,6 @@ export default function DailyReportScreen() {
         let pending = [];
         let uploaded = [];
 
-        // Fetch Pending from AsyncStorage
         let storageKey = "";
         if (category === 'Order') storageKey = `placed_orders_${username}`;
         else if (category === 'Sales') storageKey = `placed_sales_${username}`;
@@ -66,7 +66,6 @@ export default function DailyReportScreen() {
           });
         }
 
-        // Fetch Uploaded from API
         let url = "";
         if (category === 'Order') url = `https://tasksas.com/api/item-orders/list-all?client_id=${clientId}`;
         else if (category === 'Sales') url = `https://tasksas.com/api/sales/list-all`;
@@ -90,7 +89,7 @@ export default function DailyReportScreen() {
               return apiUser === currentUsername && itemDate === today;
             });
           }
-        } catch (e) { console.log(`[Reports] Uploaded ${category} fetch error:`, e); }
+        } catch (e) { console.log(`[DailyReport] Uploaded ${category} fetch error:`, e); }
 
         const all = [...pending, ...uploaded];
         let totalAmount = 0;
@@ -99,56 +98,33 @@ export default function DailyReportScreen() {
         all.forEach(item => {
           const amount = parseFloat(item.total || 0);
           totalAmount += amount;
-          const custName = item.customer_name || item.customer || 'Unknown';
-          customerMap[custName] = (customerMap[custName] || 0) + 1;
+          const name = item.customer_name || item.customer || 'Unknown';
+          if (!customerMap[name]) customerMap[name] = { count: 0, amount: 0 };
+          customerMap[name].count += 1;
+          customerMap[name].amount += amount;
         });
 
         return { count: all.length, amount: totalAmount, customers: customerMap };
       };
 
-      const fetchCollections = async () => {
-        try {
-          // Fetch Pending from Database
-          await dbService.init();
-          const pending = await dbService.getOfflineCollections(false);
-          const todaysPending = pending.filter(item => {
-            const itemDate = item.date?.split('T')[0];
-            return itemDate === today;
-          });
-
-          // Fetch Saved (Uploaded) from SavedOrdersDB
-          const saved = await savedOrdersDbService.getSavedTransactions('Collection');
-          const todaysSaved = saved.filter(item => {
-            const itemDate = (item.synced_at || item.date)?.split('T')[0];
-            return itemDate === today;
-          });
-
-          const all = [...todaysPending, ...todaysSaved];
-          let totalAmount = 0;
-          let customerMap = {};
-
-          all.forEach(item => {
-            const amount = parseFloat(item.amount || 0);
-            totalAmount += amount;
-            const custName = item.customer_name || 'Unknown';
-            customerMap[custName] = (customerMap[custName] || 0) + 1;
-          });
-
-          return { count: all.length, amount: totalAmount, customers: customerMap };
-        } catch (e) {
-          console.log('[Reports] Collection fetch error:', e);
-          return { count: 0, amount: 0, customers: {} };
-        }
-      };
-
-      const [orderRes, salesRes, returnRes, collectionRes] = await Promise.all([
+      const [orders, sales, returns] = await Promise.all([
         fetchSection('Order'),
         fetchSection('Sales'),
-        fetchSection('Return'),
-        fetchCollections()
+        fetchSection('Return')
       ]);
 
-      let punchStatusData = { is_punched_in: false, firm_name: '', punchin_time: '' };
+      await dbService.init();
+      const pendingColl = await dbService.getOfflineCollections(false);
+      const savedColl = await savedOrdersDbService.getSavedTransactions('Collection');
+      const allColl = [...pendingColl, ...savedColl].filter(item => {
+        const d = (item.date || item.synced_at)?.split('T')[0];
+        return d === today;
+      });
+      let collTotal = 0;
+      allColl.forEach(c => collTotal += parseFloat(c.amount || 0));
+      const collections = { count: allColl.length, amount: collTotal };
+
+      let punchIn = { is_punched_in: false, firm_name: '', punchin_time: '' };
       try {
         const pResp = await fetch('https://tasksas.com/api/punch-status/', {
           method: 'GET',
@@ -157,305 +133,387 @@ export default function DailyReportScreen() {
         if (pResp.ok) {
           const pJson = await pResp.json();
           if (pJson.success && pJson.is_punched_in && pJson.data) {
-            punchStatusData = {
+            punchIn = {
               is_punched_in: true,
               firm_name: pJson.data.firm_name,
               punchin_time: pJson.data.punchin_time
             };
           }
         }
-      } catch (e) { console.log('[Reports] Punch status fetch error:', e); }
+      } catch (e) {}
 
-      // Fetch Punch Attempt Logs count for today
-      try {
-        const logKey = `punch_attempt_logs_${username}`;
-        const logsRaw = await AsyncStorage.getItem(logKey);
-        if (logsRaw) {
-          const allLogs = JSON.parse(logsRaw);
-          const todayLogs = allLogs.filter(l => l.time?.split('T')[0] === today);
-          setPunchLogCount({
-            total: todayLogs.length,
-            success: todayLogs.filter(l => l.status === 'success').length,
-            failed: todayLogs.filter(l => l.status === 'failed').length,
-          });
-        } else {
-          setPunchLogCount({ total: 0, success: 0, failed: 0 });
-        }
-      } catch (e) { console.log('[Reports] Punch logs fetch error:', e); }
+      const logKey = `punch_attempt_logs_${username}`;
+      const logRaw = await AsyncStorage.getItem(logKey);
+      const logParsed = logRaw ? JSON.parse(logRaw) : [];
+      const logToday = logParsed.filter(l => l.time?.split('T')[0] === today);
+      const punchLogs = {
+        total: logToday.length,
+        success: logToday.filter(l => l.status === 'success').length,
+        failed: logToday.filter(l => l.status === 'failed').length
+      };
 
-      setReportData({
-        orders: orderRes,
-        sales: salesRes,
-        returns: returnRes,
-        collections: collectionRes,
-        punchIn: punchStatusData
-      });
+      setReportData({ orders, sales, returns, collections, punchIn });
+      setPunchLogCount(punchLogs);
 
     } catch (error) {
-      console.error('[Reports] Error:', error);
+      console.error('[DailyReport] Fetch error:', error);
     } finally {
       setLoading(false);
     }
   };
 
-  useFocusEffect(
-    useCallback(() => {
-      fetchDailyReport();
-    }, [])
-  );
+  useFocusEffect(useCallback(() => { fetchDailyReport(); }, []));
 
-  const renderCard = (title, data, icon, color, route) => (
-    <TouchableOpacity 
-      style={styles.card} 
-      onPress={() => router.push(`/Reports/${route}`)}
-      activeOpacity={0.7}
-    >
-      <LinearGradient
-        colors={[color + '15', color + '08']}
-        style={styles.cardHeader}
+  const formatCurrency = (val) => `₹${parseFloat(val || 0).toLocaleString('en-IN')}`;
+
+  const renderKPI = (title, count, amount, icon, colors, route) => (
+    <View style={styles.kpiWrapper}>
+      <TouchableOpacity 
+        style={styles.kpiCard} 
+        onPress={() => router.push(route)}
+        activeOpacity={0.7}
       >
-        <View style={styles.headerLeft}>
-          <View style={[styles.iconContainer, { backgroundColor: color + '20' }]}>
-            <Ionicons name={icon} size={24} color={color} />
-          </View>
-          <Text style={[styles.cardTitle, { color: color }]}>{title}</Text>
+        <View style={[styles.kpiIconContainer, { backgroundColor: colors[0] + '15' }]}>
+          <Ionicons name={icon} size={24} color={colors[0]} />
         </View>
-        <Ionicons name="chevron-forward" size={20} color={color} />
-      </LinearGradient>
-
-      <View style={styles.cardContent}>
-        {route === 'PunchReport' ? (
-          <View style={styles.punchSummary}>
-            <Text style={styles.statusText}>
-              {data.is_punched_in ? 'Punched In' : 'Not Punched In'}
-            </Text>
-            {data.is_punched_in && (
-              <Text style={styles.subText} numberOfLines={1}>
-                at {data.firm_name}
-              </Text>
-            )}
-          </View>
-        ) : (
-          <View style={styles.statsRow}>
-            <View style={styles.statBox}>
-              <Text style={styles.statLabel}>Count</Text>
-              <Text style={styles.statValue}>{data.count}</Text>
-            </View>
-            <View style={styles.statDivider} />
-            <View style={styles.statBox}>
-              <Text style={styles.statLabel}>Total Amount</Text>
-              <Text style={styles.statValue}>₹{data.amount.toLocaleString()}</Text>
-            </View>
-          </View>
-        )}
-      </View>
-    </TouchableOpacity>
+        <View style={styles.kpiContent}>
+          <Text style={styles.kpiTitle}>{title}</Text>
+          <Text style={styles.kpiAmount}>{formatCurrency(amount)}</Text>
+          <Text style={styles.kpiCount}>{count} {count === 1 ? 'Record' : 'Records'}</Text>
+        </View>
+        <Ionicons name="chevron-forward" size={20} color={Colors.neutral[300]} />
+      </TouchableOpacity>
+    </View>
   );
+
+  const todayLabel = new Date().toLocaleDateString('en-IN', { 
+    weekday: 'long', 
+    day: '2-digit', 
+    month: 'long' 
+  });
 
   return (
-    <SafeAreaView style={styles.container}>
-      <StatusBar barStyle="dark-content" />
-      <View style={[styles.header, { paddingTop: insets.top }]}>
-        <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
-          <Ionicons name="chevron-back" size={28} color={Colors.text.primary} />
-        </TouchableOpacity>
-        <Text style={styles.headerTitle}>Daily Reports</Text>
-        <TouchableOpacity onPress={fetchDailyReport} style={styles.refreshButton}>
-          {loading ? (
-            <ActivityIndicator size="small" color={Colors.primary.main} />
-          ) : (
-            <Ionicons name="refresh" size={24} color={Colors.primary.main} />
-          )}
-        </TouchableOpacity>
+    <View style={styles.container}>
+      <StatusBar barStyle="light-content" />
+      
+      {/* Header with Shadow Wrapper for iOS */}
+      <View style={styles.headerShadowWrapper}>
+        <LinearGradient colors={Gradients.primary} style={[styles.header, { paddingTop: insets.top + 10 }]}>
+          <View style={styles.headerTop}>
+            <TouchableOpacity onPress={() => router.back()} style={styles.headerAction}>
+              <Ionicons name="chevron-back" size={24} color="#FFFFFF" />
+            </TouchableOpacity>
+            <Text style={styles.headerTitle}>Business Overview</Text>
+            <TouchableOpacity onPress={fetchDailyReport} style={styles.headerAction}>
+              <Ionicons name="refresh" size={20} color="#FFFFFF" />
+            </TouchableOpacity>
+          </View>
+          <View style={styles.headerDateContainer}>
+            <Ionicons name="calendar-outline" size={16} color="rgba(255,255,255,0.7)" />
+            <Text style={styles.headerDate}>{todayLabel}</Text>
+          </View>
+        </LinearGradient>
       </View>
 
-      <ScrollView
+      <ScrollView 
         contentContainerStyle={styles.scrollContent}
         showsVerticalScrollIndicator={false}
-        refreshControl={
-          <RefreshControl refreshing={loading} onRefresh={fetchDailyReport} colors={[Colors.primary.main]} />
-        }
+        refreshControl={<RefreshControl refreshing={loading} onRefresh={fetchDailyReport} tintColor={Colors.primary.main} />}
       >
-        <Text style={styles.dateText}>
-          {new Date().toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}
-        </Text>
-
-        {renderCard('Orders', reportData.orders, 'cube-outline', Colors.secondary.main, 'OrderReport')}
-        {renderCard('Sales', reportData.sales, 'cart-outline', Colors.success.main, 'SalesReport')}
-        {renderCard('Returns', reportData.returns, 'return-up-back-outline', Colors.primary.main, 'ReturnReport')}
-        {renderCard('Collection', reportData.collections, 'wallet-outline', Colors.warning.main, 'CollectionReport')}
-        {renderCard('Punch In', reportData.punchIn, 'finger-print', Colors.status.info || '#00BCD4', 'PunchReport')}
-
-        {/* Punch Logs Card */}
-        <TouchableOpacity
-          style={styles.card}
-          onPress={() => router.push('/Reports/PunchLogsReport')}
-          activeOpacity={0.7}
-        >
-          <LinearGradient
-            colors={['#7c3aed15', '#7c3aed08']}
-            style={styles.cardHeader}
+        {/* Punch In Banner with Shadow Wrapper for iOS */}
+        <View style={styles.punchBannerWrapper}>
+          <TouchableOpacity 
+            style={styles.punchBannerContainer}
+            onPress={() => router.push('/Reports/PunchReport')}
+            activeOpacity={0.9}
           >
-            <View style={styles.headerLeft}>
-              <View style={[styles.iconContainer, { backgroundColor: '#7c3aed20' }]}>
-                <Ionicons name="list-circle-outline" size={24} color="#7c3aed" />
+            <LinearGradient
+              colors={reportData.punchIn.is_punched_in ? Gradients.success : Gradients.dark}
+              start={{ x: 0, y: 0 }}
+              end={{ x: 1, y: 0 }}
+              style={styles.punchGradient}
+            >
+              <View style={styles.punchLeft}>
+                <View style={styles.punchIconCircle}>
+                  <Ionicons 
+                    name={reportData.punchIn.is_punched_in ? "location" : "location-outline"} 
+                    size={24} 
+                    color="#FFFFFF" 
+                  />
+                </View>
+                <View>
+                  <Text style={styles.punchStatusLabel}>
+                    {reportData.punchIn.is_punched_in ? 'ACTIVE PUNCH-IN' : 'NOT PUNCHED IN'}
+                  </Text>
+                  <Text style={styles.punchFirmName} numberOfLines={1}>
+                    {reportData.punchIn.is_punched_in ? reportData.punchIn.firm_name : 'No active session'}
+                  </Text>
+                </View>
               </View>
-              <Text style={[styles.cardTitle, { color: '#7c3aed' }]}>PUNCH LOGS</Text>
-            </View>
-            <Ionicons name="chevron-forward" size={20} color="#7c3aed" />
-          </LinearGradient>
-          <View style={styles.cardContent}>
-            <View style={styles.statsRow}>
-              <View style={styles.statBox}>
-                <Text style={styles.statLabel}>Today's Attempts</Text>
-                <Text style={styles.statValue}>{punchLogCount.total}</Text>
-              </View>
-              <View style={styles.statDivider} />
-              <View style={styles.statBox}>
-                <Text style={styles.statLabel}>Success</Text>
-                <Text style={[styles.statValue, { color: '#16a34a' }]}>{punchLogCount.success}</Text>
-              </View>
-              <View style={styles.statDivider} />
-              <View style={styles.statBox}>
-                <Text style={styles.statLabel}>Failed</Text>
-                <Text style={[styles.statValue, { color: '#dc2626' }]}>{punchLogCount.failed}</Text>
-              </View>
-            </View>
-          </View>
-        </TouchableOpacity>
-
-        <View style={styles.footer}>
-          <Text style={styles.footerText}>Click on any card to view detailed reports</Text>
+              <Ionicons name="arrow-forward" size={20} color="rgba(255,255,255,0.6)" />
+            </LinearGradient>
+          </TouchableOpacity>
         </View>
+
+        {/* KPI Grid */}
+        <View style={styles.sectionHeader}>
+          <Text style={styles.sectionTitle}>Performance Metrics</Text>
+        </View>
+
+        <View style={styles.kpiList}>
+          {renderKPI('Total Orders', reportData.orders.count, reportData.orders.amount, 'cart', [Colors.primary.main], '/Reports/OrderReport')}
+          {renderKPI('Total Sales', reportData.sales.count, reportData.sales.amount, 'receipt', [Colors.secondary.main], '/Reports/SalesReport')}
+          {renderKPI('Sales Returns', reportData.returns.count, reportData.returns.amount, 'arrow-undo', [Colors.error.main], '/Reports/ReturnReport')}
+          {renderKPI('Total Collections', reportData.collections.count, reportData.collections.amount, 'card', [Colors.success.main], '/Reports/CollectionReport')}
+        </View>
+
+        {/* Sync Status Section */}
+        <View style={styles.sectionHeader}>
+          <Text style={styles.sectionTitle}>System Status</Text>
+        </View>
+
+        <View style={styles.syncCardWrapper}>
+          <TouchableOpacity 
+            style={styles.syncCard}
+            onPress={() => router.push('/Reports/PunchLogsReport')}
+          >
+            <View style={styles.syncHeader}>
+              <View style={styles.syncLeft}>
+                <View style={styles.syncIconContainer}>
+                  <Ionicons name="sync" size={20} color={Colors.primary.main} />
+                </View>
+                <Text style={styles.syncTitle}>Punch Attempts</Text>
+              </View>
+              <View style={styles.syncBadges}>
+                <View style={[styles.miniBadge, { backgroundColor: Colors.success[50] }]}>
+                  <Text style={[styles.miniBadgeText, { color: Colors.success.main }]}>{punchLogCount.success}</Text>
+                </View>
+                <View style={[styles.miniBadge, { backgroundColor: Colors.error[50] }]}>
+                  <Text style={[styles.miniBadgeText, { color: Colors.error.main }]}>{punchLogCount.failed}</Text>
+                </View>
+              </View>
+            </View>
+            <Text style={styles.syncDescription}>
+              Monitor your data synchronization attempts for today.
+            </Text>
+          </TouchableOpacity>
+        </View>
+
+        <View style={{ height: 40 }} />
       </ScrollView>
-    </SafeAreaView>
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#F8F9FA',
+    backgroundColor: '#F8FAFC',
+  },
+  headerShadowWrapper: {
+    backgroundColor: 'transparent',
+    ...Shadows.lg,
+    zIndex: 10,
   },
   header: {
+    paddingHorizontal: Spacing.xl,
+    paddingBottom: Spacing.xl,
+    borderBottomLeftRadius: 30,
+    borderBottomRightRadius: 30,
+    overflow: 'hidden', // Required for iOS rounded gradients
+  },
+  headerTop: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    paddingHorizontal: Spacing.lg,
-    paddingBottom: Spacing.md,
-    backgroundColor: '#FFFFFF',
-    borderBottomWidth: 1,
-    borderBottomColor: Colors.neutral[200],
+    marginBottom: Spacing.md,
   },
-  backButton: {
-    padding: 4,
-  },
-  headerTitle: {
-    fontSize: Typography.sizes.lg,
-    fontWeight: '800',
-    color: Colors.text.primary,
-  },
-  refreshButton: {
-    padding: 4,
-  },
-  scrollContent: {
-    padding: Spacing.lg,
-  },
-  dateText: {
-    fontSize: Typography.sizes.sm,
-    fontWeight: '600',
-    color: Colors.text.tertiary,
-    marginBottom: Spacing.lg,
-    textAlign: 'center',
-    textTransform: 'uppercase',
-    letterSpacing: 1,
-  },
-  card: {
-    backgroundColor: '#FFFFFF',
-    borderRadius: BorderRadius.xl,
-    marginBottom: Spacing.lg,
-    overflow: 'hidden',
-    elevation: 4,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.1,
-    shadowRadius: 8,
-  },
-  cardHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    padding: Spacing.md,
-    gap: Spacing.sm,
-  },
-  iconContainer: {
-    width: 40,
-    height: 40,
-    borderRadius: BorderRadius.lg,
+  headerAction: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: 'rgba(255,255,255,0.15)',
     justifyContent: 'center',
     alignItems: 'center',
   },
-  headerLeft: {
+  headerTitle: {
+    fontSize: 20,
+    fontWeight: '800',
+    color: '#FFFFFF',
+    letterSpacing: 0.5,
+  },
+  headerDateContainer: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: Spacing.sm,
+    justifyContent: 'center',
+    gap: 6,
+    backgroundColor: 'rgba(255,255,255,0.1)',
+    alignSelf: 'center',
+    paddingHorizontal: 12,
+    paddingVertical: 4,
+    borderRadius: 20,
   },
-  cardTitle: {
-    fontSize: Typography.sizes.base,
+  headerDate: {
+    fontSize: 13,
+    color: '#FFFFFF',
+    fontWeight: '600',
+  },
+  scrollContent: {
+    padding: Spacing.xl,
+  },
+  punchBannerWrapper: {
+    marginBottom: Spacing.xl,
+    backgroundColor: 'transparent',
+    ...Shadows.md,
+  },
+  punchBannerContainer: {
+    borderRadius: 20,
+    overflow: 'hidden', // Clip the gradient
+  },
+  punchGradient: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    padding: Spacing.lg,
+  },
+  punchLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 15,
+  },
+  punchIconCircle: {
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    backgroundColor: 'rgba(255,255,255,0.2)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  punchStatusLabel: {
+    fontSize: 10,
+    fontWeight: '800',
+    color: 'rgba(255,255,255,0.7)',
+    letterSpacing: 1,
+  },
+  punchFirmName: {
+    fontSize: 16,
     fontWeight: '700',
+    color: '#FFFFFF',
+    marginTop: 2,
+    width: width * 0.5,
+  },
+  sectionHeader: {
+    marginBottom: Spacing.lg,
+    paddingHorizontal: 4,
+  },
+  sectionTitle: {
+    fontSize: 16,
+    fontWeight: '800',
+    color: Colors.text.primary,
+    letterSpacing: 0.3,
+  },
+  kpiList: {
+    gap: Spacing.md,
+    marginBottom: Spacing.xl,
+  },
+  kpiWrapper: {
+    backgroundColor: 'transparent',
+    ...Shadows.sm,
+  },
+  kpiCard: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 20,
+    padding: Spacing.lg,
+    flexDirection: 'row',
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: '#F1F5F9',
+    overflow: 'hidden',
+  },
+  kpiIconContainer: {
+    width: 48,
+    height: 48,
+    borderRadius: 16,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: Spacing.md,
+  },
+  kpiContent: {
+    flex: 1,
+  },
+  kpiTitle: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: Colors.text.tertiary,
     textTransform: 'uppercase',
     letterSpacing: 0.5,
   },
-  cardContent: {
-    paddingHorizontal: Spacing.md,
-    paddingBottom: Spacing.md,
-  },
-  statsRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
-  statBox: {
-    flex: 1,
-    alignItems: 'center',
-  },
-  statLabel: {
-    fontSize: 10,
-    color: Colors.text.tertiary,
-    textTransform: 'uppercase',
-    marginBottom: 2,
-    fontWeight: '600',
-  },
-  statValue: {
-    fontSize: Typography.sizes.md,
+  kpiAmount: {
+    fontSize: 18,
     fontWeight: '800',
     color: Colors.text.primary,
+    marginTop: 2,
   },
-  statDivider: {
-    width: 1,
-    height: '60%',
-    backgroundColor: Colors.neutral[100],
+  kpiCount: {
+    fontSize: 12,
+    color: Colors.text.tertiary,
+    marginTop: 1,
   },
-  punchSummary: {
+  syncCardWrapper: {
+    backgroundColor: 'transparent',
+    ...Shadows.sm,
+  },
+  syncCard: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 20,
+    padding: Spacing.lg,
+    borderWidth: 1,
+    borderColor: '#F1F5F9',
+    overflow: 'hidden',
+  },
+  syncHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
     alignItems: 'center',
-    paddingVertical: 4,
+    marginBottom: Spacing.sm,
   },
-  statusText: {
-    fontSize: Typography.sizes.md,
+  syncLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+  },
+  syncIconContainer: {
+    width: 32,
+    height: 32,
+    borderRadius: 10,
+    backgroundColor: Colors.primary[50],
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  syncTitle: {
+    fontSize: 15,
     fontWeight: '700',
     color: Colors.text.primary,
   },
-  subText: {
-    fontSize: 12,
-    color: Colors.text.tertiary,
-    marginTop: 2,
+  syncBadges: {
+    flexDirection: 'row',
+    gap: 6,
   },
-  footer: {
-    marginTop: Spacing.xl,
+  miniBadge: {
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+    borderRadius: 6,
+    minWidth: 24,
     alignItems: 'center',
-    paddingBottom: Spacing.xl,
   },
-  footerText: {
-    fontSize: Typography.sizes.xs,
+  miniBadgeText: {
+    fontSize: 11,
+    fontWeight: '800',
+  },
+  syncDescription: {
+    fontSize: 13,
     color: Colors.text.tertiary,
-    fontStyle: 'italic',
+    lineHeight: 18,
+    paddingLeft: 44,
   },
 });
