@@ -504,27 +504,27 @@ export default function PunchInScreen() {
       return;
     }
 
-    // Always fetch a FRESH location at punch time
+    // Fetch location quickly to reduce wait time
     setPunching(true);
     let freshLocation = null;
     try {
-      const loc = await Location.getCurrentPositionAsync({
-        accuracy: Location.Accuracy.High,
-        timeout: 10000
-      });
-      freshLocation = loc.coords;
-      setCurrentLocation(loc.coords);
-    } catch {
-      try {
+      // First try instant last known position
+      const lastKnown = await Location.getLastKnownPositionAsync();
+      if (lastKnown && lastKnown.coords) {
+        freshLocation = lastKnown.coords;
+        setCurrentLocation(lastKnown.coords);
+      } else {
+        // Fallback to a fast balanced check
         const loc = await Location.getCurrentPositionAsync({
           accuracy: Location.Accuracy.Balanced,
-          timeout: 8000
+          timeout: 3000
         });
         freshLocation = loc.coords;
         setCurrentLocation(loc.coords);
-      } catch {
-        freshLocation = currentLocation;
       }
+    } catch {
+      // Final fallback to state if everything fails
+      freshLocation = currentLocation;
     } finally {
       setPunching(false);
     }

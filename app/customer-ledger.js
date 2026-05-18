@@ -303,7 +303,7 @@ export default function CustomerLedgerScreen() {
           <DateTimePicker
             value={datePickerMode === "from" ? (fromDate || new Date()) : (toDate || new Date())}
             mode="date"
-            display="calendar"
+            display={Platform.OS === 'ios' ? 'inline' : 'calendar'}
             onChange={onDateChange}
           />
         )}

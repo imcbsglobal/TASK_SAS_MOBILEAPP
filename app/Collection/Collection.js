@@ -23,7 +23,11 @@ export default function CollectionScreen() {
   // Handle Android back button
   useEffect(() => {
     const backAction = () => {
-      router.replace("/(tabs)/Home");
+      if (preselectedCustomerCode) {
+        router.back();
+      } else {
+        router.replace("/(tabs)/Home");
+      }
       return true;
     };
 
@@ -33,7 +37,7 @@ export default function CollectionScreen() {
     );
 
     return () => backHandler.remove();
-  }, []);
+  }, [preselectedCustomerCode, router]);
 
   const sections = [
     {
@@ -76,7 +80,13 @@ export default function CollectionScreen() {
       <SafeAreaView style={styles.safeArea}>
         {/* Header with Back Button */}
         <View style={styles.header}>
-          <TouchableOpacity onPress={() => router.replace("/(tabs)/Home")} style={styles.backButton}>
+          <TouchableOpacity onPress={() => {
+            if (preselectedCustomerCode) {
+              router.back();
+            } else {
+              router.replace("/(tabs)/Home");
+            }
+          }} style={styles.backButton}>
             <Ionicons name="arrow-back" size={24} color={Colors.primary.main} />
           </TouchableOpacity>
           <Text style={styles.headerTitle}>Collection Dashboard</Text>

@@ -7,7 +7,6 @@ import { useEffect, useState } from "react";
 import {
   ActivityIndicator,
   Alert,
-  Modal,
   RefreshControl,
   SafeAreaView,
   ScrollView,
@@ -368,14 +367,14 @@ export default function DashboardScreen() {
 
               <View style={styles.infoRow}>
                 <Text style={styles.infoLabel}>App Version</Text>
-                <Text style={styles.infoValue}>3.1.1</Text>
+                <Text style={styles.infoValue}>3.2.1</Text>
               </View>
-                
-                <View style={styles.infoRow}>
-                <Text style={styles.infoLabel}>Generated Date</Text>
-                <Text style={styles.infoValue}>8/05/2026</Text>
 
-            </View>
+              <View style={styles.infoRow}>
+                <Text style={styles.infoLabel}>Generated Date</Text>
+                <Text style={styles.infoValue}>18/05/2026</Text>
+
+              </View>
 
             </View>
 

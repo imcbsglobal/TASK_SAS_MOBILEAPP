@@ -46,12 +46,12 @@ export default function LoginScreen() {
   const [demoDaysRemaining, setDemoDaysRemaining] = useState(0);
   const [licenseKey, setLicenseKey] = useState("");
   const [companyName, setCompanyName] = useState("");
-  
+
   // Multi-license state
   const [availableLicenses, setAvailableLicenses] = useState([]);
   const [selectedLicense, setSelectedLicense] = useState(null);
   const [showLicensePicker, setShowLicensePicker] = useState(false);
-  
+
   // Add License Modal
   const [showAddLicenseModal, setShowAddLicenseModal] = useState(false);
 
@@ -89,7 +89,7 @@ export default function LoginScreen() {
       if (licensesStr) {
         const licenses = JSON.parse(licensesStr);
         setAvailableLicenses(licenses);
-        
+
         // Auto-select if only one license or load last used
         const lastClientId = await AsyncStorage.getItem("clientId");
         if (lastClientId) {
@@ -177,12 +177,12 @@ export default function LoginScreen() {
     setLicenseKey(license.license_key);
     setCompanyName(license.shop_name);
     setShowLicensePicker(false);
-    
+
     // Update current license in storage
     await AsyncStorage.setItem("clientId", license.client_id);
     await AsyncStorage.setItem("licenseKey", license.license_key);
     await AsyncStorage.setItem("customerName", license.shop_name);
-    
+
     if (license.isDemo) {
       setIsDemo(true);
       setDemoExpiresAt(license.expires_at || "");
@@ -331,7 +331,7 @@ export default function LoginScreen() {
       Alert.alert("Select Shop", "Please select a shop/license before logging in.");
       return;
     }
-    
+
     if (!username || !password) {
       Alert.alert("Missing Details", "Please enter username and password.");
       return;
@@ -537,7 +537,7 @@ export default function LoginScreen() {
         behavior={Platform.OS === "ios" ? "padding" : "height"}
         style={styles.keyboardView}
       >
-        <ScrollView 
+        <ScrollView
           contentContainerStyle={styles.scrollContent}
           showsVerticalScrollIndicator={false}
           keyboardShouldPersistTaps="handled"
@@ -641,7 +641,7 @@ export default function LoginScreen() {
             </TouchableOpacity>
 
             {/* Add License Button */}
-            <TouchableOpacity 
+            <TouchableOpacity
               style={styles.addLicenseButton}
               onPress={() => setShowAddLicenseModal(true)}
             >
@@ -729,10 +729,10 @@ export default function LoginScreen() {
                   onPress={() => handleLicenseSelect(license)}
                 >
                   <View style={styles.licenseItemContent}>
-                    <Ionicons 
-                      name="business" 
-                      size={24} 
-                      color={selectedLicense?.client_id === license.client_id ? Colors.primary.main : Colors.text.secondary} 
+                    <Ionicons
+                      name="business"
+                      size={24}
+                      color={selectedLicense?.client_id === license.client_id ? Colors.primary.main : Colors.text.secondary}
                     />
                     <View style={styles.licenseItemText}>
                       <Text style={[

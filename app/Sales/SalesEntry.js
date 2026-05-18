@@ -24,6 +24,7 @@ import dbService from "../../src/services/shopAwareDatabase";
 
 export default function SalesEntryScreen() {
   const router = useRouter();
+  const params = useGlobalSearchParams();
   const paymentList = ["Cash/Bank", "Credit"];
 
   const [debtorsData, setDebtorsData] = useState([]);
@@ -74,9 +75,13 @@ export default function SalesEntryScreen() {
 
   // Handle back press
   const handleBackPress = useCallback(() => {
-    router.replace("/(tabs)/Home");
+    if (params?.preselectedCustomerCode) {
+      router.back();
+    } else {
+      router.replace("/(tabs)/Home");
+    }
     return true;
-  }, [router]);
+  }, [router, params?.preselectedCustomerCode]);
 
   useEffect(() => {
     const unsubscribe = NetInfo.addEventListener(state => {
@@ -425,7 +430,6 @@ export default function SalesEntryScreen() {
   };
 
   // Handle Pre-selection from Punch-In (navigation params)
-  const params = useGlobalSearchParams();
   useEffect(() => {
     if (params?.preselectedCustomerCode && debtorsData.length > 0 && !loading) {
       console.log(`[Entry] Check for pre-selection: ${params.preselectedCustomerCode}`);
