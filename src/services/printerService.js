@@ -600,6 +600,8 @@ class PrinterService {
                 receipt += '\n';
             }
 
+            receipt += '\n\n';
+
             console.log("[Printer] Form1 sending to printer, receipt length:", receipt.length);
             await PrinterInterface.printBill(receipt);
             return true;
@@ -923,6 +925,8 @@ class PrinterService {
                 if (currentLine2.trim()) receipt += LEFT_PAD + currentLine2.trim() + '\n';
                 receipt += '\n';
             }
+
+            receipt += '\n\n';
 
             console.log("[Printer] Form2 sending to printer, receipt length:", receipt.length);
             if (PrinterInterface.printText) {
@@ -1276,7 +1280,7 @@ class PrinterService {
             // --- FINAL FOOTER (After QR) ---
             let footer = line;
             footer += centerText("Thank You!");
-            footer += "\n";
+            footer += "\n\n";
 
             if (PrinterInterface.printText) {
                 await PrinterInterface.printText(footer);
@@ -1492,6 +1496,7 @@ class PrinterService {
                 receipt += '\n';
             }
 
+            receipt += '\n\n';
             await PrinterInterface.printBill(receipt);
             return true;
 

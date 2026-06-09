@@ -1366,7 +1366,7 @@ export default function PlaceOrder() {
             <Text style={styles.headerSubtitle}>Manage & Track Returns</Text>
           </View>
           <View style={{ flexDirection: 'row', gap: 10 }}>
-            {filterStatus === 'pending' && (
+            {(filterStatus === 'pending' || filterStatus === 'failed') && (
               <TouchableOpacity
                 style={[styles.iconButton, selectionMode && { backgroundColor: Colors.primary[100] }]}
                 onPress={toggleSelectionMode}

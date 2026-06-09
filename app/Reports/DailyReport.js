@@ -267,6 +267,39 @@ export default function DailyReportScreen() {
           {renderKPI('Total Collections', reportData.collections.count, reportData.collections.amount, 'card', [Colors.success.main], '/Reports/CollectionReport')}
         </View>
 
+        {/* ── Expense Records Card ── */}
+        <View style={styles.sectionHeader}>
+          <Text style={styles.sectionTitle}>Expense Records</Text>
+        </View>
+
+        <View style={styles.expenseNavWrapper}>
+          <TouchableOpacity
+            style={styles.expenseNavCard}
+            onPress={() => router.push('/Expense/ExpenseReport')}
+            activeOpacity={0.85}
+          >
+            <LinearGradient
+              colors={['#6366F1', '#8B5CF6']}
+              start={{ x: 0, y: 0 }}
+              end={{ x: 1, y: 1 }}
+              style={styles.expenseNavGradient}
+            >
+              <View style={styles.expenseNavLeft}>
+                <View style={styles.expenseNavIconCircle}>
+                  <Ionicons name="receipt" size={26} color="#fff" />
+                </View>
+                <View>
+                  <Text style={styles.expenseNavTitle}>My Expense Records</Text>
+                  <Text style={styles.expenseNavSub}>
+                    View, filter &amp; track your daily expenses
+                  </Text>
+                </View>
+              </View>
+              <Ionicons name="arrow-forward-circle" size={28} color="rgba(255,255,255,0.7)" />
+            </LinearGradient>
+          </TouchableOpacity>
+        </View>
+
         {/* Sync Status Section */}
         <View style={styles.sectionHeader}>
           <Text style={styles.sectionTitle}>System Status</Text>
@@ -416,6 +449,51 @@ const styles = StyleSheet.create({
     gap: Spacing.md,
     marginBottom: Spacing.xl,
   },
+
+  // Expense Records nav card
+  expenseNavWrapper: {
+    marginBottom: Spacing.xl,
+    ...Shadows.md,
+    backgroundColor: 'transparent',
+  },
+  expenseNavCard: {
+    borderRadius: 20,
+    overflow: 'hidden',
+  },
+  expenseNavGradient: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    padding: Spacing.lg,
+    paddingVertical: Spacing.xl,
+  },
+  expenseNavLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 14,
+    flex: 1,
+    marginRight: 10,
+  },
+  expenseNavIconCircle: {
+    width: 52,
+    height: 52,
+    borderRadius: 26,
+    backgroundColor: 'rgba(255,255,255,0.22)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  expenseNavTitle: {
+    fontSize: 16,
+    fontWeight: '800',
+    color: '#fff',
+    letterSpacing: 0.3,
+    marginBottom: 3,
+  },
+  expenseNavSub: {
+    fontSize: 12,
+    color: 'rgba(255,255,255,0.78)',
+    fontWeight: '500',
+  },
   kpiWrapper: {
     backgroundColor: 'transparent',
     ...Shadows.sm,
@@ -516,4 +594,142 @@ const styles = StyleSheet.create({
     lineHeight: 18,
     paddingLeft: 44,
   },
+
+  // ── Expense Records ───────────────────────────────────────
+  expenseSectionRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  expenseCountBadge: {
+    marginLeft: 8,
+    backgroundColor: '#EDE9FE',
+    borderRadius: 12,
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+    minWidth: 24,
+    alignItems: 'center',
+  },
+  expenseCountText: {
+    fontSize: 12,
+    fontWeight: '800',
+    color: '#6366F1',
+  },
+  expenseEmptyCard: {
+    backgroundColor: '#fff',
+    borderRadius: 20,
+    padding: Spacing.xl,
+    alignItems: 'center',
+    gap: Spacing.sm,
+    borderWidth: 1,
+    borderColor: '#F1F5F9',
+    marginBottom: Spacing.xl,
+  },
+  expenseEmptyText: {
+    fontSize: 13,
+    color: Colors.text.tertiary,
+    fontWeight: '500',
+  },
+  expenseList: {
+    gap: Spacing.md,
+    marginBottom: Spacing.xl,
+  },
+  expenseCardWrapper: {
+    backgroundColor: 'transparent',
+    ...Shadows.sm,
+  },
+  expenseCard: {
+    backgroundColor: '#fff',
+    borderRadius: 16,
+    flexDirection: 'row',
+    overflow: 'hidden',
+    borderWidth: 1,
+    borderColor: '#F1F5F9',
+  },
+  expenseAccent: {
+    width: 4,
+    backgroundColor: '#6366F1',
+    borderTopLeftRadius: 16,
+    borderBottomLeftRadius: 16,
+  },
+  expenseBody: {
+    flex: 1,
+    padding: Spacing.md,
+    paddingLeft: Spacing.base,
+    gap: 4,
+  },
+  expenseTopRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 2,
+  },
+  expenseCategoryWrap: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    flex: 1,
+    marginRight: 8,
+  },
+  expenseCategoryIcon: {
+    width: 28,
+    height: 28,
+    borderRadius: 8,
+    backgroundColor: '#EDE9FE',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  expenseCategoryName: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: Colors.text.primary,
+    flex: 1,
+  },
+  expenseAmount: {
+    fontSize: 16,
+    fontWeight: '800',
+    color: '#6366F1',
+    letterSpacing: 0.3,
+  },
+  expenseRemark: {
+    fontSize: 12,
+    color: Colors.text.secondary,
+    lineHeight: 17,
+    fontStyle: 'italic',
+    paddingLeft: 2,
+  },
+  expenseMetaRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    marginTop: 4,
+    flexWrap: 'wrap',
+  },
+  expenseMeta: {
+    fontSize: 11,
+    color: Colors.text.tertiary,
+    fontWeight: '500',
+  },
+  expenseMetaDot: {
+    width: 3,
+    height: 3,
+    borderRadius: 1.5,
+    backgroundColor: Colors.neutral[300],
+  },
+  expenseDateChip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    alignSelf: 'flex-start',
+    backgroundColor: '#EDE9FE',
+    borderRadius: 10,
+    paddingHorizontal: 7,
+    paddingVertical: 2,
+    marginTop: 4,
+  },
+  expenseDateText: {
+    fontSize: 10,
+    fontWeight: '600',
+    color: '#6366F1',
+  },
 });
+

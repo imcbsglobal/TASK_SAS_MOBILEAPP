@@ -4,7 +4,7 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 import NetInfo from "@react-native-community/netinfo";
 import { LinearGradient } from "expo-linear-gradient";
 import { useGlobalSearchParams, useRouter } from "expo-router";
-import { useEffect, useState } from "react";
+import { useEffect, useState, useRef } from "react";
 import {
   ActivityIndicator,
   Alert,
@@ -16,10 +16,13 @@ import {
   Text,
   TextInput,
   TouchableOpacity,
-  View
+  View,
+  Keyboard,
+  Platform
 } from "react-native";
 import { BorderRadius, Colors, Gradients, Shadows, Spacing, Typography } from "../../constants/theme";
 import dbService from "../../src/services/shopAwareDatabase";
+import DateTimePicker from "@react-native-community/datetimepicker";
 
 const API_CUSTOMERS = "https://tasksas.com/api/debtors/get-debtors/";
 
@@ -28,11 +31,36 @@ export default function AddCollectionScreen() {
   const params = useGlobalSearchParams();
   const preselectedCode = params?.preselectedCustomerCode || null;
 
+  const scrollViewRef = useRef(null);
+
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [customers, setCustomers] = useState([]);
   const [isOnline, setIsOnline] = useState(true);
   const [isCustomerLocked, setIsCustomerLocked] = useState(false);
+  const [keyboardHeight, setKeyboardHeight] = useState(0);
+
+  useEffect(() => {
+    const showSub = Keyboard.addListener(
+      Platform.OS === 'ios' ? 'keyboardWillShow' : 'keyboardDidShow',
+      (e) => {
+        setKeyboardHeight(e.endCoordinates.height);
+        setTimeout(() => {
+          scrollViewRef.current?.scrollToEnd({ animated: true });
+        }, 100);
+      }
+    );
+    const hideSub = Keyboard.addListener(
+      Platform.OS === 'ios' ? 'keyboardWillHide' : 'keyboardDidHide',
+      () => {
+        setKeyboardHeight(0);
+      }
+    );
+    return () => {
+      showSub.remove();
+      hideSub.remove();
+    };
+  }, []);
 
   // Customer selection modal
   const [showCustomerModal, setShowCustomerModal] = useState(false);
@@ -52,6 +80,8 @@ export default function AddCollectionScreen() {
   const [amount, setAmount] = useState("");
   const [paymentType, setPaymentType] = useState("Cash");
   const [chequeNumber, setChequeNumber] = useState("");
+  const [chequeDate, setChequeDate] = useState(new Date());
+  const [showChequeDatePicker, setShowChequeDatePicker] = useState(false);
   const [remarks, setRemarks] = useState("");
 
   useEffect(() => {
@@ -288,6 +318,11 @@ export default function AddCollectionScreen() {
     setAreaSearchQuery("");
   };
 
+  const onChequeDateChange = (event, selectedDate) => {
+    if (Platform.OS !== "ios") setShowChequeDatePicker(false);
+    if (selectedDate) setChequeDate(selectedDate);
+  };
+
   const handleSelectCustomer = (customer) => {
     setSelectedCustomer(customer);
     setSelectedCustomerName(customer.name);
@@ -314,6 +349,14 @@ export default function AddCollectionScreen() {
     setSaving(true);
 
     try {
+      let finalRemarks = remarks.trim() || "";
+      if (paymentType === "Cheque" && chequeDate) {
+        const dd = String(chequeDate.getDate()).padStart(2, '0');
+        const mm = String(chequeDate.getMonth() + 1).padStart(2, '0');
+        const yyyy = chequeDate.getFullYear();
+        finalRemarks = `Date : ${dd}-${mm}-${yyyy} ${finalRemarks}`.trim();
+      }
+
       const collectionData = {
         code: selectedCustomer.code,
         name: selectedCustomer.name,
@@ -322,7 +365,7 @@ export default function AddCollectionScreen() {
         amount: parseFloat(amount),
         type: paymentType,
         cheque_number: paymentType === "Cheque" ? chequeNumber : null,
-        remarks: remarks.trim() || null,
+        remarks: finalRemarks || null,
         date: new Date().toISOString(),
         synced: 0
       };
@@ -410,9 +453,11 @@ export default function AddCollectionScreen() {
         </View>
 
         <ScrollView
+          ref={scrollViewRef}
           style={styles.scrollView}
-          contentContainerStyle={styles.scrollContent}
+          contentContainerStyle={[styles.scrollContent, { paddingBottom: Math.max(120, keyboardHeight + 40) }]}
           showsVerticalScrollIndicator={false}
+          keyboardShouldPersistTaps="handled"
         >
           {/* Changed from Animated.View to View to ensure visibility */}
           {/* Area Selection - hidden when locked */}
@@ -549,21 +594,37 @@ export default function AddCollectionScreen() {
           </View>
 
           {paymentType === "Cheque" && (
-            <View style={styles.formSection}>
-              <Text style={styles.label}>
-                Cheque Number <Text style={styles.required}>*</Text>
-              </Text>
-              <View style={styles.inputBox}>
-                <Ionicons name="document-text" size={20} color={Colors.text.tertiary} style={styles.inputIcon} />
-                <TextInput
-                  style={styles.inputText}
-                  placeholder="Enter cheque number"
-                  placeholderTextColor={Colors.text.tertiary}
-                  value={chequeNumber}
-                  onChangeText={setChequeNumber}
-                />
+            <>
+              <View style={styles.formSection}>
+                <Text style={styles.label}>
+                  Cheque Number <Text style={styles.required}>*</Text>
+                </Text>
+                <View style={styles.inputBox}>
+                  <Ionicons name="document-text" size={20} color={Colors.text.tertiary} style={styles.inputIcon} />
+                  <TextInput
+                    style={styles.inputText}
+                    placeholder="Enter cheque number"
+                    placeholderTextColor={Colors.text.tertiary}
+                    value={chequeNumber}
+                    onChangeText={setChequeNumber}
+                  />
+                </View>
               </View>
-            </View>
+              <View style={styles.formSection}>
+                <Text style={styles.label}>
+                  Cheque Date <Text style={styles.required}>*</Text>
+                </Text>
+                <TouchableOpacity
+                  style={styles.inputBox}
+                  onPress={() => setShowChequeDatePicker(true)}
+                >
+                  <Ionicons name="calendar" size={20} color={Colors.text.tertiary} style={styles.inputIcon} />
+                  <Text style={styles.inputText}>
+                    {`${String(chequeDate.getDate()).padStart(2, '0')}-${String(chequeDate.getMonth() + 1).padStart(2, '0')}-${chequeDate.getFullYear()}`}
+                  </Text>
+                </TouchableOpacity>
+              </View>
+            </>
           )}
 
           <View style={styles.formSection}>
@@ -577,6 +638,11 @@ export default function AddCollectionScreen() {
               multiline={true}
               numberOfLines={4}
               textAlignVertical="top"
+              onFocus={() => {
+                setTimeout(() => {
+                  scrollViewRef.current?.scrollToEnd({ animated: true });
+                }, 150);
+              }}
             />
           </View>
 
@@ -714,6 +780,36 @@ export default function AddCollectionScreen() {
             </View>
           </View>
         </Modal>
+
+        {showChequeDatePicker && (
+          Platform.OS === 'ios' ? (
+            <Modal transparent={true} animationType="slide">
+              <View style={{ flex: 1, justifyContent: 'flex-end', backgroundColor: 'rgba(0,0,0,0.5)' }}>
+                <View style={{ backgroundColor: '#fff', paddingBottom: 20 }}>
+                  <View style={{ flexDirection: 'row', justifyContent: 'flex-end', padding: 15, borderBottomWidth: 1, borderColor: Colors.border.light }}>
+                    <TouchableOpacity onPress={() => setShowChequeDatePicker(false)}>
+                      <Text style={{ color: Colors.primary.main, fontWeight: '700', fontSize: 16 }}>Done</Text>
+                    </TouchableOpacity>
+                  </View>
+                  <DateTimePicker
+                    value={chequeDate}
+                    mode="date"
+                    display="spinner"
+                    onChange={onChequeDateChange}
+                    themeVariant="light"
+                  />
+                </View>
+              </View>
+            </Modal>
+          ) : (
+            <DateTimePicker
+              value={chequeDate}
+              mode="date"
+              display="calendar"
+              onChange={onChequeDateChange}
+            />
+          )
+        )}
       </SafeAreaView>
     </LinearGradient >
   );
@@ -783,7 +879,7 @@ const styles = StyleSheet.create({
   },
   scrollContent: {
     padding: Spacing.lg,
-    paddingBottom: 40,
+    paddingBottom: 120,
   },
   formSection: {
     marginBottom: Spacing.lg,

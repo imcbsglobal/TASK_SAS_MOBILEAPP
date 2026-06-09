@@ -1365,7 +1365,7 @@ export default function PlaceSales() {
             <Text style={styles.headerSubtitle}>Manage & Track Sales</Text>
           </View>
           <View style={{ flexDirection: 'row', gap: 10 }}>
-            {filterStatus === 'pending' && (
+            {(filterStatus === 'pending' || filterStatus === 'failed') && (
               <TouchableOpacity
                 style={[styles.iconButton, selectionMode && { backgroundColor: Colors.success[100] }]}
                 onPress={toggleSelectionMode}

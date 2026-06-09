@@ -7,18 +7,13 @@ import { useRouter } from 'expo-router';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { Alert } from 'react-native';
 import {
-  ActivityIndicator,
   Animated,
   Dimensions,
-  KeyboardAvoidingView,
-  Modal,
-  Platform,
   SafeAreaView,
   ScrollView,
   StatusBar,
   StyleSheet,
   Text,
-  TextInput,
   TouchableOpacity,
   View
 } from 'react-native';
@@ -42,8 +37,6 @@ const Home = ({ navigation }) => {
 
   // Remote Punch-In Restriction
   const [isRemotePunchRestricted, setIsRemotePunchRestricted] = useState(false);
-
-
 
   // Godown Stock State
   const [godownStock, setGodownStock] = useState([]);
@@ -145,11 +138,6 @@ const Home = ({ navigation }) => {
             const moduleCodes = new Set(modules.map(m => m.module_code));
             setAllowedModules(moduleCodes);
           } else {
-            // Fallback: If no modules saved (e.g. old login), maybe show all or fetch?
-            // For now, let's assume if it's not present, we might be in a legacy state or offline.
-            // BUT strict requirement says "check packages".
-            // If we want to be strict: setAllowedModules(new Set());
-            // If we want to be backward compatible until re-login: setAllowedModules(null);
             setAllowedModules(null);
           }
         } catch (e) {
@@ -227,6 +215,15 @@ const Home = ({ navigation }) => {
       moduleCode: 'MOD010',
     },
     {
+      icon: 'receipt-outline',
+      title: 'EXPENSE',
+      description: 'Record an expense',
+      onPress: () => router.push("/Expense/ExpenseEntry"),
+      gradient: ['#6366F1', '#8B5CF6'],
+      shadowColor: '#6366F1',
+      moduleCode: 'MOD013',
+    },
+    {
       icon: 'cloud-download-outline',
       title: 'SYNC DATA',
       description: 'Download & Refresh',
@@ -270,6 +267,14 @@ const Home = ({ navigation }) => {
       gradient: [Colors.primary[600], Colors.primary[800]],
       shadowColor: Colors.primary.main,
     },
+    {
+      icon: 'person-add-outline',
+      title: 'NEW CUSTOMER',
+      description: 'Register a new customer',
+      onPress: () => router.push("/NewCustomer"),
+      gradient: ['#EC4899', '#BE185D'],
+      shadowColor: '#EC4899',
+    },
   ];
 
   const quickActions = allQuickActions.filter(action => {
@@ -277,7 +282,6 @@ const Home = ({ navigation }) => {
     if (!action.moduleCode) return true;
 
     // If we haven't loaded modules yet (null), show all (or hide all? decision: show all for UX speed/backward compat)
-    // OR strict mode: valid active license MUST have modules.
     if (allowedModules === null) return true; // Show until we know otherwise
 
     // Check if the module code exists in the allowed set

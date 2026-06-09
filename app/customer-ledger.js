@@ -16,6 +16,7 @@ import {
   Text,
   TouchableOpacity,
   View,
+  Modal
 } from "react-native";
 import Animated, { FadeInUp } from "react-native-reanimated";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -300,12 +301,33 @@ export default function CustomerLedgerScreen() {
       </View>
 
         {showDatePicker && (
-          <DateTimePicker
-            value={datePickerMode === "from" ? (fromDate || new Date()) : (toDate || new Date())}
-            mode="date"
-            display={Platform.OS === 'ios' ? 'inline' : 'calendar'}
-            onChange={onDateChange}
-          />
+          Platform.OS === 'ios' ? (
+            <Modal transparent={true} animationType="slide">
+              <View style={{ flex: 1, justifyContent: 'flex-end', backgroundColor: 'rgba(0,0,0,0.5)' }}>
+                <View style={{ backgroundColor: '#fff', paddingBottom: 20 }}>
+                  <View style={{ flexDirection: 'row', justifyContent: 'flex-end', padding: 15, borderBottomWidth: 1, borderColor: Colors.border.light }}>
+                    <TouchableOpacity onPress={() => setShowDatePicker(false)}>
+                      <Text style={{ color: Colors.primary.main, fontWeight: '700', fontSize: 16 }}>Done</Text>
+                    </TouchableOpacity>
+                  </View>
+                  <DateTimePicker
+                    value={datePickerMode === "from" ? (fromDate || new Date()) : (toDate || new Date())}
+                    mode="date"
+                    display="spinner"
+                    onChange={onDateChange}
+                    themeVariant="light"
+                  />
+                </View>
+              </View>
+            </Modal>
+          ) : (
+            <DateTimePicker
+              value={datePickerMode === "from" ? (fromDate || new Date()) : (toDate || new Date())}
+              mode="date"
+              display="calendar"
+              onChange={onDateChange}
+            />
+          )
         )}
 
         <View style={styles.contentContainer}>
