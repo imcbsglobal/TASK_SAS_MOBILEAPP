@@ -2,18 +2,19 @@ import { Ionicons } from "@expo/vector-icons";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { Picker } from '@react-native-picker/picker';
 import * as ImagePicker from 'expo-image-picker';
+import { CameraView, useCameraPermissions } from 'expo-camera';
 import { LinearGradient } from "expo-linear-gradient";
 import * as Location from 'expo-location';
+import { Image } from 'expo-image';
 import { useFocusEffect, useRouter } from "expo-router";
 import * as FileSystem from 'expo-file-system/legacy';
 import * as Sharing from 'expo-sharing';
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useState, useRef } from "react";
 import {
   ActivityIndicator,
   Alert,
   Dimensions,
   FlatList,
-  Image,
   LayoutAnimation,
   Modal,
   Platform,
@@ -96,6 +97,9 @@ export default function PunchInScreen() {
   // Selfie/Action State
   const [selfieUri, setSelfieUri] = useState(null);
   const [showConfirmModal, setShowConfirmModal] = useState(false);
+  const [showInlineCamera, setShowInlineCamera] = useState(false);
+  const cameraRef = useRef(null);
+  const [cameraPermission, requestCameraPermission] = useCameraPermissions();
   const [notes, setNotes] = useState("");
   const [punching, setPunching] = useState(false);
   const [loggedInUser, setLoggedInUser] = useState("");
@@ -504,29 +508,24 @@ export default function PunchInScreen() {
       return;
     }
 
-    // Fetch location quickly to reduce wait time
-    setPunching(true);
-    let freshLocation = null;
-    try {
-      // First try instant last known position
-      const lastKnown = await Location.getLastKnownPositionAsync();
-      if (lastKnown && lastKnown.coords) {
-        freshLocation = lastKnown.coords;
-        setCurrentLocation(lastKnown.coords);
-      } else {
-        // Fallback to a fast balanced check
+    // Use already fetched location to eliminate lag
+    let freshLocation = currentLocation;
+
+    // Only try to fetch if we don't have it yet
+    if (!freshLocation) {
+      setPunching(true);
+      try {
         const loc = await Location.getCurrentPositionAsync({
           accuracy: Location.Accuracy.Balanced,
           timeout: 3000
         });
         freshLocation = loc.coords;
         setCurrentLocation(loc.coords);
+      } catch {
+        freshLocation = null;
+      } finally {
+        setPunching(false);
       }
-    } catch {
-      // Final fallback to state if everything fails
-      freshLocation = currentLocation;
-    } finally {
-      setPunching(false);
     }
 
     if (!freshLocation) {
@@ -575,57 +574,50 @@ export default function PunchInScreen() {
 
   const takeSelfie = async () => {
     try {
-      // Close modal first if open (retake scenario) to avoid modal+camera conflict
       setShowConfirmModal(false);
       setSelfieUri(null);
 
-      // Small delay to let modal fully dismiss before launching camera
-      await new Promise(resolve => setTimeout(resolve, 150));
-
-      const { status } = await ImagePicker.requestCameraPermissionsAsync();
-      if (status !== 'granted') {
-        Alert.alert("Permission denied", "Camera permission is required for selfie verification.");
-        const _cust = getSelectedCustomerDetails();
-        await savePunchAttemptLog({
-          status: 'failed',
-          time: new Date().toISOString(),
-          firm_name: _cust?.name || '',
-          message: 'Camera permission denied',
-        });
-        return;
+      // We use the expo-camera permission hook here
+      if (!cameraPermission?.granted) {
+        const { granted } = await requestCameraPermission();
+        if (!granted) {
+          Alert.alert("Permission denied", "Camera permission is required for selfie verification.");
+          const _cust = getSelectedCustomerDetails();
+          await savePunchAttemptLog({
+            status: 'failed',
+            time: new Date().toISOString(),
+            firm_name: _cust?.name || '',
+            message: 'Camera permission denied',
+          });
+          return;
+        }
       }
 
-      const result = await ImagePicker.launchCameraAsync({
-        cameraType: ImagePicker.CameraType.front,
-        allowsEditing: false,
-        quality: 0.3,
-      });
+      // Open our inline camera modal instead of external intent
+      setShowInlineCamera(true);
 
-      if (!result.canceled && result.assets && result.assets.length > 0) {
-        const uri = result.assets[0].uri;
-        setSelfieUri(uri);
-        setShowConfirmModal(true);
-      } else if (result.canceled) {
-        const _cust = getSelectedCustomerDetails();
-        await savePunchAttemptLog({
-          status: 'failed',
-          time: new Date().toISOString(),
-          firm_name: _cust?.name || '',
-          message: 'User cancelled camera without taking selfie',
-        });
-      }
     } catch (error) {
-      console.error("[PunchIn] Camera error:", error);
+      console.error("[PunchIn] Camera prep error:", error);
       Alert.alert("Error", "Failed to open camera. Please try again.");
+    }
+  };
+
+  const handleCaptureSelfie = async () => {
+    if (cameraRef.current) {
       try {
-        const _cust = getSelectedCustomerDetails();
-        await savePunchAttemptLog({
-          status: 'failed',
-          time: new Date().toISOString(),
-          firm_name: _cust?.name || '',
-          message: `Camera error: ${error?.message || 'Unknown error'}`,
+        const photo = await cameraRef.current.takePictureAsync({
+          quality: 0.1,
+          base64: false,
         });
-      } catch (_) {}
+        if (photo && photo.uri) {
+          setSelfieUri(photo.uri);
+          setShowInlineCamera(false);
+          setShowConfirmModal(true);
+        }
+      } catch (e) {
+        console.error("Capture error", e);
+        Alert.alert("Error", "Could not capture image");
+      }
     }
   };
 
@@ -1403,6 +1395,10 @@ export default function PunchInScreen() {
             data={pickerFilteredCustomers}
             keyExtractor={item => item.code}
             style={styles.pickerList}
+            initialNumToRender={10}
+            maxToRenderPerBatch={10}
+            windowSize={5}
+            removeClippedSubviews={true}
             renderItem={({ item }) => (
               <TouchableOpacity
                 style={styles.pickerListItem}
@@ -1495,6 +1491,10 @@ export default function PunchInScreen() {
             )}
             keyExtractor={(item, index) => item.id?.toString() || index.toString()}
             style={styles.pickerList}
+            initialNumToRender={10}
+            maxToRenderPerBatch={10}
+            windowSize={5}
+            removeClippedSubviews={true}
             contentContainerStyle={{ paddingBottom: 20 }}
             renderItem={({ item }) => (
               <View style={styles.logListItem}>
@@ -1550,7 +1550,11 @@ export default function PunchInScreen() {
           <Text style={styles.modalSubtitle}>Shop: {getSelectedCustomerDetails()?.name}</Text>
 
           {selfieUri && (
-            <Image source={{ uri: selfieUri }} style={styles.selfieImage} />
+            <Image 
+              source={selfieUri} 
+              style={styles.selfieImage} 
+              contentFit="cover"
+            />
           )}
 
           <TextInput
@@ -1589,6 +1593,39 @@ export default function PunchInScreen() {
             <Ionicons name="close-circle" size={32} color={Colors.neutral[400]} />
           </TouchableOpacity>
         </View>
+      </View>
+    </Modal>
+  );
+
+  const renderInlineCameraModal = () => (
+    <Modal
+      visible={showInlineCamera}
+      animationType="slide"
+      transparent={false}
+      onRequestClose={() => setShowInlineCamera(false)}
+    >
+      <View style={{ flex: 1, backgroundColor: '#000' }}>
+        <CameraView
+          ref={cameraRef}
+          style={{ flex: 1 }}
+          facing="front"
+        >
+          <View style={{ flex: 1, backgroundColor: 'transparent', justifyContent: 'flex-end', paddingBottom: 40, alignItems: 'center' }}>
+            <TouchableOpacity 
+              style={{ position: 'absolute', top: 50, left: 20, padding: 10 }}
+              onPress={() => setShowInlineCamera(false)}
+            >
+              <Ionicons name="close-circle" size={36} color="#FFF" />
+            </TouchableOpacity>
+            
+            <TouchableOpacity 
+              style={{ width: 70, height: 70, borderRadius: 35, backgroundColor: 'rgba(255, 255, 255, 0.3)', justifyContent: 'center', alignItems: 'center' }}
+              onPress={handleCaptureSelfie}
+            >
+              <View style={{ width: 54, height: 54, borderRadius: 27, backgroundColor: '#FFF' }} />
+            </TouchableOpacity>
+          </View>
+        </CameraView>
       </View>
     </Modal>
   );
@@ -1687,8 +1724,9 @@ export default function PunchInScreen() {
 
         {/* Modals */}
         {renderCustomerPicker()}
-        {renderLocationLogModal()}
+        {renderInlineCameraModal()}
         {renderConfirmModal()}
+        {renderLocationLogModal()}
       </View>
     </LinearGradient>
   );

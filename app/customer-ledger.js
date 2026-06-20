@@ -266,6 +266,7 @@ export default function CustomerLedgerScreen() {
                   {fromDate && toDate
                     ? `${formatDate(fromDate)} → ${formatDate(toDate)}`
                     : "All Transactions"}
+                  <Text> • Build: 20-06-2026</Text>
                 </Animated.Text>
               </View>
               <TouchableOpacity onPress={refreshAll} style={styles.iconAction}>

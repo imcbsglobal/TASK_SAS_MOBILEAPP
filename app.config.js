@@ -2,7 +2,7 @@ module.exports = {
   expo: {
     name: "TaskSAS",
     slug: "TaskSAS1",
-    version: "2.2.1",
+    version: "3.3.2",
     orientation: "portrait",
     icon: "./assets/images/app-icon.png",
     scheme: "tasksas",
@@ -17,7 +17,7 @@ module.exports = {
   supportsTablet: true,
   backgroundColor: "#ffffff",
   bundleIdentifier: "imcbs.TaskSAS",
-   buildNumber: "3", 
+   buildNumber: "6", 
   infoPlist: {
      ITSAppUsesNonExemptEncryption: false,
     UIViewControllerBasedStatusBarAppearance: true,
@@ -32,7 +32,7 @@ module.exports = {
 },
     android: {
       package: "com.imcbs.TASKSAS",
-      versionCode: 9,
+      versionCode: 12,
       adaptiveIcon: {
         foregroundImage: "./assets/images/adaptive-icon.png",
         backgroundColor: "#ffffff"

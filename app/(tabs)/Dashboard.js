@@ -367,12 +367,12 @@ export default function DashboardScreen() {
 
               <View style={styles.infoRow}>
                 <Text style={styles.infoLabel}>App Version</Text>
-                <Text style={styles.infoValue}>3.3.1</Text>
+                <Text style={styles.infoValue}>4.3.3</Text>
               </View>
 
               <View style={styles.infoRow}>
                 <Text style={styles.infoLabel}>Generated Date</Text>
-                <Text style={styles.infoValue}>1/06/2026</Text>
+                <Text style={styles.infoValue}>20/06/2026</Text>
 
               </View>
 

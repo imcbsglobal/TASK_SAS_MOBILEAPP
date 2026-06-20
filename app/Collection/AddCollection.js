@@ -169,6 +169,7 @@ export default function AddCollectionScreen() {
         }
       } else if (isOnline) {
         await fetchCustomersFromAPI();
+        setLoading(false);
       } else {
         Alert.alert(
           "No Data Available",
@@ -248,6 +249,7 @@ export default function AddCollectionScreen() {
           name: debtor.name || "Unknown Debtor",
           place: debtor.place || debtor.area || '',
           area: debtor.area || '', // Explicitly map area
+          balance: debtor.balance || debtor.current_balance || 0,
         }))
         .sort((a, b) => {
           const nameA = (a.name || "").toLowerCase();
@@ -297,11 +299,8 @@ export default function AddCollectionScreen() {
         name: debtor.name || "Unknown Debtor",
         place: debtor.place || debtor.area || '',
         area: debtor.area || '', // Explicitly map area
-      })).sort((a, b) => {
-        const nameA = (a.name || "").toLowerCase();
-        const nameB = (b.name || "").toLowerCase();
-        return nameA.localeCompare(nameB);
-      });
+        balance: debtor.balance || debtor.current_balance || 0,
+      }));
 
       return mappedCustomers;
     } catch (error) {
@@ -502,6 +501,11 @@ export default function AddCollectionScreen() {
                 <View style={{ flex: 1 }}>
                   <Text style={[styles.inputText, { fontWeight: '700' }]}>{selectedCustomer.name}</Text>
                   <Text style={{ fontSize: 12, color: Colors.text.secondary }}>Code: {selectedCustomer.code}</Text>
+                  {Number(selectedCustomer.balance || 0) !== 0 && (
+                    <Text style={{ fontSize: 12, color: Colors.error.main, fontWeight: 'bold' }}>
+                      Balance: ₹{Number(selectedCustomer.balance || 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}
+                    </Text>
+                  )}
                 </View>
                 {isCustomerLocked && <Ionicons name="lock-closed" size={16} color={Colors.primary.main} />}
               </View>
@@ -766,6 +770,11 @@ export default function AddCollectionScreen() {
                     <View style={styles.customerInfo}>
                       <Text style={styles.customerName}>{item.name}</Text>
                       <Text style={styles.customerCode}>Code: {item.code}</Text>
+                      {Number(item.balance || 0) !== 0 && (
+                        <Text style={[styles.customerCode, { color: Colors.error.main, fontWeight: 'bold' }]}>
+                          Balance: ₹{Number(item.balance || 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}
+                        </Text>
+                      )}
                     </View>
                     <Ionicons name="chevron-forward" size={20} color={Colors.text.tertiary} />
                   </TouchableOpacity>

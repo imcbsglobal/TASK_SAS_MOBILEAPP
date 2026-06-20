@@ -5,19 +5,20 @@ import * as Print from 'expo-print';
 import * as Sharing from 'expo-sharing';
 import { Alert } from 'react-native';
 
+let memoryCompanyInfo = null;
+
 const pdfService = {
-  /**
-   * Helper to fetch company info from cache/storage
-   */
   /**
    * Helper to fetch company info from cache/storage or API
    */
   fetchCompanyInfo: async () => {
+    if (memoryCompanyInfo) return memoryCompanyInfo;
     try {
       // 1. Try Local Cache
       const cached = await AsyncStorage.getItem('printer_company_info');
       if (cached) {
-        return JSON.parse(cached);
+        memoryCompanyInfo = JSON.parse(cached);
+        return memoryCompanyInfo;
       }
 
       // 2. Fetch from API if cache misses
@@ -43,6 +44,7 @@ const pdfService = {
           }
 
           if (info) {
+            memoryCompanyInfo = info;
             // Cache it for next time (shared with printer service)
             await AsyncStorage.setItem('printer_company_info', JSON.stringify(info));
             return info;
@@ -235,7 +237,8 @@ const pdfService = {
       try {
         const { uri: pdfUri } = await Print.printToFileAsync({
           html: html,
-          base64: false
+          base64: false,
+          margins: { top: 20, right: 20, bottom: 20, left: 20 }
         });
         uri = pdfUri;
       } catch (printError) {
@@ -244,7 +247,8 @@ const pdfService = {
         try {
           const { uri: pdfUriRetry } = await Print.printToFileAsync({
             html: html,
-            base64: false
+            base64: false,
+            margins: { top: 20, right: 20, bottom: 20, left: 20 }
           });
           uri = pdfUriRetry;
         } catch (retryError) {
@@ -508,7 +512,8 @@ const pdfService = {
 
       const { uri } = await Print.printToFileAsync({
         html: html,
-        base64: false
+        base64: false,
+        margins: { top: 20, right: 20, bottom: 20, left: 20 }
       });
 
       await Sharing.shareAsync(uri, {
