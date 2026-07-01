@@ -1,11 +1,91 @@
-// app/_layout.js (ROOT LAYOUT)
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { Stack, usePathname, useRouter } from "expo-router";
 import { StatusBar } from "expo-status-bar";
 import { useEffect, useState } from "react";
-import { SafeAreaView, StyleSheet, Text, View } from "react-native";
+import { SafeAreaView, StyleSheet, Text, View, Alert, TouchableOpacity, Platform, ScrollView, TextInput } from "react-native";
 import { SafeAreaProvider } from "react-native-safe-area-context";
+import NetInfo from "@react-native-community/netinfo";
 import ErrorBoundary from "./components/ErrorBoundary"; // Import ErrorBoundary
+
+// --- Global Performance & Responsiveness Overrides ---
+// 1. Touch Delay Fix (Especially for iOS)
+TouchableOpacity.defaultProps = {
+  ...(TouchableOpacity.defaultProps || {}),
+  delayPressIn: 0,
+  activeOpacity: 0.6,
+};
+
+// Fix for dropped touches on iOS inside ScrollViews
+ScrollView.defaultProps = {
+  ...(ScrollView.defaultProps || {}),
+  keyboardShouldPersistTaps: "handled",
+};
+
+TextInput.defaultProps = {
+  ...(TextInput.defaultProps || {}),
+  allowFontScaling: false,
+};
+
+// 2. Global API Interceptor for Network Issues & Retry
+const originalFetch = global.fetch;
+
+global.fetch = async (url, options) => {
+  // We only intercept our API calls, ignoring local assets/expo URLs
+  if (typeof url === 'string' && !url.includes('tasksas.com/api')) {
+    return originalFetch(url, options);
+  }
+
+  const timeoutMs = 15000; // 15 seconds timeout
+
+  const performFetch = () => {
+    return new Promise(async (resolve, reject) => {
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => {
+        controller.abort();
+      }, timeoutMs);
+
+      try {
+        const netState = await NetInfo.fetch();
+        if (!netState.isConnected) {
+          throw new Error('NO_NETWORK');
+        }
+
+        const response = await originalFetch(url, {
+          ...options,
+          signal: controller.signal
+        });
+
+        clearTimeout(timeoutId);
+        resolve(response);
+
+      } catch (error) {
+        clearTimeout(timeoutId);
+        
+        let errorMessage = "An unexpected error occurred.";
+        if (error.name === 'AbortError' || error.message?.includes('timeout')) {
+          errorMessage = "Your internet is low, that's why it takes time. Please check your connection.";
+        } else if (error.message === 'NO_NETWORK' || error.message?.includes('Network request failed')) {
+          errorMessage = "You are currently offline. Please check your internet connection.";
+        }
+
+        Alert.alert(
+          "Network Issue",
+          errorMessage,
+          [
+            { text: "Cancel", onPress: () => reject(error), style: 'cancel' },
+            { text: "Retry", onPress: () => {
+              // Retry the fetch recursively
+              performFetch().then(resolve).catch(reject);
+            }}
+          ]
+        );
+      }
+    });
+  };
+
+  return performFetch();
+};
+// -----------------------------------------------------
 
 export default function RootLayout() {
   const pathname = usePathname();

@@ -39,9 +39,9 @@ const fmtTime = (iso) => {
 };
 
 const fmtCurrency = (val) =>
-  `₹${parseFloat(val || 0).toLocaleString('en-IN', {
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 2,
+  `${parseFloat(val || 0).toLocaleString('en-IN', {
+    minimumFractionDigits: 3,
+    maximumFractionDigits: 3,
   })}`;
 
 // ── Component ────────────────────────────────────────────────────────────────
@@ -230,7 +230,7 @@ export default function ExpenseReport() {
                   <Ionicons name="stats-chart" size={20} color="#fff" />
                 </LinearGradient>
                 <Text style={styles.overviewStatValue}>
-                  {totalCount > 0 ? fmtCurrency(totalAmount / totalCount) : '₹0.00'}
+                  {totalCount > 0 ? fmtCurrency(totalAmount / totalCount) : '0.00'}
                 </Text>
                 <Text style={styles.overviewStatLabel}>Average</Text>
               </View>

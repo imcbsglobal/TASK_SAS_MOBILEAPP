@@ -282,7 +282,7 @@ class BatchService {
                 });
             }
 
-            const duration = ((Date.now() - startTime) / 1000).toFixed(2);
+            const duration = ((Date.now() - startTime) / 1000).toFixed(3);
             console.log(`[BatchService] ✅ Loaded ${productsWithBatches.length} products with batches in ${duration}s`);
             
             return productsWithBatches;

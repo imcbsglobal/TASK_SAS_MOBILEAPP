@@ -242,7 +242,6 @@ export default function AddCollectionScreen() {
       }
 
       const filteredCustomers = customersArray
-        .filter((customer) => customer.super_code === "DEBTO")
         .map(debtor => ({
           ...debtor,
           code: debtor.code || debtor.id?.toString(),
@@ -503,7 +502,7 @@ export default function AddCollectionScreen() {
                   <Text style={{ fontSize: 12, color: Colors.text.secondary }}>Code: {selectedCustomer.code}</Text>
                   {Number(selectedCustomer.balance || 0) !== 0 && (
                     <Text style={{ fontSize: 12, color: Colors.error.main, fontWeight: 'bold' }}>
-                      Balance: ₹{Number(selectedCustomer.balance || 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}
+                      Balance: {Number(selectedCustomer.balance || 0).toLocaleString('en-IN', { minimumFractionDigits: 3 })}
                     </Text>
                   )}
                 </View>
@@ -772,7 +771,7 @@ export default function AddCollectionScreen() {
                       <Text style={styles.customerCode}>Code: {item.code}</Text>
                       {Number(item.balance || 0) !== 0 && (
                         <Text style={[styles.customerCode, { color: Colors.error.main, fontWeight: 'bold' }]}>
-                          Balance: ₹{Number(item.balance || 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}
+                          Balance: {Number(item.balance || 0).toLocaleString('en-IN', { minimumFractionDigits: 3 })}
                         </Text>
                       )}
                     </View>

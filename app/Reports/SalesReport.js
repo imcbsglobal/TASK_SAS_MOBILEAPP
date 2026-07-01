@@ -189,7 +189,7 @@ export default function SalesReportScreen() {
               <View>
                 <Text style={styles.statLabel}>Total Revenue</Text>
                 <Text style={[styles.statValue, { color: Colors.success.main }]}>
-                  ₹{data.amount.toLocaleString('en-IN')}
+                  {data.amount.toLocaleString('en-IN')}
                 </Text>
               </View>
             </View>
@@ -222,7 +222,7 @@ export default function SalesReportScreen() {
                   </View>
                   <View style={styles.amountContainer}>
                     <Text style={styles.amountLabel}>Total Value</Text>
-                    <Text style={styles.amountValue}>₹{stats.amount.toLocaleString('en-IN')}</Text>
+                    <Text style={styles.amountValue}>{stats.amount.toLocaleString('en-IN')}</Text>
                   </View>
                 </View>
                 <View style={styles.cardFooter}>

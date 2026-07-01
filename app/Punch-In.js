@@ -263,45 +263,40 @@ export default function PunchInScreen() {
         return;
       }
 
-      console.log("[PunchIn] Fetching areas and shop locations...");
+      console.log("[PunchIn] Fetching areas, shop locations, and debtors concurrently...");
       const username = await AsyncStorage.getItem("username");
       if (username) setLoggedInUser(username);
 
-      let fetchedAreas = ["All"];
-      try {
-        const areaResponse = await fetch('https://tasksas.com/api/area/list/', {
-          method: 'GET',
-          headers: {
-            'Authorization': `Bearer ${token}`,
-            'Content-Type': 'application/json'
-          }
-        });
-
-        if (areaResponse.ok) {
-          const areaData = await areaResponse.json();
-          console.log("[PunchIn] Areas API Result:", areaData);
-          if (areaData.success && Array.isArray(areaData.areas)) {
-            fetchedAreas = ["All", ...areaData.areas.sort()];
-          }
-        }
-      } catch (areaErr) {
-        console.error("[PunchIn] Error fetching areas:", areaErr);
-      }
-      setAreas(fetchedAreas);
-
-      const response = await fetch('https://tasksas.com/api/shop-location/table/', {
+      const fetchOptions = {
         method: 'GET',
         headers: {
           'Authorization': `Bearer ${token}`,
           'Content-Type': 'application/json'
         }
-      });
+      };
 
-      if (!response.ok) {
-        throw new Error(`Shop Location API error! status: ${response.status}`);
+      const [areaResponse, shopLocResponse, debtorsResp] = await Promise.all([
+        fetch('https://tasksas.com/api/area/list/', fetchOptions).catch(e => { console.error("Area API error", e); return null; }),
+        fetch('https://tasksas.com/api/shop-location/table/', fetchOptions).catch(e => { console.error("Shop Location API error", e); return null; }),
+        fetch('https://tasksas.com/api/debtors/get-debtors/', fetchOptions).catch(e => { console.error("Debtors API error", e); return null; })
+      ]);
+
+      // Process Areas
+      let fetchedAreas = ["All"];
+      if (areaResponse && areaResponse.ok) {
+        const areaData = await areaResponse.json();
+        console.log("[PunchIn] Areas API Result:", areaData);
+        if (areaData.success && Array.isArray(areaData.areas)) {
+          fetchedAreas = ["All", ...areaData.areas.sort()];
+        }
       }
+      setAreas(fetchedAreas);
 
-      const result = await response.json();
+      // Process Shop Locations
+      if (!shopLocResponse || !shopLocResponse.ok) {
+        throw new Error(`Shop Location API error! status: ${shopLocResponse ? shopLocResponse.status : 'network/timeout'}`);
+      }
+      const result = await shopLocResponse.json();
       let firms = [];
       if (Array.isArray(result)) {
         firms = result;
@@ -315,8 +310,6 @@ export default function PunchInScreen() {
       setRawLocations(firms);
 
       // Create a Set of Verified Firm Codes (Status != 'pending')
-      // User requirement: "show only the verified customers only from [API]"
-      // and "status verified no need to show the customers pending"
       const verifiedFirmCodes = new Set();
       const firmLocationMap = new Map(); // Map to store coordinates by firm_code
 
@@ -339,18 +332,9 @@ export default function PunchInScreen() {
 
       console.log(`[PunchIn] Found ${verifiedFirmCodes.size} verified firm codes`);
 
-      // Fetch Debtors for Selection List
-      console.log("[PunchIn] Fetching debtors for selection...");
-      const debtorsResp = await fetch('https://tasksas.com/api/debtors/get-debtors/', {
-        method: 'GET',
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'Content-Type': 'application/json'
-        }
-      });
-
-      if (!debtorsResp.ok) {
-        throw new Error(`Debtors API error! status: ${debtorsResp.status}`);
+      // Process Debtors
+      if (!debtorsResp || !debtorsResp.ok) {
+        throw new Error(`Debtors API error! status: ${debtorsResp ? debtorsResp.status : 'network/timeout'}`);
       }
 
       const debtorsData = await debtorsResp.json();
@@ -821,7 +805,7 @@ export default function PunchInScreen() {
 
     Alert.alert(
       "Confirm Punch Out",
-      `Are you sure you want to punch out from ${customer.name}?\n\nWork Hours: ${workHours.toFixed(2)} hrs`,
+      `Are you sure you want to punch out from ${customer.name}?\n\nWork Hours: ${workHours.toFixed(3)} hrs`,
       [
         { text: "Cancel", style: "cancel" },
         {
@@ -963,7 +947,7 @@ export default function PunchInScreen() {
 
                 Alert.alert(
                   "Punch Out Successful",
-                  `Work Duration: ${result.data?.work_duration_hours?.toFixed(2) || 0} hours`,
+                  `Work Duration: ${result.data?.work_duration_hours?.toFixed(3) || 0} hours`,
                   [
                     { 
                       text: "OK", 
@@ -1203,7 +1187,7 @@ export default function PunchInScreen() {
             <View style={styles.statusBannerActive}>
               <Ionicons name="time" size={20} color={Colors.success.main} />
               <Text style={styles.statusTextActive}>
-                You are punched in here. Work Hours: {workHours.toFixed(2)}
+                You are punched in here. Work Hours: {workHours.toFixed(3)}
               </Text>
             </View>
           )}

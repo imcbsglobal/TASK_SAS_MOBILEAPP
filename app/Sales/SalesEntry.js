@@ -340,7 +340,7 @@ export default function SalesEntryScreen() {
       setLoading(true);
       await dbService.init();
       const allCustomers = await dbService.getCustomers();
-      const filteredDebtors = allCustomers.filter((debtor) => debtor.super_code === "DEBTO");
+      const filteredDebtors = allCustomers;
 
       if (filteredDebtors.length === 0) {
         setLoading(false);

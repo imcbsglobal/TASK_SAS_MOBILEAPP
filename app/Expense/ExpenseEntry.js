@@ -122,7 +122,7 @@ export default function ExpenseEntryScreen() {
         },
         body: JSON.stringify({
           expense_name: selectedCategory.label,
-          amount: parsedAmount.toFixed(2),
+          amount: parsedAmount.toFixed(3),
           remark: note.trim(),
         }),
       });
@@ -135,7 +135,7 @@ export default function ExpenseEntryScreen() {
 
       Alert.alert(
         '✅ Expense Posted',
-        `₹${parsedAmount.toFixed(2)} for "${selectedCategory.label}" recorded successfully.`,
+        `${parsedAmount.toFixed(3)} for "${selectedCategory.label}" recorded successfully.`,
         [
           {
             text: 'Add Another',
@@ -271,7 +271,7 @@ export default function ExpenseEntryScreen() {
                 <View style={styles.summaryRow}>
                   <Ionicons name="information-circle-outline" size={16} color={Colors.primary.main} />
                   <Text style={styles.summaryText}>
-                    Posting <Text style={styles.summaryBold}>₹{parseFloat(amount).toFixed(2)}</Text> under{' '}
+                    Posting <Text style={styles.summaryBold}>{parseFloat(amount).toFixed(3)}</Text> under{' '}
                     <Text style={styles.summaryBold}>{selectedCategory.label}</Text>
                   </Text>
                 </View>

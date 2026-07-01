@@ -368,6 +368,7 @@ class SyncService {
                     'Authorization': `Bearer ${token}`,
                     'Content-Type': 'application/json',
                 },
+                cache: 'no-store',
                 signal: controller.signal
             });
 

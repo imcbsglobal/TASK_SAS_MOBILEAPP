@@ -992,7 +992,7 @@ class DatabaseService {
 
                 await this.db.runAsync('COMMIT');
 
-                const duration = ((Date.now() - startTime) / 1000).toFixed(2);
+                const duration = ((Date.now() - startTime) / 1000).toFixed(3);
                 console.log('[DB] ✅ Bulk inserted ' + insertedCount + ' batches in ' + duration + 's');
                 return true;
 
@@ -1101,7 +1101,7 @@ class DatabaseService {
                 }
 
                 await this.db.runAsync('COMMIT');
-                const duration = ((Date.now() - startTime) / 1000).toFixed(2);
+                const duration = ((Date.now() - startTime) / 1000).toFixed(3);
                 console.log('[DB] ✅ Bulk inserted ' + insertedCount + ' photos in ' + duration + 's');
                 return true;
 
@@ -1317,7 +1317,7 @@ class DatabaseService {
                 }
 
                 await this.db.runAsync('COMMIT');
-                const duration = ((Date.now() - startTime) / 1000).toFixed(2);
+                const duration = ((Date.now() - startTime) / 1000).toFixed(3);
                 console.log('[DB] ✅ Bulk inserted ' + insertedCount + ' goddowns in ' + duration + 's');
                 return true;
 

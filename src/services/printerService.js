@@ -545,9 +545,9 @@ class PrinterService {
                     totalAmount += (itemTaxable + itemTax);
 
                     const name     = String(item.name || "Item").substring(0, itemLen).padEnd(itemLen, " ");
-                    const qtyStr   = qty.toFixed(2).padStart(qtyLen, " ");
-                    const rateStr  = price.toFixed(2).padStart(rateLen, " ");
-                    const totalStr = (itemTaxable + itemTax).toFixed(2).padStart(totalLen, " ");
+                    const qtyStr   = qty.toFixed(3).padStart(qtyLen, " ");
+                    const rateStr  = price.toFixed(3).padStart(rateLen, " ");
+                    const totalStr = (itemTaxable + itemTax).toFixed(3).padStart(totalLen, " ");
 
                     receipt += `${name} ${qtyStr} ${rateStr} ${totalStr}\n`;
                 });
@@ -557,10 +557,10 @@ class PrinterService {
 
             // --- TOTAL & TAX SPLIT ---
             const totalLabel = taxSetting === 'plus_tax' ? "NET TOTAL:" : "TOTAL:";
-            const totalVal = totalAmount.toFixed(2);
+            const totalVal = totalAmount.toFixed(3);
 
             if ((taxSetting === 'plus_tax' || taxSetting === 'reverse_tax') && totalTaxAmount > 0) {
-                const halfTax = (totalTaxAmount / 2).toFixed(2);
+                const halfTax = (totalTaxAmount / 2).toFixed(3);
                 const sgstText = `SGST: ${halfTax}`;
                 const totalRight = `${totalLabel} ${totalVal}`;
                 const padSize = PRINTER_WIDTH - sgstText.length - totalRight.length;
@@ -851,9 +851,9 @@ class PrinterService {
 
                     const noStr = String(rowNo).padEnd(noLen, " ");
                     const name = String(item.name || "Item").substring(0, itemLen).padEnd(itemLen, " ");
-                    const qtyStr = qty.toFixed(2).padStart(qtyLen, " ");
-                    const priceStr = price.toFixed(2).padStart(priceLen, " ");
-                    const totalStr = (itemTaxable + itemTax).toFixed(2).padStart(totalLen, " ");
+                    const qtyStr = qty.toFixed(3).padStart(qtyLen, " ");
+                    const priceStr = price.toFixed(3).padStart(priceLen, " ");
+                    const totalStr = (itemTaxable + itemTax).toFixed(3).padStart(totalLen, " ");
 
                     receipt += LEFT_PAD + `${noStr} ${name} ` + ESC_BOLD_ON + `${qtyStr} ${priceStr} ${totalStr}` + ESC_BOLD_OFF + "\n";
 
@@ -886,11 +886,11 @@ class PrinterService {
 
             // --- TOTAL & TAX SPLIT ---
             const totalLabel = taxSetting === 'plus_tax' ? "NET TOTAL:" : "TOTAL:";
-            const totalVal = totalAmount.toFixed(2);
+            const totalVal = totalAmount.toFixed(3);
             const totalLineWidth = CONTENT_WIDTH - LEFT_PAD.length;
 
             if ((taxSetting === 'plus_tax' || taxSetting === 'reverse_tax') && totalTaxAmount > 0) {
-                const halfTax = (totalTaxAmount / 2).toFixed(2);
+                const halfTax = (totalTaxAmount / 2).toFixed(3);
                 const sgstText = `SGST: ${halfTax}`;
                 const totalRight = `${totalLabel} ${totalVal}`;
                 const padSize = totalLineWidth - sgstText.length - totalRight.length;
@@ -1166,9 +1166,9 @@ class PrinterService {
                     receipt += ESC_BOLD_ON + `${noStr} ${name}` + ESC_BOLD_OFF + "\n";
 
                     // Line 2: HSN:xx Tax:x%  QTY  PRICE  TOTAL — all in one line
-                    const qtyStr   = qty.toFixed(2).padStart(qtyLen, " ");
-                    const priceStr = displayPrice.toFixed(2).padStart(priceLen, " ");
-                    const totalStr = displayTotal.toFixed(2).padStart(totalLen, " ");
+                    const qtyStr   = qty.toFixed(3).padStart(qtyLen, " ");
+                    const priceStr = displayPrice.toFixed(3).padStart(priceLen, " ");
+                    const totalStr = displayTotal.toFixed(3).padStart(totalLen, " ");
 
                     // HSN+Tax prefix occupies fixed space, with remaining spacer
                     const hsnPart = `HSN:${hsnVal}`.padEnd(10);
@@ -1185,7 +1185,7 @@ class PrinterService {
             receipt += line;
 
             // --- SUMMARY SECTION ---
-            const totalQtyVal = totalQty.toFixed(2);
+            const totalQtyVal = totalQty.toFixed(3);
             const hsnTaxPrefixLen = 14; 
             const qtyLen_F3 = 6;
             const priceLen_F3 = 8;
@@ -1201,16 +1201,16 @@ class PrinterService {
             }
 
             if (taxSetting === 'reverse_tax' || taxSetting === 'plus_tax') {
-                const taxableVal = totalTaxable.toFixed(2);
-                const taxVal = totalTaxAmount.toFixed(2);
-                const netTotalVal = totalAmount.toFixed(2);
+                const taxableVal = totalTaxable.toFixed(3);
+                const taxVal = totalTaxAmount.toFixed(3);
+                const netTotalVal = totalAmount.toFixed(3);
 
                 const taxableLabel = "TAXABLE:";
                 const taxLabel = "TAX:";
                 const netTotalLabel = taxSetting === 'plus_tax' ? "NET TOTAL:" : "TOTAL:";
 
                 if (totalTaxAmount > 0) {
-                    const halfTax = (totalTaxAmount / 2).toFixed(2);
+                    const halfTax = (totalTaxAmount / 2).toFixed(3);
                     const sgstPart = `SGST: ${halfTax}`;
                     const taxRight = `${taxableLabel} ${taxableVal}`;
                     receipt += sgstPart + " ".repeat(Math.max(1, CONTENT_WIDTH_F3 - sgstPart.length - taxRight.length)) + taxRight + "\n";
@@ -1228,7 +1228,7 @@ class PrinterService {
             } else {
                 // --- TOTAL only (no_tax or other) ---
                 const totalLabel = "TOTAL:";
-                const totalVal = totalAmount.toFixed(2);
+                const totalVal = totalAmount.toFixed(3);
                 const totalPad_F3 = Math.max(0, CONTENT_WIDTH_F3 - totalLabel.length - totalVal.length - 1);
                 receipt += ESC_SIZE_LARGE + " ".repeat(totalPad_F3) + totalLabel + " " + totalVal + ESC_SIZE_NORMAL + "\n";
             }
@@ -1416,7 +1416,7 @@ class PrinterService {
             const customerName = collection.customer_name || "Customer";
             const place = collection.place || collection.area || "";
 
-            const amount = parseFloat(collection.amount || 0).toFixed(2);
+            const amount = parseFloat(collection.amount || 0).toFixed(3);
             const chequeRef = collection.cheque_number || collection.ref_no || "";
             const paymentType = collection.payment_type || "CASH";
             const refDetail = chequeRef ? `(${chequeRef})` : `(${paymentType})`;
@@ -1510,7 +1510,7 @@ class PrinterService {
 
     // Convert number to words
     numberToWords(num) {
-        if (num === 0) return "ZERO RUPEES";
+        if (num === 0) return "ZERO";
 
         const units = ["", "ONE", "TWO", "THREE", "FOUR", "FIVE", "SIX", "SEVEN", "EIGHT", "NINE"];
         const teens = ["TEN", "ELEVEN", "TWELVE", "THIRTEEN", "FOURTEEN", "FIFTEEN", "SIXTEEN", "SEVENTEEN", "EIGHTEEN", "NINETEEN"];
@@ -1526,7 +1526,7 @@ class PrinterService {
         };
 
         const intPart = Math.floor(num);
-        const words = convert(intPart) + " RUPEES";
+        const words = convert(intPart);
         return words.trim();
     }
 }

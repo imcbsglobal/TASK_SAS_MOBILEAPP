@@ -135,7 +135,7 @@
 
 //                   {/* BALANCE Column */}
 //                   <Text style={[styles.balanceCell, { flex: 1 }]}>
-//                     {item.balance.toFixed(2)}
+//                     {item.balance.toFixed(3)}
 //                   </Text>
 //                 </View>
 //               )}

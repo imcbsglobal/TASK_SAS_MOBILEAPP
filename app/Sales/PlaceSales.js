@@ -1228,7 +1228,7 @@ export default function PlaceSales() {
                   <Ionicons name="pencil-outline" size={20} color={Colors.success.main} />
                 </TouchableOpacity>
               )}
-              <Text style={styles.orderTotal}>{(order.total || 0).toFixed(2)}</Text>
+              <Text style={styles.orderTotal}>{(order.total || 0).toFixed(3)}</Text>
             </View>
             <Text style={styles.itemCount}>{(order.items || []).length} items</Text>
             <Ionicons
@@ -1250,9 +1250,9 @@ export default function PlaceSales() {
                   <Text style={{ fontSize: 11, color: Colors.text.secondary, marginTop: 2, marginBottom: 2 }}>
                     Code: {item.code}
                   </Text>
-                  <Text style={styles.itemPrice}>{(item.price || 0).toFixed(2)} x {(parseFloat(item.qty) || 0).toFixed(3)}</Text>
+                  <Text style={styles.itemPrice}>{(item.price || 0).toFixed(3)} x {(parseFloat(item.qty) || 0).toFixed(3)}</Text>
                 </View>
-                <Text style={styles.itemTotal}>{(item.total || 0).toFixed(2)}</Text>
+                <Text style={styles.itemTotal}>{(item.total || 0).toFixed(3)}</Text>
               </View>
             ))}
 
@@ -1471,7 +1471,7 @@ export default function PlaceSales() {
               <ActivityIndicator size="large" color={Colors.success.main} style={{ marginBottom: 18 }} />
               <Text style={styles.syncTitle}>Syncing to Server...</Text>
               <Text style={styles.syncSubtitle} numberOfLines={1}>{syncingModal.customer}</Text>
-              <Text style={styles.syncAmount}>₹{Number(syncingModal.total || 0).toFixed(2)}</Text>
+              <Text style={styles.syncAmount}>{Number(syncingModal.total || 0).toFixed(3)}</Text>
               <Text style={styles.syncHint}>Please wait, do not close the app</Text>
             </View>
           </View>

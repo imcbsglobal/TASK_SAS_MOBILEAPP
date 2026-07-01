@@ -192,7 +192,7 @@ const CartItem = ({ item, changeQty, removeItem, isEditable, onPriceChange }) =>
               />
             ) : (
               <Text style={[styles.cartItemPrice, { fontSize: 15, fontWeight: '600', color: Colors.text.primary }]}>
-                {parseFloat(item.product.price || 0).toFixed(2)}
+                {parseFloat(item.product.price || 0).toFixed(3)}
               </Text>
             )}
           </View>
@@ -238,7 +238,7 @@ const CartItem = ({ item, changeQty, removeItem, isEditable, onPriceChange }) =>
         {/* Total Section (Right) */}
         <View style={{ flex: 1, alignItems: 'flex-end' }}>
           <Text style={[styles.cartItemTotal, { fontSize: 15, marginHorizontal: 0 }]}>
-            {(item.qty * item.product.price).toFixed(2)}
+            {(item.qty * item.product.price).toFixed(3)}
           </Text>
         </View>
 
@@ -399,7 +399,7 @@ export default function SalesDetails() {
     try {
       await dbService.init();
       const allCustomers = await dbService.getCustomers();
-      const filteredDebtors = allCustomers.filter((debtor) => debtor.super_code === "DEBTO");
+      const filteredDebtors = allCustomers;
       setDebtorsData(filteredDebtors);
       setFilteredCustomers(filteredDebtors);
     } catch (error) {
@@ -1613,7 +1613,7 @@ export default function SalesDetails() {
 
       Alert.alert(
         "Order Placed Successfully",
-        `Order placed for ${currentCustomer}\nTotal:  ${order.total.toFixed(2)}`,
+        `Order placed for ${currentCustomer}\nTotal:  ${order.total.toFixed(3)}`,
         [
           {
             text: "Continue Shopping",
@@ -2288,7 +2288,7 @@ export default function SalesDetails() {
           <View style={styles.sheetFooter}>
             <View style={styles.totalRow}>
               <Text style={styles.totalLabel}>Total Amount</Text>
-              <Text style={styles.totalValue}> {total.toFixed(2)}</Text>
+              <Text style={styles.totalValue}> {total.toFixed(3)}</Text>
             </View>
             <TouchableOpacity
               style={[styles.checkoutButton, cart.length === 0 && styles.disabledButton]}
@@ -2379,7 +2379,7 @@ export default function SalesDetails() {
                           </View>
                         ) : (
                           <Text style={styles.quantityProductPrice}>
-                            {(selectedProduct.price || selectedProduct.retail || 0).toFixed(2)} per unit
+                            {(selectedProduct.price || selectedProduct.retail || 0).toFixed(3)} per unit
                           </Text>
                         )}
                       </View>
@@ -2432,7 +2432,7 @@ export default function SalesDetails() {
                       <View style={styles.quantityTotalContainer}>
                         <Text style={styles.quantityTotalLabel}>Total:</Text>
                         <Text style={styles.quantityTotalValue}>
-                          {((parseFloat(tempQuantity) || 0) * ((appSettings?.order_rate_editable === true || String(appSettings?.order_rate_editable) === 'true') ? (parseFloat(tempPrice) || 0) : selectedProduct.price)).toFixed(2)}
+                          {((parseFloat(tempQuantity) || 0) * ((appSettings?.order_rate_editable === true || String(appSettings?.order_rate_editable) === 'true') ? (parseFloat(tempPrice) || 0) : selectedProduct.price)).toFixed(3)}
                         </Text>
                       </View>
 
@@ -2655,7 +2655,7 @@ export default function SalesDetails() {
                                   {priceObj.price_name} ({priceObj.price_code})
                                 </Text>
                                 <Text style={[styles.priceValue, isEffective && { color: Colors.success.main }]}>
-                                  {parseFloat(priceObj.value || 0).toFixed(2)}
+                                  {parseFloat(priceObj.value || 0).toFixed(3)}
                                 </Text>
                               </View>
                             );
@@ -2666,19 +2666,19 @@ export default function SalesDetails() {
                             {selectedBatchDetails.mrp > 0 && !selectedBatchDetails.restrictedCodes?.includes('MR') && (
                               <View style={styles.priceItem}>
                                 <Text style={styles.priceLabel}>MRP</Text>
-                                <Text style={styles.priceValue}>{selectedBatchDetails.mrp?.toFixed(2)}</Text>
+                                <Text style={styles.priceValue}>{selectedBatchDetails.mrp?.toFixed(3)}</Text>
                               </View>
                             )}
                             {selectedBatchDetails.price > 0 && !selectedBatchDetails.restrictedCodes?.includes(selectedBatchDetails.priceCodeUsed || 'S2') && (
                               <View style={[styles.priceItem, styles.priceItemHighlight]}>
                                 <Text style={[styles.priceLabel, { color: Colors.success.main }]}>Rate ({selectedBatchDetails.priceCodeUsed || 'S2'})</Text>
-                                <Text style={[styles.priceValue, { color: Colors.success.main }]}>{selectedBatchDetails.price?.toFixed(2)}</Text>
+                                <Text style={[styles.priceValue, { color: Colors.success.main }]}>{selectedBatchDetails.price?.toFixed(3)}</Text>
                               </View>
                             )}
                             {selectedBatchDetails.retail > 0 && !selectedBatchDetails.restrictedCodes?.includes('S2') && (
                               <View style={styles.priceItem}>
                                 <Text style={styles.priceLabel}>Retail</Text>
-                                <Text style={styles.priceValue}>{selectedBatchDetails.retail?.toFixed(2)}</Text>
+                                <Text style={styles.priceValue}>{selectedBatchDetails.retail?.toFixed(3)}</Text>
                               </View>
                             )}
                           </>
@@ -2776,16 +2776,16 @@ const CodeItemBase = ({ item, inStock, stockQty, gStock, currentQty, displayValu
 
         <View style={styles.priceColumn}>
           {item.mrp > 0 && !item.restrictedCodes?.includes('MR') && (
-            <Text style={styles.mrpLabel}>MRP: {item.mrp.toFixed(2)}</Text>
+            <Text style={styles.mrpLabel}>MRP: {item.mrp.toFixed(3)}</Text>
           )}
           {!item.restrictedCodes?.includes(item.priceCodeUsed || 'S2') && (
             <View>
               <Text style={[styles.price, isInCart && cartPrice !== undefined && cartPrice !== item.price && { textDecorationLine: 'line-through', fontSize: 12, opacity: 0.6 }]}>
-                Price: {item.price ? item.price.toFixed(2) : '0.00'}
+                Price: {item.price ? item.price.toFixed(3) : '0.00'}
               </Text>
               {isInCart && cartPrice !== undefined && cartPrice !== item.price && (
                 <Text style={[styles.price, { color: Colors.success.main, marginTop: -2 }]}>
-                  Rate: {cartPrice.toFixed(2)}
+                  Rate: {cartPrice.toFixed(3)}
                 </Text>
               )}
             </View>

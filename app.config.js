@@ -2,7 +2,7 @@ module.exports = {
   expo: {
     name: "TaskSAS",
     slug: "TaskSAS1",
-    version: "3.3.2",
+    version: "3.3.3",
     orientation: "portrait",
     icon: "./assets/images/app-icon.png",
     scheme: "tasksas",
@@ -13,26 +13,26 @@ module.exports = {
       resizeMode: "contain",
       backgroundColor: "#ffffff"
     },
-   ios: {
-  supportsTablet: true,
-  backgroundColor: "#ffffff",
-  bundleIdentifier: "imcbs.TaskSAS",
-   buildNumber: "6", 
-  infoPlist: {
-     ITSAppUsesNonExemptEncryption: false,
-    UIViewControllerBasedStatusBarAppearance: true,
-    UIStatusBarStyle: "UIStatusBarStyleLightContent",
+    ios: {
+      supportsTablet: true,
+      backgroundColor: "#ffffff",
+      bundleIdentifier: "imcbs.TaskSAS",
+      buildNumber: "7",
+      infoPlist: {
+        ITSAppUsesNonExemptEncryption: false,
+        UIViewControllerBasedStatusBarAppearance: true,
+        UIStatusBarStyle: "UIStatusBarStyleLightContent",
 
-    NSBluetoothAlwaysUsageDescription:
-      "This app uses Bluetooth to connect to nearby printers and print receipts.",
+        NSBluetoothAlwaysUsageDescription:
+          "This app uses Bluetooth to connect to nearby printers and print receipts.",
 
-    NSBluetoothPeripheralUsageDescription:
-      "This app uses Bluetooth to communicate with external printer devices."
-  }
-},
+        NSBluetoothPeripheralUsageDescription:
+          "This app uses Bluetooth to communicate with external printer devices."
+      }
+    },
     android: {
       package: "com.imcbs.TASKSAS",
-      versionCode: 12,
+      versionCode: 13,
       adaptiveIcon: {
         foregroundImage: "./assets/images/adaptive-icon.png",
         backgroundColor: "#ffffff"

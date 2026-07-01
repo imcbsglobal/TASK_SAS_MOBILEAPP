@@ -164,7 +164,7 @@ export default function DailyReportScreen() {
 
   useFocusEffect(useCallback(() => { fetchDailyReport(); }, []));
 
-  const formatCurrency = (val) => `₹${parseFloat(val || 0).toLocaleString('en-IN')}`;
+  const formatCurrency = (val) => `${parseFloat(val || 0).toLocaleString('en-IN')}`;
 
   const renderKPI = (title, count, amount, icon, colors, route) => (
     <View style={styles.kpiWrapper}>

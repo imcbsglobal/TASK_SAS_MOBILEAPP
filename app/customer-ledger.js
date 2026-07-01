@@ -337,13 +337,13 @@ export default function CustomerLedgerScreen() {
             <View style={styles.balanceBox}>
               <Text style={styles.balanceLabel}>Current Balance</Text>
               <Text style={styles.balanceValue}>
-                {closingBalance.toLocaleString("en-IN", { minimumFractionDigits: 2 })}
+                {closingBalance.toLocaleString("en-IN", { minimumFractionDigits: 3 })}
               </Text>
             </View>
             <View style={styles.balanceBox}>
               <Text style={styles.balanceLabel}>Opening Balance</Text>
               <Text style={styles.balanceValue}>
-                {openingBalance.toLocaleString("en-IN", { minimumFractionDigits: 2 })}
+                {openingBalance.toLocaleString("en-IN", { minimumFractionDigits: 3 })}
               </Text>
             </View>
           </View>
@@ -387,7 +387,7 @@ export default function CustomerLedgerScreen() {
           >
             <Text style={styles.footerLabel}>Closing Balance</Text>
             <Text style={styles.footerValue}>
-              {closingBalance.toLocaleString("en-IN", { minimumFractionDigits: 2 })}
+              {closingBalance.toLocaleString("en-IN", { minimumFractionDigits: 3 })}
             </Text>
           </LinearGradient>
         </View>

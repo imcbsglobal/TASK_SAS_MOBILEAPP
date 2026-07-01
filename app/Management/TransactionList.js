@@ -454,7 +454,7 @@ export default function TransactionListScreen() {
           </View>
 
           <View style={styles.itemRight}>
-            <Text style={styles.amountText}>₹{item.total?.toFixed(0)}</Text>
+            <Text style={styles.amountText}>{item.total?.toFixed(0)}</Text>
             <View style={[styles.statusTag, { backgroundColor: type === 'pending' ? Colors.warning[50] : Colors.success[50] }]}>
               <Text style={[styles.statusText, { color: type === 'pending' ? Colors.warning.main : Colors.success.main }]}>
                 {type === 'pending' ? 'Pending' : 'Synced'}

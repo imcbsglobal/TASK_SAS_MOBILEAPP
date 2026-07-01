@@ -372,7 +372,7 @@ export default function DashboardScreen() {
 
               <View style={styles.infoRow}>
                 <Text style={styles.infoLabel}>Generated Date</Text>
-                <Text style={styles.infoValue}>20/06/2026</Text>
+                <Text style={styles.infoValue}>01/07/2026</Text>
 
               </View>
 

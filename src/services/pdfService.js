@@ -72,7 +72,7 @@ const pdfService = {
     const date = new Date(order.timestamp).toLocaleString();
 
     // Calculate totals
-    const totalAmount = order.total.toFixed(2);
+    const totalAmount = order.total.toFixed(3);
 
     // Company Details Logic
     const companyName = companyInfo?.firm_name || "TaskSAS";
@@ -115,8 +115,8 @@ const pdfService = {
         <td style="text-align: center; padding: 5px; border-bottom: 1px solid #eee;">${item.hsn || item.text6 || '-'}</td>
         <td style="text-align: center; padding: 5px; border-bottom: 1px solid #eee;">${parseFloat(item.qty).toFixed(3)}</td>
         <td style="text-align: center; padding: 5px; border-bottom: 1px solid #eee;">${item.taxcode || item.gst || '-'}</td>
-        <td style="text-align: right; padding: 5px; border-bottom: 1px solid #eee;">${item.price.toFixed(2)}</td>
-        <td style="text-align: right; padding: 5px; border-bottom: 1px solid #eee;">${item.total.toFixed(2)}</td>
+        <td style="text-align: right; padding: 5px; border-bottom: 1px solid #eee;">${item.price.toFixed(3)}</td>
+        <td style="text-align: right; padding: 5px; border-bottom: 1px solid #eee;">${item.total.toFixed(3)}</td>
       </tr>
     `).join('');
 
@@ -306,7 +306,7 @@ const pdfService = {
     const companyName = companyInfo?.firm_name || "Company Name";
     const voucherNo = collection.code || collection.local_id || collection.id || "N/A";
     const customerName = collection.customer_name || "Customer";
-    const amount = parseFloat(collection.amount || 0).toFixed(2);
+    const amount = parseFloat(collection.amount || 0).toFixed(3);
     const chequeRef = collection.cheque_number || collection.ref_no || formattedDate;
     const paymentType = collection.payment_type || "CASH";
 
@@ -324,7 +324,7 @@ const pdfService = {
 
     // Amount in words
     const numberToWords = (num) => {
-      if (num === 0) return "ZERO RUPEES";
+      if (num === 0) return "ZERO";
 
       const units = ["", "ONE", "TWO", "THREE", "FOUR", "FIVE", "SIX", "SEVEN", "EIGHT", "NINE"];
       const teens = ["TEN", "ELEVEN", "TWELVE", "THIRTEEN", "FOURTEEN", "FIFTEEN", "SIXTEEN", "SEVENTEEN", "EIGHTEEN", "NINETEEN"];
@@ -340,7 +340,7 @@ const pdfService = {
       };
 
       const intPart = Math.floor(num);
-      return convert(intPart) + " RUPEES";
+      return convert(intPart);
     };
 
     const amountInWords = numberToWords(parseFloat(collection.amount));

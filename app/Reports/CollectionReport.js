@@ -184,7 +184,7 @@ export default function CollectionReportScreen() {
               <View>
                 <Text style={styles.statLabel}>Total Collected</Text>
                 <Text style={[styles.statValue, { color: Colors.success.main }]}>
-                  ₹{data.amount.toLocaleString('en-IN')}
+                  {data.amount.toLocaleString('en-IN')}
                 </Text>
               </View>
             </View>
@@ -217,7 +217,7 @@ export default function CollectionReportScreen() {
                   </View>
                   <View style={styles.amountContainer}>
                     <Text style={styles.amountLabel}>Total Collected</Text>
-                    <Text style={styles.amountValue}>₹{stats.amount.toLocaleString('en-IN')}</Text>
+                    <Text style={styles.amountValue}>{stats.amount.toLocaleString('en-IN')}</Text>
                   </View>
                 </View>
                 
@@ -232,7 +232,7 @@ export default function CollectionReportScreen() {
                         />
                         <Text style={styles.typeText}>{t.type}</Text>
                       </View>
-                      <Text style={styles.transactionAmount}>₹{t.amount.toLocaleString('en-IN')}</Text>
+                      <Text style={styles.transactionAmount}>{t.amount.toLocaleString('en-IN')}</Text>
                       <View style={[styles.statusBadge, { backgroundColor: t.status === 'Uploaded' ? Colors.success[50] : Colors.warning[50] }]}>
                         <Text style={[styles.statusText, { color: t.status === 'Uploaded' ? Colors.success.main : Colors.warning.main }]}>
                           {t.status}
